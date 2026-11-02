@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PDF手書きノート</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header>
+  <div class="row">
+    <label class="btn on" for="file" id="openLabel" style="display:inline-flex;align-items:center;">PDFを開く</label>
+    <input id="file" type="file" accept="application/pdf" hidden>
+    <button class="btn" id="blankBtn">白紙で試す</button>
+    <span class="sep"></span>
+    <div class="group">
+      <button class="btn" id="prev" aria-label="前のページ">◀</button>
+      <span class="label" id="pageLabel">- / -</span>
+      <button class="btn" id="next" aria-label="次のページ">▶</button>
+    </div>
+    <span class="sep"></span>
+    <div class="group">
+      <button class="btn" id="zoomOut" aria-label="縮小">−</button>
+      <span class="label" id="zoomLabel">100%</span>
+      <button class="btn" id="zoomIn" aria-label="拡大">＋</button>
+    </div>
+    <span class="sep"></span>
+    <button class="btn" id="jsonBtn">手書きデータ</button>
+    <span id="status">PDFを開いてください</span>
+  </div>
+  <div class="row">
+    <div class="group">
+      <button class="btn on" data-tool="pen">ペン</button>
+      <button class="btn" data-tool="highlighter">蛍光ペン</button>
+      <button class="btn" data-tool="eraser">消しゴム</button>
+    </div>
+    <span class="sep"></span>
+    <div class="group" id="colors">
+      <button class="swatch" data-color="#1b2430" style="background:#1b2430" aria-label="黒"></button>
+      <button class="swatch on" data-color="#e53935" style="background:#e53935" aria-label="赤"></button>
+      <button class="swatch" data-color="#1e5fd6" style="background:#1e5fd6" aria-label="青"></button>
+      <button class="swatch" data-color="#2e9e55" style="background:#2e9e55" aria-label="緑"></button>
+      <button class="swatch" data-color="#f2c500" style="background:#f2c500" aria-label="黄"></button>
+    </div>
+    <span class="sep"></span>
+    <div class="group" id="widths">
+      <button class="btn" data-width="2">細</button>
+      <button class="btn on" data-width="4">中</button>
+      <button class="btn" data-width="8">太</button>
+    </div>
+    <span class="sep"></span>
+    <div class="group">
+      <button class="btn" id="undo" aria-label="元に戻す">↶</button>
+      <button class="btn" id="redo" aria-label="やり直す">↷</button>
+      <button class="btn" id="clearPage">このページを消去</button>
+    </div>
+    <label class="check"><input type="checkbox" id="finger">指でも書く</label>
+  </div>
+</header>
+
+<div id="stage">
+  <div id="wrap">
+    <canvas id="pdfc"></canvas>
+    <canvas id="ink"></canvas>
+    <canvas id="livec"></canvas>
+  </div>
+  <div id="hint">
+    <strong>PDFを開いて、Apple Pencilで書き込めます</strong>
+    <span>「PDFを開く」でiPadのファイルから選びます。<br>手書きはこの端末に自動保存され、同じPDFを開くと復元されます。<br>指1本でスクロール、指2本のピンチで拡大縮小できます。</span>
+  </div>
+</div>
+
+<div id="dlg">
+  <div class="box">
+    <strong>手書きデータ（JSON）</strong>
+    <p>下の文字列が、このPDFの手書きのすべてです。コピーして保存しておくと、別の端末に貼り付けて復元できます。貼り付けて「読み込む」を押すと、現在の手書きが置き換わります。</p>
+    <textarea id="json" spellcheck="false"></textarea>
+    <div class="row">
+      <button class="btn on" id="copyJson">コピー</button>
+      <button class="btn" id="importJson">読み込む</button>
+      <button class="btn" id="closeDlg" style="margin-left:auto;">閉じる</button>
+    </div>
+    <p id="dlgMsg"></p>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
