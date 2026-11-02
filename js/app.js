@@ -463,4 +463,7 @@
     rt = setTimeout(function () { if (S.hasFile && stage.clientWidth !== lastStageW) renderPage(); }, 200);
   });
   updateUI();
+
+  /* Drive連携など、ほかのファイルから使う入口 */
+  window.App = { openDoc: openDoc, setStatus: setStatus };
 })();
