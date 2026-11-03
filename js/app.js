@@ -470,6 +470,11 @@
   ['touchstart', 'touchmove', 'touchend'].forEach(function (t) {
     ink.addEventListener(t, function (e) { if (e.cancelable) e.preventDefault(); }, { passive: false });
   });
+  // スクリブル対策（追加）: 紙のまわりの余白など、表示エリア全体でも標準タッチ動作を止める。
+  // ボタンが並ぶ上部（header）には付けない（タップが効かなくなるため）
+  ['touchstart', 'touchmove', 'touchend'].forEach(function (t) {
+    stage.addEventListener(t, function (e) { if (e.cancelable) e.preventDefault(); }, { passive: false });
+  });
   if (DEBUG) {
     // OSから届いたタッチの種類（stylus=ペン, direct=指）。preventDefault の処理とは別に記録だけする
     ink.addEventListener('touchstart', function (e) {
@@ -481,11 +486,18 @@
   /* ---------- JSONダイアログ ---------- */
   $('jsonBtn').onclick = function () {
     if (!S.hasFile) { setStatus('先にPDFを開いてください'); return; }
-    $('json').value = JSON.stringify(exportData());
+    // 文字入力欄はページに常に置かず、開いたときだけ作る（スクリブルが反応しにくくなるように）
+    var ta = document.createElement('textarea');
+    ta.id = 'json'; ta.spellcheck = false;
+    ta.value = JSON.stringify(exportData());
+    $('jsonSlot').appendChild(ta);
     $('dlgMsg').textContent = '';
     $('dlg').classList.add('open');
   };
-  $('closeDlg').onclick = function () { $('dlg').classList.remove('open'); };
+  $('closeDlg').onclick = function () {
+    $('dlg').classList.remove('open');
+    $('jsonSlot').textContent = '';
+  };
   $('copyJson').onclick = function () {
     var ta = $('json'); ta.focus(); ta.select();
     var ok = false;

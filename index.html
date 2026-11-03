@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>PDF手書きノート</title>
-<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/app.css?v=4">
 </head>
 <body>
 <header>
@@ -75,7 +75,8 @@
   <div class="box">
     <strong>手書きデータ（JSON）</strong>
     <p>下の文字列が、このPDFの手書きのすべてです。コピーして保存しておくと、別の端末に貼り付けて復元できます。貼り付けて「読み込む」を押すと、現在の手書きが置き換わります。</p>
-    <textarea id="json" spellcheck="false"></textarea>
+    <!-- 文字入力欄はダイアログを開いたときだけ作る（スクリブル対策） -->
+    <div id="jsonSlot"></div>
     <div class="row">
       <button class="btn on" id="copyJson">コピー</button>
       <button class="btn" id="importJson">読み込む</button>
@@ -88,11 +89,11 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async></script>
 <script src="https://apis.google.com/js/api.js" async></script>
-<script src="js/config.js"></script>
-<script src="js/app.js"></script>
-<script src="js/google-auth.js"></script>
-<script src="js/google-picker.js"></script>
-<script src="js/drive.js"></script>
-<script src="js/drive-open.js"></script>
+<script src="js/config.js?v=4"></script>
+<script src="js/app.js?v=4"></script>
+<script src="js/google-auth.js?v=4"></script>
+<script src="js/google-picker.js?v=4"></script>
+<script src="js/drive.js?v=4"></script>
+<script src="js/drive-open.js?v=4"></script>
 </body>
 </html>

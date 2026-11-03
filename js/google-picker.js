@@ -35,12 +35,16 @@
             var a = d[P.Response.ACTION];
             if (a === P.Action.PICKED) {
               var doc = d[P.Response.DOCUMENTS][0];
+              close();
               resolve({ id: doc[P.Document.ID], name: doc[P.Document.NAME] });
             } else if (a === P.Action.CANCEL) {
+              close();
               resolve(null);
             }
           })
           .build();
+        // 閉じたら選択画面（検索欄を含む）をページから完全に取り除く（スクリブル対策）
+        function close() { setTimeout(function () { try { picker.dispose(); } catch (e) {} }, 0); }
         picker.setVisible(true);
       });
     });

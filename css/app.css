@@ -56,6 +56,7 @@ header {
 #stage {
   flex: 1; min-height: 0; overflow: auto; background: var(--stage);
   -webkit-overflow-scrolling: touch; position: relative;
+  -webkit-touch-callout: none;
 }
 #wrap { position: relative; margin: 12px auto; background: #fff; box-shadow: 0 1px 6px rgba(0,0,0,.25); display: none; }
 #wrap canvas { position: absolute; left: 0; top: 0; display: block; }
