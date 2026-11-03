@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>スクリブル切り分けテスト</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #fff;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: none; }
+  canvas { display: block; touch-action: none; }
+  #log { position: fixed; left: 8px; bottom: 8px; margin: 0; padding: 8px; max-width: 70vw;
+    background: rgba(0,0,0,.75); color: #7f7; font: 12px/1.5 ui-monospace, Menlo, monospace;
+    pointer-events: none; white-space: pre-wrap; border-radius: 6px; }
+  #title { position: fixed; left: 8px; top: 8px; color: #888; font: 13px sans-serif; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="title">テスト用：線を書くだけのページ（文字入力欄なし・外部読み込みなし）</div>
+<canvas id="c"></canvas>
+<pre id="log"></pre>
+<script>
+(function () {
+  var c = document.getElementById('c'), g = c.getContext('2d');
+  var logEl = document.getElementById('log'), lines = [];
+  var t0 = performance.now();
+  function log(m) {
+    lines.push(((performance.now() - t0) / 1000).toFixed(2) + ' ' + m);
+    if (lines.length > 18) lines.shift();
+    logEl.textContent = lines.join('\n');
+  }
+  function size() {
+    var r = window.devicePixelRatio || 1;
+    c.width = innerWidth * r; c.height = innerHeight * r;
+    c.style.width = innerWidth + 'px'; c.style.height = innerHeight + 'px';
+    g.setTransform(r, 0, 0, r, 0, 0);
+    g.lineWidth = 3; g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = '#e53935';
+  }
+  size(); addEventListener('resize', size);
+
+  // ページ全体でタッチの標準動作を止める
+  ['touchstart', 'touchmove', 'touchend'].forEach(function (t) {
+    document.addEventListener(t, function (e) { if (e.cancelable) e.preventDefault(); }, { passive: false });
+  });
+
+  var last = null, n = 0, lastUp = 0;
+  c.addEventListener('pointerdown', function (e) {
+    if (e.pointerType !== 'pen') return;
+    var gap = lastUp ? ((performance.now() - lastUp) / 1000).toFixed(2) : '-';
+    log('書き始め（前の線から ' + gap + '秒）');
+    last = { x: e.clientX, y: e.clientY }; n = 1;
+    try { c.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+  c.addEventListener('pointermove', function (e) {
+    if (!last || e.pointerType !== 'pen') return;
+    var evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    g.beginPath(); g.moveTo(last.x, last.y);
+    evs.forEach(function (p) { g.lineTo(p.clientX, p.clientY); n++; });
+    g.stroke();
+    last = { x: e.clientX, y: e.clientY };
+  });
+  function up(e) {
+    if (!last) return;
+    log((e.type === 'pointercancel' ? '中断' : '離す') + '（' + n + '点）');
+    last = null; lastUp = performance.now();
+  }
+  c.addEventListener('pointerup', up);
+  c.addEventListener('pointercancel', up);
+  log('準備完了');
+})();
+</script>
+</body>
+</html>
