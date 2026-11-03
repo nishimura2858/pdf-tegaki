@@ -21,7 +21,7 @@
   --bg: #14181d; --bar: #1d232a; --text: #e6ebf0; --muted: #94a1af;
   --line: #333c46; --accent: #5b9bf0; --accent-text: #0b1118; --stage: #0f1317;
 }
-html, body { height: 100%; margin: 0; overflow: hidden; touch-action: none; -webkit-touch-callout: none; }
+html, body { height: 100%; margin: 0; }
 body {
   display: flex; flex-direction: column;
   background: var(--bg); color: var(--text);
