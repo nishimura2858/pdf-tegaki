@@ -466,15 +466,13 @@
   ink.addEventListener('pointerup', endPointer);
   ink.addEventListener('pointercancel', endPointer);
   ink.addEventListener('contextmenu', function (e) { e.preventDefault(); });
-  // iPadのスクリブル等がペン入力を横取りしないように、手書き面での標準タッチ動作を止める
-  ['touchstart', 'touchmove', 'touchend'].forEach(function (t) {
-    ink.addEventListener(t, function (e) { if (e.cancelable) e.preventDefault(); }, { passive: false });
-  });
-  // スクリブル対策（追加）: 紙のまわりの余白など、表示エリア全体でも標準タッチ動作を止める。
-  // ボタンが並ぶ上部（header）には付けない（タップが効かなくなるため）
-  ['touchstart', 'touchmove', 'touchend'].forEach(function (t) {
-    stage.addEventListener(t, function (e) { if (e.cancelable) e.preventDefault(); }, { passive: false });
-  });
+  // iPadのスクリブル等がペン入力を横取りしないように、手書き面での標準タッチ動作を止める。
+  // touchmove だけで止める。touchstart/touchend でも止めると、スクリブルとぶつかって
+  // 数秒〜長時間ペンが効かなくなった（2026-11-03 iPadで確認。ユーザー了承のうえ外した）。
+  // スクロール・拡大・文字選択・長押しメニューは CSS（touch-action / user-select / touch-callout）で防いでいる
+  ink.addEventListener('touchmove', function (e) { if (e.cancelable) e.preventDefault(); }, { passive: false });
+  // 紙のまわりの余白でも同じ（ボタンが並ぶ上部 header には付けない）
+  stage.addEventListener('touchmove', function (e) { if (e.cancelable) e.preventDefault(); }, { passive: false });
   if (DEBUG) {
     // OSから届いたタッチの種類（stylus=ペン, direct=指）。preventDefault の処理とは別に記録だけする
     ink.addEventListener('touchstart', function (e) {
