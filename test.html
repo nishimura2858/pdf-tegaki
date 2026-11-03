@@ -37,9 +37,11 @@
   }
   size(); addEventListener('resize', size);
 
-  // ページ全体でタッチの標準動作を止める
-  ['touchstart', 'touchmove', 'touchend'].forEach(function (t) {
-    document.addEventListener(t, function (e) { if (e.cancelable) e.preventDefault(); }, { passive: false });
+  // ?m=move なら touchmove だけ止める（touchstart は止めない）。それ以外は3種類とも止める
+  var MOVE_ONLY = /[?&]m=move\b/.test(location.search);
+  document.getElementById('title').textContent += MOVE_ONLY ? '　【moveのみ】' : '　【3種類すべて】';
+  (MOVE_ONLY ? ['touchmove'] : ['touchstart', 'touchmove', 'touchend']).forEach(function (t) {
+    document.addEventListener(t, function (e) { if (e.cancelable) e.preventDefault(); }, { passive: false, capture: true });
   });
 
   var last = null, n = 0, lastUp = 0;
