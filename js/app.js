@@ -20,6 +20,37 @@
   };
   var renderToken = 0, renderTask = null, saveTimer = null, lastStageW = 0;
 
+  /* ---------- 確認用モード（URLに ?debug=1 を付けたときだけ動く） ---------- */
+  var DEBUG = /[?&]debug=1(&|$)/.test(location.search);
+  var dbgBox = null, dbgLines = [], dbgT0 = performance.now();
+  function dbg(msg) {
+    if (!DEBUG) return;
+    dbgLines.push(((performance.now() - dbgT0) / 1000).toFixed(2) + ' ' + msg);
+    if (dbgLines.length > 22) dbgLines.shift();
+    if (!dbgBox) {
+      dbgBox = document.createElement('pre');
+      dbgBox.style.cssText = 'position:fixed;left:6px;bottom:6px;z-index:50;margin:0;padding:6px 8px;' +
+        'max-width:60vw;background:rgba(0,0,0,.72);color:#9f9;font:11px/1.35 ui-monospace,Menlo,monospace;' +
+        'border-radius:6px;pointer-events:none;white-space:pre-wrap;';
+      document.body.appendChild(dbgBox);
+    }
+    dbgBox.textContent = dbgLines.join('\n');
+  }
+  if (DEBUG) {
+    // 画面の更新が止まった時間を記録する
+    var lastFrame = performance.now();
+    requestAnimationFrame(function tick(now) {
+      if (now - lastFrame > 150 && !document.hidden) dbg('!! 画面停止 ' + Math.round(now - lastFrame) + 'ms');
+      lastFrame = now;
+      requestAnimationFrame(tick);
+    });
+    // 手書き面以外に入ったペン入力
+    document.addEventListener('pointerdown', function (e) {
+      if (e.target !== ink) dbg('入力(' + e.pointerType + ') → 手書き面の外: ' + (e.target.id || e.target.tagName));
+    }, true);
+    dbg('確認用モード開始');
+  }
+
   /* DOM更新は値が変わったときだけ（余計な再レイアウトを避ける） */
   var ui = {};
   function setText(el, t) { if (ui[el.id] !== t) { ui[el.id] = t; el.textContent = t; } }
@@ -100,6 +131,7 @@
 
   async function renderPage() {
     if (!S.hasFile) return;
+    var t0 = performance.now();
     var token = ++renderToken;
     if (renderTask) { try { renderTask.cancel(); } catch (e) {} renderTask = null; }
     var page = null, bw = 1, bh = 1.414;
@@ -136,6 +168,7 @@
     } else {
       pctx.fillStyle = '#fff'; pctx.fillRect(0, 0, pdfC.width, pdfC.height);
     }
+    dbg('ページ描き直し ' + Math.round(performance.now() - t0) + 'ms（倍率' + Math.round(S.zoom * 100) + '%）');
     updateUI();
   }
 
@@ -181,6 +214,7 @@
   }
   function doSave() {
     saveTimer = null;
+    var t0 = performance.now();
     try {
       var parts = [];
       Object.keys(S.strokes).forEach(function (k) {
@@ -190,7 +224,9 @@
         parts.push(JSON.stringify(k) + ':' + S.cache[k]);
       });
       S.dirty = {};
-      localStorage.setItem(S.key, '{"version":1,"pdf":' + JSON.stringify(S.name) + ',"pages":{' + parts.join(',') + '}}');
+      var data = '{"version":1,"pdf":' + JSON.stringify(S.name) + ',"pages":{' + parts.join(',') + '}}';
+      localStorage.setItem(S.key, data);
+      dbg('自動保存 ' + Math.round(performance.now() - t0) + 'ms（' + Math.round(data.length / 1024) + 'KB）');
       setStatus('自動保存しました');
     } catch (e) { setStatus('この端末への保存に失敗しました（手書きデータからコピーしてください）'); }
   }
@@ -316,6 +352,7 @@
   function endPinch() {
     var p = pinch; cancelPinch();
     var nz = Math.round(p.z0 * p.s * 100) / 100;
+    dbg('ピンチ終了 ' + Math.round(S.zoom * 100) + '% → ' + Math.round(nz * 100) + '%');
     if (Math.abs(nz - S.zoom) < 0.01) return;
     S.anchor = { fx: p.fx, fy: p.fy, cx: p.cx, cy: p.cy };
     S.zoom = nz; renderPage();
@@ -357,15 +394,20 @@
     if (!S.hasFile) return;
     e.preventDefault();
     if (e.pointerType === 'touch' && !S.finger) {
-      if (drawing || performance.now() - lastPenUp < 500) return; // 手のひらの接触は無視
+      if (drawing || performance.now() - lastPenUp < 500) { // 手のひらの接触は無視
+        dbg('指#' + e.pointerId + ' 無視（' + (drawing ? 'ペンで書いている最中' : 'ペンを離した直後') + '）');
+        return;
+      }
       touches[e.pointerId] = { x: e.clientX, y: e.clientY };
       ink.setPointerCapture(e.pointerId);
       var n = Object.keys(touches).length;
+      dbg('指#' + e.pointerId + ' 接触 → ' + (n === 1 ? 'スクロール扱い' : n === 2 ? 'ピンチ扱い' : n + '本目'));
       if (n === 1) { pan = { id: e.pointerId, x: e.clientX, y: e.clientY }; }
       else if (n === 2) { pan = null; startPinch(); }
       return;
     }
-    if (drawing) return;
+    if (drawing) { dbg('!! ペン#' + e.pointerId + ' 無視（前の線#' + drawing.id + 'が終わっていない）'); return; }
+    dbg('ペン#' + e.pointerId + '(' + e.pointerType + ') 書き始め' + (Object.keys(touches).length ? '（指' + Object.keys(touches).length + '本を解除）' : ''));
     pan = null; touches = {}; if (pinch) cancelPinch();
     ink.setPointerCapture(e.pointerId);
     S.rc = ink.getBoundingClientRect(); // 書き始めに1回だけ取得
@@ -400,12 +442,15 @@
   });
   function endPointer(e) {
     if (touches[e.pointerId]) {
+      dbg('指#' + e.pointerId + ' ' + (e.type === 'pointercancel' ? '取り消し' : '離す'));
       delete touches[e.pointerId];
       if (pinch) endPinch();
       if (pan && pan.id === e.pointerId) pan = null;
       return;
     }
     if (!drawing || e.pointerId !== drawing.id) return;
+    dbg('ペン#' + e.pointerId + ' ' + (e.type === 'pointercancel' ? '!! 取り消し（OSに中断された）' : '離す') +
+      (S.live ? '（' + S.live.points.length + '点）' : ''));
     if (!drawing.erase && S.live) {
       if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
       flushDraw();
@@ -425,6 +470,13 @@
   ['touchstart', 'touchmove', 'touchend'].forEach(function (t) {
     ink.addEventListener(t, function (e) { if (e.cancelable) e.preventDefault(); }, { passive: false });
   });
+  if (DEBUG) {
+    // OSから届いたタッチの種類（stylus=ペン, direct=指）。preventDefault の処理とは別に記録だけする
+    ink.addEventListener('touchstart', function (e) {
+      var types = Array.prototype.map.call(e.changedTouches, function (t) { return t.touchType || '?'; });
+      dbg('touchstart ' + types.join(',') + '（画面上の接触 計' + e.touches.length + '）' + (e.cancelable ? '' : ' !! 止められない'));
+    }, { passive: true });
+  }
 
   /* ---------- JSONダイアログ ---------- */
   $('jsonBtn').onclick = function () {
