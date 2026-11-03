@@ -31,6 +31,15 @@
     });
   }
 
+  // DriveのPDFをダウンロードして開く。最後に開いたファイルを覚えておく（ログインで画面を離れたあと開き直すため）
+  async function openFile(f, token) {
+    App.setStatus('「' + f.name + '」をダウンロード中…');
+    var buf = await download(f.id, token);
+    var doc = await pdfjsLib.getDocument({ data: buf }).promise;
+    try { localStorage.setItem('drive:last', JSON.stringify({ id: f.id, name: f.name })); } catch (e) {}
+    App.openDoc(doc, f.name, 'strokes:drive:' + f.id);
+  }
+
   async function openFromDrive() {
     try {
       // ポップアップ方式では、タップ直後に同期的にログイン画面を開く必要があるので、最初に呼ぶ
@@ -38,14 +47,20 @@
       App.setStatus('Driveのファイルを表示しています…');
       var f = await GPicker.pickPdf(token);
       if (!f) { App.setStatus('キャンセルしました'); return; }
-      App.setStatus('「' + f.name + '」をダウンロード中…');
-      var buf = await download(f.id, token);
-      var doc = await pdfjsLib.getDocument({ data: buf }).promise;
-      App.openDoc(doc, f.name, 'strokes:drive:' + f.id);
+      await openFile(f, token);
     } catch (e) {
       console.error(e);
       App.setStatus(message(e));
     }
+  }
+
+  // 最後に開いたDriveのPDFを開き直す（同期のためにログインし直して戻ってきたとき）
+  async function reopenLast() {
+    var last = null;
+    try { last = JSON.parse(localStorage.getItem('drive:last')); } catch (e) {}
+    if (!last || !last.id) { App.setStatus('ログインしました'); return; }
+    try { await openFile(last, await GAuth.getToken('sync')); }
+    catch (e) { console.error(e); App.setStatus(message(e)); }
   }
 
   document.getElementById('driveBtn').addEventListener('click', openFromDrive);
@@ -56,6 +71,7 @@
     var after = GAuth.takeAfter();
     if (r.error) App.setStatus(message(new Error(r.error)));
     else if (after === 'pick') openFromDrive();
+    else if (after === 'sync') reopenLast();
     else App.setStatus('ログインしました');
   }
 })();

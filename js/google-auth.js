@@ -94,6 +94,8 @@
   window.GAuth = {
     mode: mode,
     hasToken: valid,
+    /* ログイン画面を出さずに使えるトークン。なければ null */
+    current: function () { return valid() ? token : null; },
     /* 有効なトークンを返す。リダイレクト方式ではページを離れるので、戻ってこない Promise を返す。
        after: 戻ってきたあとに続けたい操作の名前 */
     getToken: function (after) {

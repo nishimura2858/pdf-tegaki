@@ -18,6 +18,7 @@
     strokes: {}, undo: [], redo: [], cache: {}, dirty: {},
     cssW: 0, cssH: 0, live: null, rc: null, anchor: null
   };
+  var hooks = { saved: null, opened: null }; // Drive同期から使う通知先
   var renderToken = 0, renderTask = null, saveTimer = null, lastStageW = 0;
 
   /* ---------- 確認用モード（URLに ?debug=1 を付けたときだけ動く） ---------- */
@@ -212,7 +213,8 @@
     });
     return res;
   }
-  function doSave() {
+  // quiet === true のときは「変更あり」を外部（Drive同期）に知らせない（Driveから読み込んだ直後の保存など）
+  function doSave(quiet) {
     saveTimer = null;
     var t0 = performance.now();
     try {
@@ -229,6 +231,7 @@
       dbg('自動保存 ' + Math.round(performance.now() - t0) + 'ms（' + Math.round(data.length / 1024) + 'KB）');
       setStatus('自動保存しました');
     } catch (e) { setStatus('この端末への保存に失敗しました（手書きデータからコピーしてください）'); }
+    if (quiet !== true && hooks.saved) hooks.saved(S.key);
   }
   function scheduleSave(page) {
     S.dirty[page || S.page] = true;
@@ -255,6 +258,7 @@
 
   /* ---------- ファイルを開く ---------- */
   function openDoc(doc, name, key) {
+    flushSave(); // 前のファイルの未保存分を、切り替える前に保存する
     S.pdf = doc; S.hasFile = true; S.name = name; S.key = key;
     S.total = doc ? doc.numPages : 1; S.page = 1; S.zoom = 1;
     S.undo = []; S.redo = []; S.live = null; S.cache = {}; S.dirty = {};
@@ -262,6 +266,7 @@
     $('hint').style.display = 'none'; wrap.style.display = 'block';
     stage.scrollTo(0, 0);
     renderPage();
+    if (hooks.opened) hooks.opened(key, name);
   }
   $('file').addEventListener('change', async function (e) {
     var f = e.target.files[0]; if (!f) return;
@@ -527,5 +532,19 @@
   updateUI();
 
   /* Drive連携など、ほかのファイルから使う入口 */
-  window.App = { openDoc: openDoc, setStatus: setStatus };
+  window.App = {
+    openDoc: openDoc, setStatus: setStatus, dbg: dbg, hooks: hooks,
+    currentKey: function () { return S.hasFile ? S.key : ''; },
+    hasStrokes: function () { for (var k in S.strokes) if (S.strokes[k].length) return true; return false; },
+    exportJson: function () { return JSON.stringify(exportData()); },
+    // 外から受け取った手書きデータで置き換える（取り消し履歴は消える）
+    replaceData: function (obj) {
+      var res = sanitize(obj); if (!res) return false;
+      if (drawing) return false;
+      S.strokes = res; S.undo = []; S.redo = []; S.cache = {}; S.dirty = {};
+      clearTimeout(saveTimer); saveTimer = null;
+      drawInk(); updateUI(); doSave(true);
+      return true;
+    }
+  };
 })();
