@@ -475,6 +475,13 @@
   ['touchstart', 'touchmove', 'touchend'].forEach(function (t) {
     stage.addEventListener(t, function (e) { if (e.cancelable) e.preventDefault(); }, { passive: false });
   });
+  // スクリブル対策（追加2）: ページ全体でも止める。ボタン類（header）とダイアログ内は除く
+  ['touchstart', 'touchmove', 'touchend'].forEach(function (t) {
+    document.addEventListener(t, function (e) {
+      if (e.target.closest && e.target.closest('header, #dlg')) return;
+      if (e.cancelable) e.preventDefault();
+    }, { passive: false });
+  });
   if (DEBUG) {
     // OSから届いたタッチの種類（stylus=ペン, direct=指）。preventDefault の処理とは別に記録だけする
     ink.addEventListener('touchstart', function (e) {
