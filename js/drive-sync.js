@@ -129,6 +129,11 @@
     if (document.hidden && cur && readMeta(cur.pdfId).dirty) sync();
   });
 
+  // 通信が戻ったら、Driveに送れていない分を送る
+  window.addEventListener('online', function () {
+    if (cur && readMeta(cur.pdfId).dirty) schedule(1000);
+  });
+
   // ボタン: ログインが必要ならログインしてから、それ以外はすぐ同期
   btn.addEventListener('click', function () {
     if (!cur) return;

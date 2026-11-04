@@ -268,16 +268,6 @@
     renderPage();
     if (hooks.opened) hooks.opened(key, name);
   }
-  $('file').addEventListener('change', async function (e) {
-    var f = e.target.files[0]; if (!f) return;
-    try {
-      setStatus('読み込み中…');
-      var buf = await f.arrayBuffer();
-      var doc = await pdfjsLib.getDocument({ data: buf }).promise;
-      openDoc(doc, f.name, 'strokes:' + f.name + ':' + f.size);
-    } catch (err) { setStatus('PDFを開けませんでした'); console.error(err); }
-    e.target.value = '';
-  });
   $('blankBtn').addEventListener('click', function () { openDoc(null, '白紙', 'strokes:__blank__'); });
 
   /* ---------- 操作 ---------- */
