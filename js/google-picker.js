@@ -43,8 +43,21 @@
             }
           })
           .build();
+        // 選択画面が「Googleアカウントにアクセスできません」などで進めないとき用の逃げ道
+        var esc = document.createElement('div');
+        esc.id = 'pickerEscape';
+        esc.innerHTML = '<span>ファイルが表示されないときは</span>' +
+          '<button class="btn on" type="button">ログインし直す</button>' +
+          '<button class="btn" type="button">閉じる</button>';
+        var bs = esc.querySelectorAll('button');
+        bs[0].onclick = function () { close(); resolve({ relogin: true }); };
+        bs[1].onclick = function () { close(); resolve(null); };
+        document.body.appendChild(esc);
         // 閉じたら選択画面（検索欄を含む）をページから完全に取り除く（スクリブル対策）
-        function close() { setTimeout(function () { try { picker.dispose(); } catch (e) {} }, 0); }
+        function close() {
+          if (esc.parentNode) esc.parentNode.removeChild(esc);
+          setTimeout(function () { try { picker.dispose(); } catch (e) {} }, 0);
+        }
         picker.setVisible(true);
       });
     });

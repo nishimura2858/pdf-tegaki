@@ -53,7 +53,13 @@
       }
       App.setStatus('Driveのファイルを表示しています…');
       var f = await GPicker.pickPdf(token);
-      if (!f) { App.setStatus('キャンセルしました'); return; }
+      if (f && f.relogin) {
+        // ホーム画面アプリでは、ここでGoogleのログイン画面へ移り、戻ってきたら選択画面を開き直す
+        token = await GAuth.relogin('pick');
+        App.setStatus('Driveのファイルを表示しています…');
+        f = await GPicker.pickPdf(token);
+      }
+      if (!f || f.relogin) { App.setStatus('キャンセルしました'); return; }
       await openFile(f, token);
     } catch (e) {
       console.error(e);

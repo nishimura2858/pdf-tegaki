@@ -35,7 +35,7 @@
   function fail(code) { return new Error(code); }
 
   /* ---------- ポップアップ方式 ---------- */
-  function requestPopup() {
+  function requestPopup(prompt) {
     return new Promise(function (resolve, reject) {
       var o = window.google && google.accounts && google.accounts.oauth2;
       if (!o) { reject(fail('gis_not_loaded')); return; }
@@ -51,7 +51,7 @@
         error_callback: function (e) { reject(fail((e && e.type) || 'popup_error')); }
       });
       // ユーザーのタップの直後に同期的に呼ぶ必要がある（ポップアップブロック対策）
-      client.requestAccessToken({ prompt: '' });
+      client.requestAccessToken({ prompt: prompt || '' });
     });
   }
 
@@ -60,7 +60,7 @@
     var a = new Uint8Array(16); crypto.getRandomValues(a);
     return Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
   }
-  function startRedirect(after) {
+  function startRedirect(after, prompt) {
     var state = randomState();
     store(STATE_KEY, state);
     store(AFTER_KEY, after || null);
@@ -72,6 +72,7 @@
       include_granted_scopes: 'true',
       state: state
     });
+    if (prompt) q.set('prompt', prompt);
     location.assign('https://accounts.google.com/o/oauth2/v2/auth?' + q.toString());
   }
   // リダイレクトで戻ってきたときに、URLの # 以降からトークンを受け取る
@@ -117,6 +118,13 @@
             return true;
           });
         }, function () { return true; });
+    },
+    /* アカウント選択から必ずログインし直す（ホーム画面アプリでGoogleのログイン状態が切れているとき用）。
+       タップの直後に呼ぶこと */
+    relogin: function (after) {
+      token = null; expiresAt = 0; store(TOKEN_KEY, null);
+      if (mode() === 'redirect') { startRedirect(after, 'select_account'); return new Promise(function () {}); }
+      return requestPopup('select_account');
     },
     invalidate: function () { token = null; expiresAt = 0; store(TOKEN_KEY, null); },
     consumeRedirect: consumeRedirect,
