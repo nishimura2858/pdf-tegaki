@@ -4,12 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>PDF手書きノート</title>
-<link rel="stylesheet" href="css/app.css?v=11">
+<link rel="stylesheet" href="css/app.css?v=12">
 </head>
 <body>
 <header>
   <div class="row">
-    <button class="btn on" id="driveBtn">Driveから開く</button>
+    <label class="btn on" for="file" id="openLabel" style="display:inline-flex;align-items:center;">ファイルから開く</label>
+    <input id="file" type="file" accept="application/pdf" hidden>
     <button class="btn" id="blankBtn">白紙で試す</button>
     <span class="sep"></span>
     <div class="group">
@@ -65,8 +66,8 @@
     <canvas id="livec"></canvas>
   </div>
   <div id="hint">
-    <strong>「Driveから開く」でPDFを選ぶと、Apple Pencilで書き込めます</strong>
-    <span>手書きはこのiPadとGoogleドライブに自動保存され、同じPDFを開くと復元されます。<br>指1本でスクロール、指2本のピンチで拡大縮小できます。</span>
+    <strong>「ファイルから開く」でPDFを選ぶと、Apple Pencilで書き込めます</strong>
+    <span>ファイルアプリの「Googleドライブ」からも選べます。<br>手書きはこのiPadとGoogleドライブに自動保存され、同じPDFを開くと復元されます。<br>指1本でスクロール、指2本のピンチで拡大縮小できます。</span>
   </div>
 </div>
 
@@ -87,13 +88,11 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async></script>
-<script src="https://apis.google.com/js/api.js" async></script>
-<script src="js/config.js?v=11"></script>
-<script src="js/app.js?v=11"></script>
-<script src="js/google-auth.js?v=11"></script>
-<script src="js/google-picker.js?v=11"></script>
-<script src="js/drive.js?v=11"></script>
-<script src="js/drive-open.js?v=11"></script>
-<script src="js/drive-sync.js?v=11"></script>
+<script src="js/config.js?v=12"></script>
+<script src="js/app.js?v=12"></script>
+<script src="js/google-auth.js?v=12"></script>
+<script src="js/drive.js?v=12"></script>
+<script src="js/drive-sync.js?v=12"></script>
+<script src="js/pdf-open.js?v=12"></script>
 </body>
 </html>

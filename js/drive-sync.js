@@ -1,14 +1,15 @@
 /* 手書きデータのDrive同期
-   - Driveから開いたPDFだけが対象（iPadのファイルや白紙は、この端末にだけ保存）
+   - 「ファイルから開く」で開いたPDFが対象（白紙は、この端末にだけ保存）
+   - PDFとは、PDFの中身から作った識別子（SHA-256）で結びつける
    - この端末への保存はこれまでどおりすぐ行い、Driveへは書き終えて約10秒後と、アプリを閉じたときに送る
    - 開いたときにDrive側が新しければ読み込む。両方で書き換えていたら、どちらを残すか聞く
-   この端末での同期の記録: localStorage「sync:<PDFのファイルID>」= { fileId, version, dirty, dirtyAt } */
+   この端末での同期の記録: localStorage「sync:<PDFの識別子>」= { fileId, version, dirty, dirtyAt } */
 (function () {
   'use strict';
   var App = window.App;
   var btn = document.getElementById('syncBtn');
   var DELAY = 10000;
-  var cur = null;        // 開いているDriveのPDF { pdfId, name, key }
+  var cur = null;        // 開いているPDF { pdfHash, name, key }
   var timer = null, busy = false, again = false, state = '';
   var folderP = null;
 
@@ -39,15 +40,15 @@
     clearTimeout(timer); timer = null;
     var token = GAuth.current();
     if (!token) {
-      show('login', readMeta(cur.pdfId).dirty ? 'Drive未保存・ログイン' : 'Driveにログイン');
+      show('login', readMeta(cur.pdfHash).dirty ? 'Drive未保存・ログイン' : 'Driveにログイン');
       return;
     }
     busy = true;
     var c = cur;
     try {
-      var m = readMeta(c.pdfId);
+      var m = readMeta(c.pdfHash);
       if (m.dirty) show('busy', 'Drive保存中…'); else show('busy', 'Drive確認中…');
-      var remote = await Drive.findStrokes(c.pdfId, token);
+      var remote = await Drive.findStrokes(c.pdfHash, token);
       if (c !== cur) return;
       var overwriteId = null;
 
@@ -55,7 +56,7 @@
       if (remote && (remote.id !== m.fileId || remote.version !== m.version)) {
         var data = await Drive.getJson(remote.id, token);
         if (c !== cur) return;
-        var now = readMeta(c.pdfId);
+        var now = readMeta(c.pdfHash);
         var useRemote = true;
         if (now.dirty && App.hasStrokes()) {
           useRemote = window.confirm(
@@ -64,11 +65,11 @@
             'キャンセル：この端末の内容でDriveを上書きする\n\n' +
             '選ばなかった方は、この端末に控えとして残します。');
           if (c !== cur) return;
-          keepBackup(c.pdfId, useRemote ? App.exportJson() : JSON.stringify(data));
+          keepBackup(c.pdfHash, useRemote ? App.exportJson() : JSON.stringify(data));
         }
         if (useRemote) {
           if (!App.replaceData(data)) { again = true; return; } // 書いている最中なら、あとでやり直す
-          writeMeta(c.pdfId, { fileId: remote.id, version: remote.version, dirty: false, dirtyAt: 0 });
+          writeMeta(c.pdfHash, { fileId: remote.id, version: remote.version, dirty: false, dirtyAt: 0 });
           App.setStatus('Driveの手書きを読み込みました');
           show('ok', 'Drive保存済み');
           return;
@@ -76,7 +77,7 @@
         overwriteId = remote.id;
       }
 
-      var before = readMeta(c.pdfId);
+      var before = readMeta(c.pdfHash);
       var target = overwriteId || (remote && remote.id) || null;
       if (!before.dirty && !overwriteId && (target || !App.hasStrokes())) { show('ok', 'Drive保存済み'); return; }
 
@@ -87,11 +88,11 @@
         try { res = await Drive.updateStrokes(target, body, token); }
         catch (e) { if (e.status !== 404) throw e; target = null; }
       }
-      if (!target) res = await Drive.createStrokes(await folder(token), jsonName(c.name), c.pdfId, body, token);
+      if (!target) res = await Drive.createStrokes(await folder(token), jsonName(c.name), c.pdfHash, body, token);
       // 送っている間にまた書いたら、もう一度送る
-      var after = readMeta(c.pdfId);
+      var after = readMeta(c.pdfHash);
       var changed = after.dirtyAt !== before.dirtyAt;
-      writeMeta(c.pdfId, { fileId: res.id, version: res.version, dirty: changed, dirtyAt: after.dirtyAt || 0 });
+      writeMeta(c.pdfHash, { fileId: res.id, version: res.version, dirty: changed, dirtyAt: after.dirtyAt || 0 });
       if (c !== cur) return;
       if (changed) { show('pending', 'Drive保存待ち'); schedule(DELAY); }
       else show('ok', 'Drive保存済み');
@@ -108,9 +109,9 @@
   // この端末に保存されたとき（＝手書きが変わったとき）
   App.hooks.saved = function (key) {
     if (!cur || key !== cur.key) return;
-    var m = readMeta(cur.pdfId);
+    var m = readMeta(cur.pdfHash);
     m.dirty = true; m.dirtyAt = Date.now();
-    writeMeta(cur.pdfId, m);
+    writeMeta(cur.pdfHash, m);
     if (state !== 'login') show('pending', 'Drive保存待ち');
     if (!busy) schedule(DELAY); else again = true;
   };
@@ -118,20 +119,20 @@
   // ファイルを開いたとき
   App.hooks.opened = function (key, name) {
     clearTimeout(timer); timer = null;
-    var mt = /^strokes:drive:(.+)$/.exec(key);
+    var mt = /^strokes:pdf:([0-9a-f]{64})$/.exec(key);
     if (!mt) { cur = null; btn.hidden = true; state = ''; return; }
-    cur = { pdfId: mt[1], name: name, key: key };
+    cur = { pdfHash: mt[1], name: name, key: key };
     sync();
   };
 
   // アプリを閉じる・ほかのアプリに切り替えるときは、待たずに送る
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden && cur && readMeta(cur.pdfId).dirty) sync();
+    if (document.hidden && cur && readMeta(cur.pdfHash).dirty) sync();
   });
 
   // 通信が戻ったら、Driveに送れていない分を送る
   window.addEventListener('online', function () {
-    if (cur && readMeta(cur.pdfId).dirty) schedule(1000);
+    if (cur && readMeta(cur.pdfHash).dirty) schedule(1000);
   });
 
   // ボタン: ログインが必要ならログインしてから、それ以外はすぐ同期
@@ -139,7 +140,7 @@
     if (!cur) return;
     if (state === 'login' || !GAuth.hasToken()) {
       GAuth.getToken('sync').then(function () { sync(); }, function (e) {
-        App.setStatus('ログインできませんでした（' + ((e && e.message) || '不明') + '）');
+        App.setStatus(PdfOpen.message(e && e.message));
       });
       return;
     }

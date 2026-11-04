@@ -49,9 +49,9 @@
     });
   }
 
-  /* PDFのファイルIDに対応する手書きデータ（○○.strokes.json）を探す。なければ null */
-  function findStrokes(pdfId, token) {
-    var query = "appProperties has { key='pdfId' and value='" + q(pdfId) + "' } and trashed=false";
+  /* PDFの中身の識別子（SHA-256）に対応する手書きデータ（○○.strokes.json）を探す。なければ null */
+  function findStrokes(pdfHash, token) {
+    var query = "appProperties has { key='pdfHash' and value='" + q(pdfHash) + "' } and trashed=false";
     return list(query, 'id,version,modifiedTime', token).then(function (files) { return files[0] || null; });
   }
 
@@ -60,9 +60,9 @@
   }
 
   /* 手書きデータを新しく作る */
-  function createStrokes(folderId, name, pdfId, body, token) {
+  function createStrokes(folderId, name, pdfHash, body, token) {
     var b = 'pdftegaki' + Math.random().toString(16).slice(2);
-    var meta = { name: name, mimeType: 'application/json', parents: [folderId], appProperties: { pdfId: pdfId } };
+    var meta = { name: name, mimeType: 'application/json', parents: [folderId], appProperties: { pdfHash: pdfHash } };
     var payload =
       '--' + b + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(meta) + '\r\n' +
       '--' + b + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + body + '\r\n' +
