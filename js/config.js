@@ -8,5 +8,6 @@ window.APP_CONFIG = {
   API_KEY: 'AIzaSyA9Eg71Y5a9V4ZR5Y5rlglYWpGUA1b-oas',
   // プロジェクト番号（PickerのappIdに使う）
   APP_ID: '519206114844',
-  SCOPE: 'https://www.googleapis.com/auth/drive.file'
+  // Drive全体（元のPDFに書き込みを反映するため。Google Cloud の「データアクセス」にも同じものを登録）
+  SCOPE: 'https://www.googleapis.com/auth/drive'
 };

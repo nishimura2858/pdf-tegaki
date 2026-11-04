@@ -5,7 +5,8 @@
 (function () {
   'use strict';
   var C = window.APP_CONFIG;
-  var TOKEN_KEY = 'gauth:token', STATE_KEY = 'gauth:state', AFTER_KEY = 'gauth:after';
+  // 権限を drive.file → drive に広げたので、前の権限のトークンは使わない（キー名を変えた）
+  var TOKEN_KEY = 'gauth:token:drive', STATE_KEY = 'gauth:state', AFTER_KEY = 'gauth:after';
   var token = null, expiresAt = 0;
 
   function store(k, v) { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} }

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>PDF手書きノート</title>
-<link rel="stylesheet" href="css/app.css?v=12">
+<link rel="stylesheet" href="css/app.css?v=13">
 </head>
 <body>
 <header>
@@ -67,7 +67,7 @@
   </div>
   <div id="hint">
     <strong>「ファイルから開く」でPDFを選ぶと、Apple Pencilで書き込めます</strong>
-    <span>ファイルアプリの「Googleドライブ」からも選べます。<br>手書きはこのiPadとGoogleドライブに自動保存され、同じPDFを開くと復元されます。<br>指1本でスクロール、指2本のピンチで拡大縮小できます。</span>
+    <span>ファイルアプリの「Googleドライブ」からも選べます。<br>手書きはこのiPadとGoogleドライブに自動保存され、同じPDFを開くと復元されます。<br>Googleドライブから開いたPDFには、書き込みがPDFそのものにも反映されます（30分おきと、アプリを離れたとき）。<br>指1本でスクロール、指2本のピンチで拡大縮小できます。</span>
   </div>
 </div>
 
@@ -88,11 +88,13 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async></script>
-<script src="js/config.js?v=12"></script>
-<script src="js/app.js?v=12"></script>
-<script src="js/google-auth.js?v=12"></script>
-<script src="js/drive.js?v=12"></script>
-<script src="js/drive-sync.js?v=12"></script>
-<script src="js/pdf-open.js?v=12"></script>
+<script src="js/config.js?v=13"></script>
+<script src="js/app.js?v=13"></script>
+<script src="js/google-auth.js?v=13"></script>
+<script src="js/drive.js?v=13"></script>
+<script src="js/drive-sync.js?v=13"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"></script>
+<script src="js/pdf-open.js?v=13"></script>
+<script src="js/pdf-write.js?v=13"></script>
 </body>
 </html>

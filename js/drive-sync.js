@@ -1,4 +1,5 @@
 /* 手書きデータのDrive同期
+   - 書き込みを元のPDFそのものに反映する処理は pdf-write.js
    - 「ファイルから開く」で開いたPDFが対象（白紙は、この端末にだけ保存）
    - PDFとは、PDFの中身から作った識別子（SHA-256）で結びつける
    - この端末への保存はこれまでどおりすぐ行い、Driveへは書き終えて約10秒後と、アプリを閉じたときに送る
@@ -21,7 +22,7 @@
     state = s;
     btn.hidden = false;
     btn.textContent = text;
-    btn.classList.toggle('warn', s === 'login' || s === 'error');
+    btn.classList.toggle('warn', s === 'login' || s === 'error' || s === 'relogin');
     App.dbg('Drive同期: ' + text);
   }
   function jsonName(pdfName) { return String(pdfName || 'PDF').replace(/\.pdf$/i, '') + '.strokes.json'; }
@@ -120,7 +121,13 @@
   App.hooks.opened = function (key, name) {
     clearTimeout(timer); timer = null;
     var mt = /^strokes:pdf:([0-9a-f]{64})$/.exec(key);
-    if (!mt) { cur = null; btn.hidden = true; state = ''; return; }
+    if (!mt) {
+      cur = null; state = '';
+      // 書き込み入りPDFで元のPDFが手元にないとき: ログインすれば取り寄せて開き直せる
+      if (window.PdfOpen && PdfOpen.needLogin()) show('relogin', 'Driveにログイン');
+      else btn.hidden = true;
+      return;
+    }
     cur = { pdfHash: mt[1], name: name, key: key };
     sync();
   };
@@ -137,6 +144,12 @@
 
   // ボタン: ログインが必要ならログインしてから、それ以外はすぐ同期
   btn.addEventListener('click', function () {
+    if (!cur && state === 'relogin') {
+      GAuth.getToken('reopen').then(function () { PdfOpen.reopenLast(); }, function (e) {
+        App.setStatus(PdfOpen.message(e && e.message));
+      });
+      return;
+    }
     if (!cur) return;
     if (state === 'login' || !GAuth.hasToken()) {
       GAuth.getToken('sync').then(function () { sync(); }, function (e) {
