@@ -44,6 +44,13 @@
     try {
       // ポップアップ方式では、タップ直後に同期的にログイン画面を開く必要があるので、最初に呼ぶ
       var token = await GAuth.getToken('pick');
+      App.setStatus('ログインを確認しています…');
+      if (!(await GAuth.check(token))) {
+        GAuth.invalidate();
+        if (GAuth.mode() === 'redirect') { await GAuth.getToken('pick'); return; } // ログイン画面へ移動する
+        App.setStatus('ログインの期限が切れていました。もう一度「Driveから開く」を押してください');
+        return;
+      }
       App.setStatus('Driveのファイルを表示しています…');
       var f = await GPicker.pickPdf(token);
       if (!f) { App.setStatus('キャンセルしました'); return; }

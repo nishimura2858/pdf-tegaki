@@ -103,6 +103,21 @@
       if (mode() === 'redirect') { startRedirect(after); return new Promise(function () {}); }
       return requestPopup();
     },
+    /* 手元のトークンがGoogle側でまだ使えるか確かめる（期限切れ・取り消し済みだと、
+       ファイル選択画面が「APIデベロッパーキーが無効です」と表示してしまうため）。
+       通信できないときは判断せず true を返す */
+    check: function (t) {
+      return fetch('https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=' + encodeURIComponent(t))
+        .then(function (r) {
+          if (!r.ok) return false;
+          return r.json().then(function (d) {
+            var left = +d.expires_in || 0;
+            if (d.aud !== C.CLIENT_ID || left < 120) return false;
+            if (t === token) { expiresAt = Math.min(expiresAt, Date.now() + (left - 60) * 1000); store(TOKEN_KEY, JSON.stringify({ t: token, e: expiresAt })); }
+            return true;
+          });
+        }, function () { return true; });
+    },
     invalidate: function () { token = null; expiresAt = 0; store(TOKEN_KEY, null); },
     consumeRedirect: consumeRedirect,
     takeAfter: function () { var a = read(AFTER_KEY); store(AFTER_KEY, null); return a; }
