@@ -56,7 +56,29 @@
   var ui = {};
   function setText(el, t) { if (ui[el.id] !== t) { ui[el.id] = t; el.textContent = t; } }
   function setDis(el, v) { var k = 'd' + el.id; if (ui[k] !== v) { ui[k] = v; el.disabled = v; } }
-  function setStatus(t) { setText($('status'), t); }
+  // お知らせは画面下に数秒だけ出す
+  var statusTimer = null;
+  function setStatus(t) {
+    var el = $('status');
+    setText(el, t);
+    el.classList.add('show');
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(function () { el.classList.remove('show'); }, 3500);
+  }
+  // 右下のページ番号を少しのあいだ出す（text を渡すとその文字を出す: 倍率など）
+  var pagerTimer = null;
+  function flashPager(text) {
+    var el = $('pager');
+    if (!S.hasFile) return;
+    setText($('pageLabel'), text || (S.page + ' / ' + S.total));
+    el.classList.add('show');
+    clearTimeout(pagerTimer);
+    pagerTimer = setTimeout(function () {
+      pagerTimer = null;
+      el.classList.remove('show');
+      setText($('pageLabel'), S.page + ' / ' + S.total);
+    }, 1400);
+  }
   function r4(n) { return Math.round(n * 10000) / 10000; }
   function pages() { return S.strokes[S.page] || []; }
 
@@ -174,8 +196,7 @@
   }
 
   function updateUI() {
-    setText($('pageLabel'), S.hasFile ? (S.page + ' / ' + S.total) : '- / -');
-    setText($('zoomLabel'), Math.round(S.zoom * 100) + '%');
+    if (!pagerTimer) setText($('pageLabel'), S.hasFile ? (S.page + ' / ' + S.total) : '- / -');
     setDis($('prev'), !S.hasFile || S.page <= 1);
     setDis($('next'), !S.hasFile || S.page >= S.total);
     setDis($('undo'), !S.undo.length);
@@ -264,33 +285,50 @@
     S.undo = []; S.redo = []; S.live = null; S.cache = {}; S.dirty = {};
     loadSaved();
     $('hint').style.display = 'none'; wrap.style.display = 'block';
+    $('pager').hidden = false;
     stage.scrollTo(0, 0);
     renderPage();
     if (hooks.opened) hooks.opened(key, name);
   }
-  $('blankBtn').addEventListener('click', function () { openDoc(null, '白紙', 'strokes:__blank__'); });
+  $('blankBtn').addEventListener('click', function () { closeMenu(); openDoc(null, '白紙', 'strokes:__blank__'); });
+
+  /* ---------- その他メニュー ---------- */
+  function closeMenu() { $('moreMenu').hidden = true; $('moreBtn').setAttribute('aria-expanded', 'false'); }
+  $('moreBtn').addEventListener('click', function (e) {
+    e.stopPropagation();
+    var open = $('moreMenu').hidden;
+    $('moreMenu').hidden = !open; $('moreBtn').setAttribute('aria-expanded', String(open));
+  });
+  document.addEventListener('pointerdown', function (e) {
+    if (!$('moreMenu').hidden && !e.target.closest('.menu-wrap')) closeMenu();
+  }, true);
 
   /* ---------- 操作 ---------- */
   function goPage(n) {
     n = Math.min(S.total, Math.max(1, n));
     if (n === S.page && S.hasFile) { drawInk(); updateUI(); return; }
     S.page = n; S.live = null; stage.scrollTo(0, 0); renderPage();
+    flashPager();
   }
   $('prev').onclick = function () { goPage(S.page - 1); };
   $('next').onclick = function () { goPage(S.page + 1); };
-  function setZoom(z) { S.zoom = Math.min(MAXZOOM, Math.max(0.5, Math.round(z * 100) / 100)); renderPage(); }
-  $('zoomIn').onclick = function () { setZoom(S.zoom + 0.25); };
-  $('zoomOut').onclick = function () { setZoom(S.zoom - 0.25); };
+  function setZoom(z) {
+    S.zoom = Math.min(MAXZOOM, Math.max(0.5, Math.round(z * 100) / 100));
+    flashPager(Math.round(S.zoom * 100) + '%');
+    renderPage();
+  }
 
   document.querySelectorAll('[data-tool]').forEach(function (b) {
     b.onclick = function () {
       S.tool = b.dataset.tool;
       document.querySelectorAll('[data-tool]').forEach(function (x) { x.classList.toggle('on', x === b); });
+      document.querySelector('header').classList.toggle('eraser', S.tool === 'eraser');
     };
   });
   document.querySelectorAll('[data-color]').forEach(function (b) {
     b.onclick = function () {
       S.color = b.dataset.color;
+      document.querySelector('header').style.setProperty('--cur', S.color);
       document.querySelectorAll('[data-color]').forEach(function (x) { x.classList.toggle('on', x === b); });
     };
   });
@@ -300,7 +338,14 @@
       document.querySelectorAll('[data-width]').forEach(function (x) { x.classList.toggle('on', x === b); });
     };
   });
-  $('finger').onchange = function () { S.finger = this.checked; };
+  $('finger').onclick = function () {
+    S.finger = !S.finger;
+    this.classList.toggle('on', S.finger);
+    this.setAttribute('aria-pressed', String(S.finger));
+    // 指で書くあいだは指でめくれないので、ページの矢印を出しておく
+    $('pager').classList.toggle('arrows', S.finger);
+    setStatus(S.finger ? '指でも書けます（ページは右下の矢印でめくれます）' : '指ではスクロール・ページめくり・拡大縮小をします');
+  };
 
   function pushUndo() {
     S.undo.push({ page: S.page, strokes: pages().slice() });
@@ -319,7 +364,7 @@
   $('clearPage').onclick = function () {
     if (!S.hasFile || !pages().length) return;
     pushUndo(); S.strokes[S.page] = []; drawInk(); updateUI(); scheduleSave();
-    setStatus('このページを消去しました（↶で戻せます）');
+    setStatus('このページを消去しました（元に戻すボタンで戻せます）');
   };
 
   /* ---------- 手書き ---------- */
@@ -340,6 +385,7 @@
     var m = tMetrics();
     var z = Math.min(MAXZOOM, Math.max(0.5, pinch.z0 * m.d / pinch.d0));
     pinch.s = z / pinch.z0; pinch.cx = m.cx; pinch.cy = m.cy;
+    flashPager(Math.round(z * 100) + '%');
     wrap.style.transform = 'translate(' + (m.cx - pinch.cx0) + 'px,' + (m.cy - pinch.cy0) + 'px) scale(' + pinch.s + ')';
   }
   function clearPinchStyle() { wrap.style.transform = ''; wrap.style.transformOrigin = ''; }
@@ -385,6 +431,30 @@
     drawnIdx = s.points.length;
   }
 
+  /* 指1本を離したとき: 左右に払った → ページをめくる / 2回タップ → 拡大・元に戻す */
+  var lastTap = null;
+  function fingerUp(p, e) {
+    var dx = e.clientX - p.x0, dy = e.clientY - p.y0, dt = performance.now() - p.t0;
+    if (dt < 500 && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      if (dx < 0 && p.atR && S.page < S.total) goPage(S.page + 1);
+      else if (dx > 0 && p.atL && S.page > 1) goPage(S.page - 1);
+      else if (dx < 0 ? p.atR : p.atL) flashPager(); // 最初・最後のページ
+      lastTap = null;
+      return;
+    }
+    if (dt < 300 && Math.hypot(dx, dy) < 12) {
+      var now = performance.now();
+      if (lastTap && now - lastTap.t < 350 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 40) {
+        lastTap = null;
+        var rc = wrap.getBoundingClientRect();
+        S.anchor = { fx: (e.clientX - rc.left) / rc.width, fy: (e.clientY - rc.top) / rc.height, cx: e.clientX, cy: e.clientY };
+        setZoom(Math.abs(S.zoom - 1) < 0.01 ? 2 : 1);
+        return;
+      }
+      lastTap = { t: now, x: e.clientX, y: e.clientY };
+    } else lastTap = null;
+  }
+
   ink.addEventListener('pointerdown', function (e) {
     if (!S.hasFile) return;
     e.preventDefault();
@@ -397,7 +467,11 @@
       ink.setPointerCapture(e.pointerId);
       var n = Object.keys(touches).length;
       dbg('指#' + e.pointerId + ' 接触 → ' + (n === 1 ? 'スクロール扱い' : n === 2 ? 'ピンチ扱い' : n + '本目'));
-      if (n === 1) { pan = { id: e.pointerId, x: e.clientX, y: e.clientY }; }
+      if (n === 1) {
+        pan = { id: e.pointerId, x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: performance.now(),
+          // 払う前に、横スクロールが端まで来ていたか（端なら、払うとページをめくる）
+          atL: stage.scrollLeft <= 1, atR: stage.scrollLeft >= stage.scrollWidth - stage.clientWidth - 1 };
+      }
       else if (n === 2) { pan = null; startPinch(); }
       return;
     }
@@ -440,7 +514,7 @@
       dbg('指#' + e.pointerId + ' ' + (e.type === 'pointercancel' ? '取り消し' : '離す'));
       delete touches[e.pointerId];
       if (pinch) endPinch();
-      if (pan && pan.id === e.pointerId) pan = null;
+      if (pan && pan.id === e.pointerId) { if (e.type === 'pointerup') fingerUp(pan, e); pan = null; }
       return;
     }
     if (!drawing || e.pointerId !== drawing.id) return;
@@ -478,6 +552,7 @@
 
   /* ---------- JSONダイアログ ---------- */
   $('jsonBtn').onclick = function () {
+    closeMenu();
     if (!S.hasFile) { setStatus('先にPDFを開いてください'); return; }
     // 文字入力欄はページに常に置かず、開いたときだけ作る（スクリブルが反応しにくくなるように）
     var ta = document.createElement('textarea');

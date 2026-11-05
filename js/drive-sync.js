@@ -21,7 +21,9 @@
   function show(s, text) {
     state = s;
     btn.hidden = false;
-    btn.textContent = text;
+    document.getElementById('syncText').textContent = text;
+    btn.title = text; btn.setAttribute('aria-label', text);
+    btn.className = 'btn icon s-' + s;
     btn.classList.toggle('warn', s === 'login' || s === 'error' || s === 'relogin');
     App.dbg('Drive同期: ' + text);
   }
