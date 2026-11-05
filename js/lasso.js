@@ -166,8 +166,8 @@
     clearLive();
     var W = lc.width, H = lc.height, k = W / S.cssW;
     lctx.save();
-    lctx.setLineDash([6 * k, 5 * k]); lctx.lineWidth = 1.6 * k; lctx.strokeStyle = '#3d5fc4';
-    lctx.fillStyle = 'rgba(61,95,196,.06)';
+    lctx.setLineDash([6 * k, 5 * k]); lctx.lineWidth = 1.6 * k; lctx.strokeStyle = '#ec6f69';
+    lctx.fillStyle = 'rgba(236,111,105,.06)';
     lctx.beginPath(); lctx.moveTo(path[0][0] * W, path[0][1] * H);
     for (var i = 1; i < path.length; i++) lctx.lineTo(path[i][0] * W, path[i][1] * H);
     lctx.closePath(); lctx.fill(); lctx.stroke();
