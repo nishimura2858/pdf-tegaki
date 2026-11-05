@@ -3,7 +3,7 @@
   "short_name": "手書きノート",
   "start_url": "./",
   "scope": "./",
-  "display": "browser",
+  "display": "standalone",
   "background_color": "#efebe4",
   "theme_color": "#f7f4ee",
   "icons": [
