@@ -4,7 +4,9 @@
    - PDFとは、PDFの中身から作った識別子（SHA-256）で結びつける
    - この端末への保存はこれまでどおりすぐ行い、Driveへは書き終えて約10秒後と、アプリを閉じたときに送る
    - 開いたときにDrive側が新しければ読み込む。両方で書き換えていたら、どちらを残すか聞く
-   この端末での同期の記録: localStorage「sync:<PDFの識別子>」= { fileId, version, dirty, dirtyAt } */
+   この端末での同期の記録: localStorage「sync:<PDFの識別子>」= { fileId, version, md5, dirty, dirtyAt }
+   - 別の端末で書き換えられたかは、中身の指紋（MD5）で比べる。Driveの version は、中身が同じでも
+     Drive側の都合で増えることがあり、「別の端末でも書き換えられています」が誤って出ていた（2026-11-05） */
 (function () {
   'use strict';
   var App = window.App;
@@ -61,8 +63,10 @@
       if (c !== cur) return;
       var overwriteId = null;
 
-      // Drive側が、この端末が最後に同期したときから変わっている
-      if (remote && (remote.id !== m.fileId || remote.version !== m.version)) {
+      // Drive側が、この端末が最後に同期したときから変わっている（中身の指紋で比べる。
+      // 指紋の記録がない古い記録は、同じファイルなら変わっていないとみなす）
+      var remoteChanged = remote && (remote.id !== m.fileId || (!!m.md5 && !!remote.md5Checksum && remote.md5Checksum !== m.md5));
+      if (remoteChanged) {
         var data = await Drive.getJson(remote.id, token);
         if (c !== cur) return;
         var now = readMeta(c.pdfHash);
@@ -78,7 +82,7 @@
         }
         if (useRemote) {
           if (!App.replaceData(data)) { again = true; return; } // 書いている最中なら、あとでやり直す
-          writeMeta(c.pdfHash, { fileId: remote.id, version: remote.version, dirty: false, dirtyAt: 0 });
+          writeMeta(c.pdfHash, { fileId: remote.id, version: remote.version, md5: remote.md5Checksum, dirty: false, dirtyAt: 0 });
           App.setStatus('Driveの手書きを読み込みました');
           show('ok', 'Drive保存済み');
           return;
@@ -88,7 +92,10 @@
 
       var before = readMeta(c.pdfHash);
       var target = overwriteId || (remote && remote.id) || null;
-      if (!before.dirty && !overwriteId && (target || !App.hasStrokes())) { show('ok', 'Drive保存済み'); return; }
+      if (!before.dirty && !overwriteId && (target || !App.hasStrokes())) {
+        if (remote && remote.md5Checksum && before.md5 !== remote.md5Checksum) { before.md5 = remote.md5Checksum; writeMeta(c.pdfHash, before); }
+        show('ok', 'Drive保存済み'); return;
+      }
 
       show('busy', 'Drive保存中…');
       var body = App.exportJson();
@@ -101,7 +108,7 @@
       // 送っている間にまた書いたら、もう一度送る
       var after = readMeta(c.pdfHash);
       var changed = after.dirtyAt !== before.dirtyAt;
-      writeMeta(c.pdfHash, { fileId: res.id, version: res.version, dirty: changed, dirtyAt: after.dirtyAt || 0 });
+      writeMeta(c.pdfHash, { fileId: res.id, version: res.version, md5: res.md5Checksum, dirty: changed, dirtyAt: after.dirtyAt || 0 });
       if (c !== cur) return;
       if (changed) { show('pending', 'Drive保存待ち'); schedule(DELAY); }
       else show('ok', 'Drive保存済み');

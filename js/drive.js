@@ -53,7 +53,7 @@
   /* PDFの中身の識別子（SHA-256）に対応する手書きデータ（○○.strokes.json）を探す。なければ null */
   function findStrokes(pdfHash, token) {
     var query = "appProperties has { key='pdfHash' and value='" + q(pdfHash) + "' } and trashed=false";
-    return list(query, 'id,version,modifiedTime', token).then(function (files) { return files[0] || null; });
+    return list(query, 'id,version,md5Checksum,modifiedTime', token).then(function (files) { return files[0] || null; });
   }
 
   function getJson(id, token) {
@@ -68,14 +68,14 @@
       '--' + b + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(meta) + '\r\n' +
       '--' + b + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + body + '\r\n' +
       '--' + b + '--';
-    return call(UPLOAD + '?uploadType=multipart&fields=id,version&supportsAllDrives=true', token, {
+    return call(UPLOAD + '?uploadType=multipart&fields=id,version,md5Checksum&supportsAllDrives=true', token, {
       method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + b }, body: payload
     });
   }
 
   /* 既存の手書きデータを上書きする */
   function updateStrokes(id, body, token) {
-    return call(UPLOAD + '/' + encodeURIComponent(id) + '?uploadType=media&fields=id,version&supportsAllDrives=true', token, {
+    return call(UPLOAD + '/' + encodeURIComponent(id) + '?uploadType=media&fields=id,version,md5Checksum&supportsAllDrives=true', token, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json; charset=UTF-8' }, body: body
     });
   }
