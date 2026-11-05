@@ -7,10 +7,13 @@
   var THUMB_W = 132;
 
   /* ---------- ページ一覧 ---------- */
-  var sideOpen = false, dirty = {}, queue = [], running = false, observer = null;
+  var sideOpen = false, dirty = {}, queue = [], running = false, observer = null, built = false, startAt = 0;
 
   function runQueue() {
     if (running) return;
+    // 一覧が滑り出している間は描かない（動きがカクカクしないように）
+    var wait = startAt - performance.now();
+    if (wait > 0) { setTimeout(runQueue, wait + 10); return; }
     var job = queue.shift(); if (!job) return;
     running = true;
     App.renderThumb(job.canvas, job.n, THUMB_W).catch(function (e) { console.error(e); })
@@ -26,6 +29,7 @@
     if (observer) observer.disconnect();
     queue = []; thumbs.textContent = '';
     if (!S.hasFile) return;
+    built = true;
     observer = new IntersectionObserver(function (ents) {
       ents.forEach(function (en) {
         if (en.isIntersecting && !en.target.dataset.done) { en.target.dataset.done = '1'; request(en.target); }
@@ -57,13 +61,15 @@
     });
     dirty = {};
   }
+  // 一覧は紙の上に重ねて出す（紙の大きさは変えない）。一度作った小さな絵は使い回す
   function setSide(v) {
     sideOpen = v;
+    if (v) {
+      startAt = performance.now() + 320;
+      if (!built) build(); else { mark(); refreshDirty(); }
+    }
     document.body.classList.toggle('side-open', v);
     $('sideBtn').classList.toggle('on', v);
-    if (v) { build(); }
-    // 紙の幅が変わるので、少し待ってから描き直す
-    setTimeout(function () { if (S.hasFile) App.renderPage(); mark(); }, 260);
   }
   $('sideBtn').addEventListener('click', function () {
     if (!S.hasFile) { App.setStatus('先にPDFを開いてください'); return; }
@@ -79,8 +85,8 @@
     clearTimeout(dt); dt = setTimeout(refreshDirty, 900);
   });
   App.on('page', function () { if (sideOpen) mark(); showMarks(); });
-  App.on('layout', function () { if (sideOpen) build(); });
-  App.on('open', function () { textCache = {}; query = ''; clearMarks(); if (sideOpen) build(); });
+  App.on('layout', function () { built = false; if (sideOpen) build(); });
+  App.on('open', function () { textCache = {}; query = ''; clearMarks(); built = false; if (sideOpen) build(); });
 
   /* ---------- 検索 ---------- */
   var textCache = {}, query = '', input = null, timer = null;

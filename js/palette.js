@@ -1,8 +1,8 @@
-/* 動かせる道具パレット
+/* 動かせる設定パレット（色・太さ・図形・消しゴムの大きさ・元に戻す）
    - 丸いボタンをタップすると、ふわっと開く。もう一度タップすると閉じる
    - 丸いボタンをドラッグすると、好きな場所に動かせる（位置はこの端末に保存）
-   - 道具や色を選ぶか、ペンで書き始めると自動で閉じる
-   道具・色の切り替えそのものは app.js が担当（data-tool / data-color のボタン） */
+   - ペンで書き始めると自動で閉じる
+   色・太さの切り替えそのものは toolbar.js が担当 */
 (function () {
   'use strict';
   var pal = document.getElementById('palette');
@@ -18,8 +18,6 @@
     y = Math.max(headerBottom() + MARGIN, Math.min(maxY, y));
     pos = { x: x, y: y };
     pal.style.left = x + 'px'; pal.style.top = y + 'px';
-    // 画面の右半分にあるときは、パネルを左向きに開く
-    pal.classList.toggle('to-left', x + SIZE / 2 > window.innerWidth / 2);
   }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(pos)); } catch (e) {} }
   function load() {
@@ -28,7 +26,14 @@
     if (p && isFinite(p.x) && isFinite(p.y)) place(p.x, p.y);
     else place(16, window.innerHeight - SIZE - 90); // 最初は左下
   }
+  // 開く向き: 右に入りきるなら右、だめなら左（中身の幅は道具によって変わる）
+  function side() {
+    var w = panel.offsetWidth, x = pos.x;
+    var fitR = x + SIZE + 10 + w <= window.innerWidth - 6, fitL = x - 10 - w >= 6;
+    pal.classList.toggle('to-left', fitR && fitL ? x + SIZE / 2 > window.innerWidth / 2 : !fitR);
+  }
   function setOpen(v) {
+    if (v) side();
     pal.classList.toggle('open', v);
     bub.setAttribute('aria-expanded', String(v));
   }
@@ -57,21 +62,22 @@
   // ドラッグ中に画面がスクロールしないように
   pal.addEventListener('touchmove', function (e) { if (e.cancelable) e.preventDefault(); }, { passive: false });
 
-  // 道具・色を選んだら閉じる（元に戻すは続けて押せるように閉じない）
-  panel.addEventListener('click', function (e) {
-    if (e.target.closest('[data-tool],[data-slot]')) setTimeout(function () { setOpen(false); }, 140);
-  });
   // ペンで書き始めたら閉じる
   document.getElementById('ink').addEventListener('pointerdown', function (e) {
     if (e.pointerType !== 'touch') setOpen(false);
   }, true);
 
-  // 元に戻す: 上のバーのボタンと同じ動き・同じ押せる／押せない状態
-  var undo = document.getElementById('undo'), palUndo = document.getElementById('palUndo');
-  palUndo.addEventListener('click', function () { undo.click(); });
-  function syncUndo() { palUndo.disabled = undo.disabled; }
-  new MutationObserver(syncUndo).observe(undo, { attributes: true, attributeFilter: ['disabled'] });
-  syncUndo();
+  // 元に戻す・やり直す: 上のバーのボタンと同じ動き・同じ押せる／押せない状態
+  [['undo', 'palUndo'], ['redo', 'palRedo']].forEach(function (ids) {
+    var src = document.getElementById(ids[0]), b = document.getElementById(ids[1]);
+    b.addEventListener('click', function () { src.click(); });
+    function syncDis() { b.disabled = src.disabled; }
+    new MutationObserver(syncDis).observe(src, { attributes: true, attributeFilter: ['disabled'] });
+    syncDis();
+  });
+
+  // 道具を変えると中身の幅が変わるので、開く向きを確かめ直す
+  window.App.on('tool', function () { if (pal.classList.contains('open')) setTimeout(side, 0); });
 
   var rt = null;
   window.addEventListener('resize', function () {

@@ -1,5 +1,6 @@
-/* 道具のボタン（上の2段のバー・パレット）とポップアップ
-   - ボールペン・えんぴつ・蛍光ペンは、それぞれ「よく使う4色」と太さを覚える（この端末に保存）
+/* 道具のボタン（上の藍色のバー）、設定のパレット、ポップアップ
+   - ボールペン・えんぴつ・マーカーは、それぞれ「よく使う4色」と太さを覚える（この端末に保存）
+   - 色・太さ・図形・消しゴムの大きさは、動かせるパレットで選ぶ
    - 選んでいる色をもう一度タップすると、その枠の色を選び直せる（GoodNotesと同じ） */
 (function () {
   'use strict';
@@ -37,12 +38,6 @@
   }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (e) {} }
 
-  // パレットのボタンに、2段目・1段目と同じアイコンを入れる
-  document.querySelectorAll('#palPanel [data-tool]').forEach(function (b) {
-    var src = document.querySelector('.subbar [data-tool="' + b.dataset.tool + '"] svg, .topbar [data-tool="' + b.dataset.tool + '"] svg');
-    if (src) b.innerHTML = src.outerHTML;
-  });
-
   function slotsHtml(c) {
     return c.slots.map(function (col, i) {
       return '<button class="swatch' + (i === c.sel ? ' on' : '') + '" data-slot="' + i + '" style="--c:' + col +
@@ -52,24 +47,20 @@
   function sync() {
     var t = S.tool, g = group(t), c = penCfg();
     document.querySelectorAll('[data-tool]').forEach(function (x) { x.classList.toggle('on', x.dataset.tool === t); });
-    $('writeBtn').classList.toggle('on', g === 'pens');
-    document.querySelectorAll('.subbar .opts').forEach(function (p) { p.hidden = p.dataset.for !== g; });
     var root = document.documentElement;
-    root.dataset.group = g;
+    root.dataset.group = g; root.dataset.tool = t;
     if (c) {
-      $('slots').innerHTML = slotsHtml(c);
       $('palSlots').innerHTML = slotsHtml(c);
       root.style.setProperty('--cur', S.color);
       root.style.setProperty('--curd', Math.round(3 + S.width * 2) + 'px');
       document.querySelectorAll('[data-width]').forEach(function (x) { x.classList.toggle('on', +x.dataset.width === S.width); });
     }
-    $('shapeBtn').hidden = t === 'highlighter';
     $('shapeBtn').classList.toggle('on', !!cfg.shape);
     document.querySelectorAll('[data-esize]').forEach(function (x) { x.classList.toggle('on', +x.dataset.esize === S.eraser); });
     document.querySelectorAll('[data-pick]').forEach(function (x) {
       x.classList.toggle('on', !!c && x.dataset.pick.toLowerCase() === S.color.toLowerCase());
     });
-    var icon = document.querySelector('#palPanel [data-tool="' + t + '"] svg, .topbar [data-tool="' + t + '"] svg');
+    var icon = document.querySelector('.topbar [data-tool="' + t + '"] svg');
     if (icon) $('palIcon').innerHTML = icon.outerHTML;
     cfg.tool = t;
     save();
@@ -89,11 +80,14 @@
   function showPop(pop, anchor) {
     if (openPop && openPop.pop === pop && openPop.anchor === anchor) { closePops(); return; }
     closePops();
-    var r = anchor.getBoundingClientRect(), w = pop.offsetWidth;
+    var r = anchor.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
     var cx = r.left + r.width / 2;
     var left = Math.max(8, Math.min(window.innerWidth - w - 8, cx - w / 2));
+    // 下に入りきらないときは、ボタンの上に出す（パレットが画面の下にあるときなど）
+    var up = r.bottom + 10 + h > window.innerHeight - 8 && r.top - 10 - h > 8;
+    pop.classList.toggle('up', up);
     pop.style.left = left + 'px';
-    pop.style.top = (r.bottom + 10) + 'px';
+    pop.style.top = (up ? r.top - 10 - h : r.bottom + 10) + 'px';
     pop.style.setProperty('--ax', (cx - left) + 'px');
     pop.classList.add('open');
     openPop = { pop: pop, anchor: anchor };
@@ -112,7 +106,7 @@
     if (d.slot !== undefined) {
       if (!c) return;
       var i = +d.slot;
-      if (i === c.sel && b.closest('.subbar')) { showPop($('colorPop'), b); return; }
+      if (i === c.sel) { showPop($('colorPop'), b); return; }
       c.sel = i; apply(); sync(); return;
     }
     if (d.pick) {
@@ -121,17 +115,15 @@
     }
     if (d.width) {
       if (c) { c.w = +d.width; apply(); sync(); }
-      setTimeout(closePops, 140); return;
+      return;
     }
     if (d.esize) { cfg.eraser = +d.esize; apply(); sync(); return; }
     if (d.add) { closePops(); App.insertPage(d.add); return; }
     switch (b.id) {
-      case 'writeBtn': setTool(cfg.lastPen); break;
       case 'shapeBtn':
         cfg.shape = !cfg.shape; apply(); sync();
         App.setStatus(cfg.shape ? '図形モード：丸・四角・三角・直線を書くと、きれいな形に直します' : '図形モードを切りました');
         break;
-      case 'widthBtn': showPop($('widthPop'), b); break;
       case 'moreBtn':
         $('delPageBtn').disabled = !S.hasFile || !App.pageEntry().added;
         showPop($('moreMenu'), b); break;

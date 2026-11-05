@@ -90,33 +90,18 @@ header { position: relative; z-index: 10; background: var(--bg); }
 .topbar #syncBtn.warn { color: var(--warn); box-shadow: inset 0 0 0 1px var(--warn); padding: 0 12px 0 8px; }
 #syncBtn.warn #syncText { display: inline; }
 
-/* ---------- 2段目: 道具の設定（白い角丸の帯） ---------- */
-.subbar {
-  display: flex; align-items: center; justify-content: center; gap: 12px;
-  padding: 8px 12px; position: relative; min-height: 52px; box-sizing: border-box;
-}
-.subbar .pill {
-  display: flex; align-items: center; gap: 4px; padding: 4px 8px;
-  background: var(--bar); border: 1px solid var(--line); border-radius: 18px;
-  box-shadow: 0 2px 10px rgba(16,24,48,.06);
-}
-.subbar .pill:first-child { position: absolute; left: 12px; }
-.subbar .note { padding: 0 16px; height: 44px; color: var(--muted); font-size: 13px; }
-.sbtn {
-  width: 44px; height: 40px; border: 0; border-radius: 12px; padding: 0; cursor: pointer;
-  background: transparent; color: var(--text); touch-action: manipulation; flex: none;
-  display: inline-flex; align-items: center; justify-content: center; transition: background .15s, transform .12s;
-}
-.sbtn:active { transform: scale(.92); }
-.sbtn:disabled { opacity: .3; }
-.sbtn.on { background: var(--sel); }
-.sbtn .tip { stroke: var(--cur); stroke-width: 2.4; }
-.sbtn:not(.on) .tip { stroke: currentColor; opacity: .35; }
-.sbtn.text { width: auto; padding: 0 12px; font: inherit; font-size: 13px; color: #d23c3c; }
-.ssep { width: 1px; height: 26px; background: var(--line); margin: 0 6px; flex: none; }
-.cur-width { width: var(--curd); height: var(--curd); border-radius: 50%; background: var(--cur); }
-.esize i { display: block; width: var(--d); height: var(--d); border-radius: 50%; border: 1.6px solid var(--muted); }
+/* ペンのアイコンの先に、いまの色を出す */
+.topbar .btn.icon .tip { stroke: var(--cur); stroke-width: 2.6; }
+.topbar .btn.icon:not(.on) .tip { stroke: currentColor; opacity: .4; }
+.topbar .btn.icon:disabled { opacity: .3; }
 .slots { display: flex; align-items: center; gap: 4px; }
+.esize i { display: block; width: var(--d); height: var(--d); border-radius: 50%; border: 1.6px solid currentColor; box-sizing: border-box; }
+@media (max-width: 860px) {
+  .topbar { padding-left: 6px; padding-right: 6px; gap: 4px; }
+  .topbar .center { gap: 2px; }
+  .topbar .side { gap: 0; }
+  .topbar .btn.icon { width: 40px; }
+}
 
 /* 色の丸（2段目・パレット・ポップアップで共通） */
 .swatch {
@@ -126,8 +111,8 @@ header { position: relative; z-index: 10; background: var(--bg); }
 }
 .swatch:active { transform: scale(.88); }
 .swatch.on { box-shadow: 0 0 0 3px var(--bar), 0 0 0 5px rgba(120,130,150,.35); }
-/* 2段目で選んでいる色: もう一度タップで色を変えられる印（∨） */
-.subbar .swatch.on::after {
+/* パレットで選んでいる色: もう一度タップで色を変えられる印（∨） */
+#palPanel .swatch.on::after {
   content: ""; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px;
   border-right: 2px solid rgba(255,255,255,.95); border-bottom: 2px solid rgba(255,255,255,.95);
   transform: translate(-50%, -70%) rotate(45deg);
@@ -146,6 +131,8 @@ header { position: relative; z-index: 10; background: var(--bg); }
   content: ""; position: absolute; top: -6px; left: var(--ax); width: 12px; height: 12px;
   background: var(--bar); transform: translateX(-50%) rotate(45deg); border-radius: 2px;
 }
+.pop.up { transform: translateY(6px) scale(.94); transform-origin: var(--ax) 100%; }
+.pop.up::before { top: auto; bottom: -6px; }
 .pop.open {
   opacity: 1; visibility: visible; pointer-events: auto; transform: none;
   transition: opacity .16s ease, transform .26s cubic-bezier(.2,1.3,.4,1), visibility 0s;
@@ -190,11 +177,18 @@ header { position: relative; z-index: 10; background: var(--bg); }
 
 /* ---------- 机とページ一覧 ---------- */
 #main { flex: 1; min-height: 0; display: flex; position: relative; }
+/* ページ一覧: 紙の上に左から滑り出す（紙の大きさは変えないので、なめらかに動く） */
 #sidebar {
-  width: 0; overflow: hidden auto; flex: none; background: var(--bar); border-right: 1px solid transparent;
-  transition: width .24s ease; -webkit-overflow-scrolling: touch;
+  position: absolute; left: 0; top: 0; bottom: 0; width: 172px; z-index: 6;
+  overflow: hidden auto; background: var(--bar); border-right: 1px solid var(--line);
+  -webkit-overflow-scrolling: touch; will-change: transform;
+  transform: translate3d(-100%, 0, 0); visibility: hidden;
+  transition: transform .28s cubic-bezier(.2,.9,.3,1), box-shadow .28s, visibility 0s .28s;
 }
-.side-open #sidebar { width: 172px; border-right-color: var(--line); }
+.side-open #sidebar {
+  transform: none; visibility: visible; box-shadow: 6px 0 24px rgba(16,24,48,.18);
+  transition: transform .28s cubic-bezier(.2,.9,.3,1), box-shadow .28s, visibility 0s;
+}
 #thumbs { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 14px 0 80px; width: 172px; }
 .thumb {
   border: 0; background: transparent; padding: 0; cursor: pointer; display: flex; flex-direction: column;
@@ -226,6 +220,29 @@ header { position: relative; z-index: 10; background: var(--bg); }
   color: var(--muted); padding: 24px; pointer-events: none; line-height: 1.7;
 }
 #hint strong { color: var(--text); font-size: 17px; font-weight: 600; }
+
+/* 上下に引っぱってページを移る・増やす */
+#pull {
+  position: absolute; left: 50%; bottom: 76px; z-index: 4; pointer-events: none;
+  display: flex; align-items: center; gap: 8px; padding: 8px 16px 8px 10px; border-radius: 22px;
+  background: var(--bar); color: var(--muted); font-size: 13px; box-shadow: var(--pop-shadow);
+  opacity: 0; transform: translate(-50%, 16px) scale(.9); transition: opacity .15s, transform .2s, background .15s, color .15s;
+}
+#pull.top { bottom: auto; top: 16px; transform: translate(-50%, -16px) scale(.9); }
+#pull.show { opacity: 1; transform: translate(-50%, 0) scale(calc(.85 + .15 * var(--k, 0))); }
+#pull .ic {
+  width: 26px; height: 26px; border-radius: 50%; background: var(--bg); position: relative; flex: none;
+  transition: background .15s, transform .25s cubic-bezier(.2,1.4,.4,1);
+}
+#pull .ic::before, #pull .ic::after { content: ""; position: absolute; left: 50%; top: 50%; background: currentColor; border-radius: 1px; }
+#pull.next .ic::before, #pull.prev .ic::before { width: 8px; height: 8px; background: none; border-left: 2px solid; border-top: 2px solid; transform: translate(-50%, -25%) rotate(45deg); }
+#pull.prev .ic { transform: rotate(180deg); }
+#pull.add .ic::before { width: 12px; height: 2px; transform: translate(-50%, -50%); }
+#pull.add .ic::after { width: 2px; height: 12px; transform: translate(-50%, -50%); }
+#pull.ready { background: var(--accent); color: var(--accent-text); }
+#pull.ready .ic { background: rgba(255,255,255,.22); }
+#pull.ready.add .ic { transform: rotate(90deg) scale(1.1); }
+#pull.ready.next .ic { transform: translateY(-2px); }
 
 /* 投げ縄で選んだもの */
 #selBox { position: absolute; border: 1.5px dashed var(--accent); border-radius: 6px; background: rgba(61,95,196,.05); pointer-events: none; }
@@ -284,7 +301,23 @@ header { position: relative; z-index: 10; background: var(--bg); }
 .pbtn .tip { stroke: var(--cur); stroke-width: 2.4; }
 .pbtn:not(.on) .tip { opacity: .45; stroke: currentColor; }
 .psep { width: 1px; height: 22px; background: rgba(255,255,255,.18); margin: 0 4px; }
-:root:not([data-group="pens"]) .pal-pens { display: none; }
+:root:not([data-group="pens"]) .g-pens, :root:not([data-group="pens"]) .g-shape,
+:root[data-tool="highlighter"] .g-shape,
+:root:not([data-group="eraser"]) .g-eraser,
+:root:not([data-group="lasso"]) .g-lasso,
+:root:not([data-group="laser"]) .g-laser { display: none; }
+#palPanel .widths { display: flex; align-items: center; }
+#palPanel .wopt { width: 36px; height: 40px; border-radius: 50%; }
+#palPanel .wopt i { background: var(--cur); box-shadow: 0 0 0 1px rgba(255,255,255,.25); }
+#palPanel .wopt.on { background: rgba(255,255,255,.16); box-shadow: none; }
+#palPanel .esize.on { background: var(--chip); color: var(--chip-text); }
+#palPanel .pbtn.on#shapeBtn { background: var(--chip); color: var(--chip-text); }
+.ptext {
+  border: 0; background: rgba(255,255,255,.1); color: #ffb3b3; font: inherit; font-size: 13px;
+  height: 36px; padding: 0 14px; border-radius: 18px; cursor: pointer; touch-action: manipulation;
+}
+.ptext:active { background: rgba(255,255,255,.2); }
+.pnote { color: var(--head-muted); font-size: 12.5px; padding: 0 10px 0 6px; }
 #palPanel .swatch { width: 26px; height: 26px; margin: 0 3px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.25); }
 #palPanel .swatch.on { box-shadow: 0 0 0 2px var(--head), 0 0 0 4px #fff; }
 

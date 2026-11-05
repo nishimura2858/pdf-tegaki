@@ -30,7 +30,7 @@
   var listeners = {};
   function on(ev, fn) { (listeners[ev] = listeners[ev] || []).push(fn); }
   function emit(ev, a) { (listeners[ev] || []).forEach(function (fn) { try { fn(a); } catch (e) { console.error(e); } }); }
-  var renderToken = 0, renderTask = null, saveTimer = null, lastStageW = 0;
+  var renderToken = 0, renderTask = null, saveTimer = null, lastStageW = 0, lastShown = '';
 
   /* ---------- 確認用モード（URLに ?debug=1 を付けたときだけ動く） ---------- */
   var DEBUG = /[?&]debug=1(&|$)/.test(location.search);
@@ -192,8 +192,9 @@
   // 画像を先に、線をあとに描く（画像の上に書けるように）。xf: 投げ縄で動かしている最中の見た目
   function drawList(ctx, list, W, H, xf) {
     var i, s;
-    for (i = 0; i < list.length; i++) { s = xf ? xf(list[i]) : list[i]; if (s.tool === 'image') drawItem(ctx, s, W, H); }
-    for (i = 0; i < list.length; i++) { s = xf ? xf(list[i]) : list[i]; if (s.tool !== 'image') drawItem(ctx, s, W, H); }
+    // xf が null を返したものは描かない（投げ縄で動かしている最中は、別の紙に描いている）
+    for (i = 0; i < list.length; i++) { s = xf ? xf(list[i]) : list[i]; if (s && s.tool === 'image') drawItem(ctx, s, W, H); }
+    for (i = 0; i < list.length; i++) { s = xf ? xf(list[i]) : list[i]; if (s && s.tool !== 'image') drawItem(ctx, s, W, H); }
   }
   function drawInk() {
     ictx.clearRect(0, 0, ink.width, ink.height);
@@ -237,7 +238,16 @@
     var dprInk = Math.max(0.7, Math.min(dw, Math.sqrt(6e6 / area)));
     S.cssW = cssW; S.cssH = cssH;
     wrap.style.width = cssW + 'px'; wrap.style.height = cssH + 'px';
+    if (S.landBottom) { S.landBottom = false; stage.scrollTop = stage.scrollHeight; } // 前のページへ戻るときは、下の端から
+    // 同じページの描き直し（拡大・画面の回転）では、描き終わるまで今の絵を引き伸ばして出しておく（白く点滅しないように）
+    var shown = S.key + ':' + S.page + ':' + entry().src, old = null;
+    if (page && shown === lastShown && pdfC.width > 0) {
+      old = document.createElement('canvas'); old.width = pdfC.width; old.height = pdfC.height;
+      old.getContext('2d').drawImage(pdfC, 0, 0);
+    }
+    lastShown = shown;
     pdfC.width = Math.floor(cssW * dprPdf); pdfC.height = Math.floor(cssH * dprPdf);
+    if (old) { pctx.drawImage(old, 0, 0, pdfC.width, pdfC.height); old.width = old.height = 0; }
     [ink, lc, tmp].forEach(function (c) { c.width = Math.floor(cssW * dprInk); c.height = Math.floor(cssH * dprInk); });
     [pdfC, ink, lc].forEach(function (c) { c.style.width = cssW + 'px'; c.style.height = cssH + 'px'; });
     if (S.anchor) {
@@ -249,12 +259,18 @@
     drawInk();
     emit('resize');
     if (page) {
-      var task = page.render({ canvasContext: pctx, viewport: page.getViewport({ scale: cssW / bw * dprPdf }) });
+      // 別の紙に描いてから、できあがったら一度に写す
+      var off = document.createElement('canvas'); off.width = pdfC.width; off.height = pdfC.height;
+      var task = page.render({ canvasContext: off.getContext('2d'), viewport: page.getViewport({ scale: cssW / bw * dprPdf }) });
       renderTask = task;
-      try { await task.promise; }
-      catch (e) {
+      try {
+        await task.promise;
+        if (token === renderToken) { pctx.clearRect(0, 0, pdfC.width, pdfC.height); pctx.drawImage(off, 0, 0); }
+      } catch (e) {
         if (!(e && e.name === 'RenderingCancelledException')) { setStatus('PDFの表示に失敗しました'); console.error(e); }
       }
+      off.width = off.height = 0;
+      if (token !== renderToken) return;
     } else {
       pctx.fillStyle = '#fff'; pctx.fillRect(0, 0, pdfC.width, pdfC.height);
     }
@@ -435,10 +451,12 @@
   /* ---------- 操作 ---------- */
   function goPage(n) {
     n = Math.min(S.total, Math.max(1, n));
-    if (n === S.page && S.hasFile) { drawInk(); updateUI(); return; }
-    S.page = n; S.live = null; stage.scrollTo(0, 0); renderPage();
+    if (n === S.page && S.hasFile) { drawInk(); updateUI(); return Promise.resolve(); }
+    S.page = n; S.live = null; stage.scrollTo(0, 0);
+    var done = renderPage();
     flashPager();
     emit('page');
+    return done;
   }
   $('prev').onclick = function () { goPage(S.page - 1); };
   $('next').onclick = function () { goPage(S.page + 1); };
@@ -475,7 +493,7 @@
 
   /* ページを今のページの次に追加する。kind: 'same'（同じページ）/ 'blank'（白紙） */
   function insertPage(kind) {
-    if (!S.hasFile) return;
+    if (!S.hasFile) return Promise.resolve();
     flushSave();
     var cur = entry();
     var e = kind === 'blank' || !(cur.src > 0)
@@ -489,8 +507,9 @@
     S.undo = []; S.redo = []; S.cache = {}; // ページ番号がずれるので、取り消し履歴は消す
     scheduleSave(at + 1);
     emit('layout');
-    goPage(at + 1);
+    var done = goPage(at + 1);
     setStatus(kind === 'blank' ? '白紙のページを追加しました' : '同じページを追加しました');
+    return done;
   }
   /* 今のページを削除する（追加したページだけ） */
   function deletePage() {
@@ -596,10 +615,43 @@
     if (Math.abs(dy) < Math.abs(dx) * 0.12) b = [b[0], a[1], b[2]];
     return [[a[0], a[1], 0.5], [b[0], b[1], 0.5]];
   }
+  /* えんぴつの書いている最中: 新しく書いた所のまわりだけを描き直して、質感の模様で切り抜く。
+     （以前は書き込み面全体にCSSの模様マスクをかけていて、iPadで線が遅れて出ていた） */
+  var livePat = null;
+  function pencilLive(from) {
+    var s = S.live, p = s.points, W = lc.width, H = lc.height, i;
+    var pad = widthAt(s, W, 1) / 2 + 2;
+    var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    for (i = Math.max(0, (from || 1) - 1); i < p.length; i++) {
+      var x = p[i][0] * W, y = p[i][1] * H;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+    var bx = Math.max(0, Math.floor(x0 - pad)), by = Math.max(0, Math.floor(y0 - pad));
+    var bw = Math.min(W, Math.ceil(x1 + pad)) - bx, bh = Math.min(H, Math.ceil(y1 + pad)) - by;
+    if (bw <= 0 || bh <= 0) return;
+    lctx.save();
+    lctx.beginPath(); lctx.rect(bx, by, bw, bh); lctx.clip();
+    lctx.clearRect(bx, by, bw, bh);
+    lctx.lineCap = 'round'; lctx.lineJoin = 'round'; lctx.strokeStyle = s.color; lctx.fillStyle = s.color;
+    if (p.length === 1) {
+      lctx.beginPath(); lctx.arc(p[0][0] * W, p[0][1] * H, widthAt(s, W, p[0][2]) / 2, 0, Math.PI * 2); lctx.fill();
+    }
+    for (var j = 1; j < p.length; j++) {
+      var ax = p[j - 1][0] * W, ay = p[j - 1][1] * H, cx = p[j][0] * W, cy = p[j][1] * H;
+      if (Math.max(ax, cx) + pad < bx || Math.min(ax, cx) - pad > bx + bw ||
+          Math.max(ay, cy) + pad < by || Math.min(ay, cy) - pad > by + bh) continue; // この範囲にかからない線
+      lctx.lineWidth = widthAt(s, W, (p[j][2] + p[j - 1][2]) / 2);
+      lctx.beginPath(); lctx.moveTo(ax, ay); lctx.lineTo(cx, cy); lctx.stroke();
+    }
+    lctx.globalCompositeOperation = 'destination-in';
+    lctx.fillStyle = livePat || (livePat = lctx.createPattern(noise(), 'repeat'));
+    lctx.fillRect(bx, by, bw, bh);
+    lctx.restore();
+  }
   function drawLive(from) {
     var s = S.live;
     if (s.tool === 'pen') segs(ictx, s, ink.width, ink.height, from);
-    else if (s.tool === 'pencil') segs(lctx, s, lc.width, lc.height, from);
+    else if (s.tool === 'pencil') pencilLive(from);
     else { lctx.clearRect(0, 0, lc.width, lc.height); hlPath(lctx, s, lc.width, lc.height); }
   }
   function flushDraw() {
@@ -611,8 +663,81 @@
   function liveLayer(tool) {
     lctx.clearRect(0, 0, lc.width, lc.height);
     lc.style.opacity = tool === 'highlighter' ? '0.35' : tool === 'pencil' ? '0.92' : '1';
-    var m = tool === 'pencil' ? 'url(' + noise().toDataURL() + ')' : '';
-    lc.style.webkitMaskImage = m; lc.style.maskImage = m;
+    lc.style.webkitMaskImage = ''; lc.style.maskImage = '';
+  }
+
+  /* ---------- 上下に引っぱってページを移る（GoodNotes風） ----------
+     ページの下の端で、さらに指を上へ引っぱる → 次のページ（最後のページなら、同じページを追加）
+     ページの上の端で、さらに指を下へ引っぱる → 前のページ */
+  var pullEl = $('pull'), PULL_MAX = 150, PULL_READY = 64, turning = false;
+  function pullKind(dir) { return dir > 0 ? (S.page < S.total ? 'next' : 'add') : (S.page > 1 ? 'prev' : null); }
+  var PULL_TEXT = {
+    next: ['引っぱると次のページ', '離すと次のページへ'],
+    add: ['引っぱるとページを追加', '離すとページを追加'],
+    prev: ['引っぱると前のページ', '離すと前のページへ']
+  };
+  // pull: 引っぱった量（正: 上へ、負: 下へ）。紙をゴムのように少し動かし、案内を出す
+  function showPull(p) {
+    var off = (p > 0 ? 1 : -1) * Math.min(PULL_MAX, Math.abs(p) * 0.5);
+    wrap.style.transform = p ? 'translateY(' + (-off) + 'px)' : '';
+    var kind = p ? pullKind(p) : null;
+    if (!kind) { pullEl.className = ''; return null; }
+    var ready = Math.abs(off) >= PULL_READY;
+    pullEl.className = 'show ' + kind + (p < 0 ? ' top' : '') + (ready ? ' ready' : '');
+    pullEl.style.setProperty('--k', Math.min(1, Math.abs(off) / PULL_READY).toFixed(2));
+    setText($('pullText'), PULL_TEXT[kind][ready ? 1 : 0]);
+    return ready ? kind : null;
+  }
+  function panMove(e) {
+    var dx = e.clientX - pan.x, dy = e.clientY - pan.y;
+    pan.x = e.clientX; pan.y = e.clientY;
+    stage.scrollLeft -= dx;
+    var want = -dy; // 正: 下へスクロールしたい
+    if (pan.pull) { // 引っぱっている最中は、まず引っぱりを戻す
+      var np = pan.pull + want;
+      if ((pan.pull > 0) !== (np > 0) || np === 0) { want = np; pan.pull = 0; } else { pan.pull = np; want = 0; }
+    }
+    if (want) {
+      var before = stage.scrollTop;
+      stage.scrollTop += want;
+      var rest = want - (stage.scrollTop - before); // 端まで来て、スクロールしきれなかった分
+      if ((rest > 0.5 && pan.atB) || (rest < -0.5 && pan.atT)) pan.pull += rest;
+    }
+    if (pan.pull || pan.ready !== undefined) pan.ready = showPull(pan.pull);
+  }
+  function settle() { setTimeout(function () { if (!turning) wrap.style.transition = ''; }, 460); }
+  function endPull(p, cancel) {
+    var kind = cancel ? null : p.ready;
+    pullEl.classList.remove('show', 'ready');
+    if (!kind) {
+      wrap.style.transition = 'transform .32s cubic-bezier(.2,1.3,.4,1)';
+      wrap.style.transform = '';
+      settle();
+      return;
+    }
+    turnPage(kind);
+  }
+  // 紙を送り出して、新しいページをにゅっと出す
+  function turnPage(kind) {
+    var dir = kind === 'prev' ? -1 : 1, h = stage.clientHeight;
+    turning = true;
+    wrap.style.transition = 'transform .18s ease-in, opacity .18s ease-in';
+    wrap.style.transform = 'translateY(' + (-dir * h * 0.5) + 'px)';
+    wrap.style.opacity = '0';
+    setTimeout(function () {
+      wrap.style.transition = 'none';
+      var done;
+      if (kind === 'add') done = insertPage('same');
+      else if (kind === 'prev') { S.landBottom = true; done = goPage(S.page - 1); }
+      else done = goPage(S.page + 1);
+      wrap.style.transform = 'translateY(' + (dir * h * 0.45) + 'px)' + (kind === 'add' ? ' scale(.9)' : '');
+      Promise.resolve(done).catch(function () {}).then(function () {
+        void wrap.offsetWidth; // 置いた位置を確定させてから動かす
+        wrap.style.transition = 'transform .46s cubic-bezier(.2,1.25,.35,1), opacity .2s ease-out';
+        wrap.style.transform = ''; wrap.style.opacity = '';
+        turning = false; settle();
+      });
+    }, 180);
   }
 
   /* 指1本を離したとき: 左右に払った → ページをめくる / 2回タップ → 拡大・元に戻す */
@@ -648,6 +773,17 @@
         dbg('指#' + e.pointerId + ' 無視（' + (drawing ? 'ペンで書いている最中' : 'ペンを離した直後') + '）');
         return;
       }
+      if (turning) return;
+      // 投げ縄で選んだもの・貼った画像は、指でもつかんで動かせる
+      var gh = tools[S.tool];
+      if (gh && gh.grab && !Object.keys(touches).length) {
+        S.rc = ink.getBoundingClientRect();
+        if (gh.grab(pos(e), e)) {
+          drawing = { id: e.pointerId, h: gh, touch: true };
+          ink.setPointerCapture(e.pointerId);
+          return;
+        }
+      }
       touches[e.pointerId] = { x: e.clientX, y: e.clientY };
       ink.setPointerCapture(e.pointerId);
       var n = Object.keys(touches).length;
@@ -655,13 +791,16 @@
       if (n === 1) {
         pan = { id: e.pointerId, x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: performance.now(),
           // 払う前に、横スクロールが端まで来ていたか（端なら、払うとページをめくる）
-          atL: stage.scrollLeft <= 1, atR: stage.scrollLeft >= stage.scrollWidth - stage.clientWidth - 1 };
+          atL: stage.scrollLeft <= 1, atR: stage.scrollLeft >= stage.scrollWidth - stage.clientWidth - 1,
+          // 縦も同じ: 端まで来てから引っぱると、ページを移る
+          atT: stage.scrollTop <= 1, atB: stage.scrollTop >= stage.scrollHeight - stage.clientHeight - 1, pull: 0 };
       }
-      else if (n === 2) { pan = null; startPinch(); }
+      else if (n === 2) { if (pan && pan.pull) endPull(pan, true); pan = null; startPinch(); }
       return;
     }
     if (drawing) { dbg('!! ペン#' + e.pointerId + ' 無視（前の線#' + drawing.id + 'が終わっていない）'); return; }
     dbg('ペン#' + e.pointerId + '(' + e.pointerType + ') 書き始め' + (Object.keys(touches).length ? '（指' + Object.keys(touches).length + '本を解除）' : ''));
+    if (pan && pan.pull) endPull(pan, true);
     pan = null; touches = {}; if (pinch) cancelPinch();
     ink.setPointerCapture(e.pointerId);
     S.rc = ink.getBoundingClientRect(); // 書き始めに1回だけ取得
@@ -681,10 +820,7 @@
       touches[e.pointerId].x = e.clientX; touches[e.pointerId].y = e.clientY;
       if (pinch && Object.keys(touches).length === 2) { movePinch(); return; }
     }
-    if (pan && e.pointerId === pan.id) {
-      stage.scrollLeft -= e.clientX - pan.x; stage.scrollTop -= e.clientY - pan.y;
-      pan.x = e.clientX; pan.y = e.clientY; return;
-    }
+    if (pan && e.pointerId === pan.id) { panMove(e); return; }
     if (!drawing || e.pointerId !== drawing.id) return;
     e.preventDefault();
     var evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
@@ -708,14 +844,19 @@
       dbg('指#' + e.pointerId + ' ' + (e.type === 'pointercancel' ? '取り消し' : '離す'));
       delete touches[e.pointerId];
       if (pinch) endPinch();
-      if (pan && pan.id === e.pointerId) { if (e.type === 'pointerup') fingerUp(pan, e); pan = null; }
+      if (pan && pan.id === e.pointerId) {
+        if (pan.pull || pan.ready) endPull(pan, e.type !== 'pointerup');
+        else if (e.type === 'pointerup') fingerUp(pan, e);
+        pan = null;
+      }
       return;
     }
     if (!drawing || e.pointerId !== drawing.id) return;
     dbg('ペン#' + e.pointerId + ' ' + (e.type === 'pointercancel' ? '!! 取り消し（OSに中断された）' : '離す') +
       (S.live ? '（' + S.live.points.length + '点）' : ''));
     if (drawing.h) {
-      var h = drawing.h; drawing = null; lastPenUp = performance.now();
+      var h = drawing.h, byFinger = drawing.touch; drawing = null;
+      if (!byFinger) lastPenUp = performance.now();
       h.up(e);
       return;
     }

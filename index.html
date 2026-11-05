@@ -5,21 +5,25 @@
 <meta name="theme-color" content="#24304d">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>PDF手書きノート</title>
-<link rel="stylesheet" href="css/app.css?v=19">
+<link rel="stylesheet" href="css/app.css?v=20">
 </head>
 <body>
 <header>
-  <!-- 1段目: 藍色のバー（大きな道具） -->
+  <!-- 藍色のバー（道具）。色・太さなどの設定は、動かせるパレットで選ぶ -->
   <div class="topbar">
     <div class="side left">
       <button class="btn icon" id="sideBtn" title="ページ一覧" aria-label="ページ一覧"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9 4v16M5.6 8.5h1.2M5.6 12h1.2M5.6 15.5h1.2"/></svg></button>
       <button class="btn icon" id="searchBtn" title="検索" aria-label="検索"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg></button>
       <label class="btn icon" for="file" id="openLabel" title="ファイルから開く" aria-label="ファイルから開く"><svg viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2h7.5A2.5 2.5 0 0 1 21 9.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg></label>
       <input id="file" type="file" accept="application/pdf" hidden>
+      <button class="btn icon" id="undo" title="元に戻す" aria-label="元に戻す"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+      <button class="btn icon" id="redo" title="やり直す" aria-label="やり直す"><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
     </div>
     <div class="center">
       <button class="btn icon" data-tool="lasso" title="投げ縄（囲んで選ぶ）" aria-label="投げ縄"><svg viewBox="0 0 24 24"><path d="M12 4c4.4 0 8 2.4 8 5.4s-3.6 5.4-8 5.4-8-2.4-8-5.4S7.6 4 12 4z" stroke-dasharray="2.6 2.4"/><path d="M8.2 14c-1.3 1.5-1 3.8 1.2 4 1.4.1 2.3-.8 2.2-2"/></svg></button>
-      <button class="btn icon" id="writeBtn" title="ペン" aria-label="ペン"><svg viewBox="0 0 24 24"><path d="M4 20l1-4.5L15.5 5a2.1 2.1 0 0 1 3 0l.5.5a2.1 2.1 0 0 1 0 3L8.5 19z"/><path d="M13.5 7l3.5 3.5"/></svg></button>
+      <button class="btn icon" data-tool="pen" title="ボールペン" aria-label="ボールペン"><svg viewBox="0 0 24 24"><path d="M5.5 18.5l1.3-4.2L16 5.1a1.7 1.7 0 0 1 2.4 0l.5.5a1.7 1.7 0 0 1 0 2.4l-9.2 9.2z"/><path d="M14.5 6.6l2.9 2.9"/><path class="tip" d="M3.5 21h6"/></svg></button>
+      <button class="btn icon" data-tool="pencil" title="えんぴつ" aria-label="えんぴつ"><svg viewBox="0 0 24 24"><path d="M5.5 18.5l1.5-4.6 9-9 3.1 3.1-9 9z"/><path d="M14 6.9l3.1 3.1"/><path d="M7 13.9l3.1 3.1"/><path class="tip" d="M3.5 21h6"/></svg></button>
+      <button class="btn icon" data-tool="highlighter" title="マーカー（直線）" aria-label="マーカー"><svg viewBox="0 0 24 24"><path d="M9 14.5l7.5-10 3 2.5-7.5 10z"/><path d="M9 14.5l-1 3 3 .5 1-1.5"/><path class="tip" d="M3.5 21h12" stroke-width="3"/></svg></button>
       <button class="btn icon" data-tool="eraser" title="消しゴム" aria-label="消しゴム"><svg viewBox="0 0 24 24"><path d="M7.5 19.5L3.8 15.8a1.8 1.8 0 0 1 0-2.6L13 4a1.8 1.8 0 0 1 2.6 0l4.4 4.4a1.8 1.8 0 0 1 0 2.6l-8.5 8.5z"/><path d="M8.5 8.5l7 7"/><path d="M11.5 19.5H20"/></svg></button>
       <button class="btn icon" id="imageBtn" title="画像を貼る" aria-label="画像を貼る"><svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="9.5" r="1.6"/><path d="M4 17l5-4.5 4 3.5 3-2.5 4.5 3.5"/></svg></button>
       <input id="imgFile" type="file" accept="image/*" hidden>
@@ -31,32 +35,6 @@
       <button class="btn icon" id="moreBtn" title="その他" aria-label="その他"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="8" cy="12" r="1.2" class="fill"/><circle cx="12" cy="12" r="1.2" class="fill"/><circle cx="16" cy="12" r="1.2" class="fill"/></svg></button>
       <button class="btn icon" id="syncBtn" hidden><svg viewBox="0 0 24 24"><path d="M7 18.5a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9.5a4.5 4.5 0 0 1-.5 9z"/><path class="ok" d="M9.5 13.5l2 2 3.5-3.5"/><path class="up" d="M12 16v-5M9.8 13.2L12 11l2.2 2.2"/></svg><span id="syncText"></span></button>
     </div>
-  </div>
-  <!-- 2段目: 選んでいる道具の設定（GoodNotes風） -->
-  <div class="subbar">
-    <div class="pill">
-      <button class="sbtn" id="undo" title="元に戻す" aria-label="元に戻す"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
-      <button class="sbtn" id="redo" title="やり直す" aria-label="やり直す"><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
-    </div>
-    <div class="pill opts" data-for="pens">
-      <button class="sbtn" data-tool="pen" title="ボールペン" aria-label="ボールペン"><svg viewBox="0 0 24 24"><path d="M5.5 18.5l1.3-4.2L16 5.1a1.7 1.7 0 0 1 2.4 0l.5.5a1.7 1.7 0 0 1 0 2.4l-9.2 9.2z"/><path d="M14.5 6.6l2.9 2.9"/><path class="tip" d="M3.5 21h6"/></svg></button>
-      <button class="sbtn" data-tool="pencil" title="えんぴつ" aria-label="えんぴつ"><svg viewBox="0 0 24 24"><path d="M5.5 18.5l1.5-4.6 9-9 3.1 3.1-9 9z"/><path d="M14 6.9l3.1 3.1"/><path d="M7 13.9l3.1 3.1"/><path class="tip" d="M3.5 21h6"/></svg></button>
-      <button class="sbtn" data-tool="highlighter" title="蛍光ペン（直線）" aria-label="蛍光ペン"><svg viewBox="0 0 24 24"><path d="M9 14.5l7.5-10 3 2.5-7.5 10z"/><path d="M9 14.5l-1 3 3 .5 1-1.5"/><path class="tip" d="M3.5 21h12" stroke-width="3"/></svg></button>
-      <button class="sbtn" id="shapeBtn" title="図形（手書きをきれいな図形に直す）" aria-label="図形"><svg viewBox="0 0 24 24"><circle cx="8" cy="15.5" r="4"/><rect x="11" y="3.5" width="8" height="8" rx="1"/><path d="M16 13.5l4 6.5h-8z"/></svg></button>
-      <span class="ssep"></span>
-      <button class="sbtn" id="widthBtn" title="太さ" aria-label="太さ"><span class="cur-width"></span></button>
-      <span class="ssep"></span>
-      <div class="slots" id="slots"></div>
-    </div>
-    <div class="pill opts" data-for="eraser">
-      <button class="sbtn esize" data-esize="8" title="小さい" aria-label="小さい消しゴム"><i style="--d:8px"></i></button>
-      <button class="sbtn esize" data-esize="14" title="ふつう" aria-label="ふつうの消しゴム"><i style="--d:13px"></i></button>
-      <button class="sbtn esize" data-esize="26" title="大きい" aria-label="大きい消しゴム"><i style="--d:19px"></i></button>
-      <span class="ssep"></span>
-      <button class="sbtn text" id="clearPage">このページを全部消す</button>
-    </div>
-    <div class="pill opts note" data-for="lasso">囲んで選ぶと、動かす・大きさを変える・消すができます</div>
-    <div class="pill opts note" data-for="laser">書いた線はすぐに消えます（説明するとき用）</div>
   </div>
 </header>
 
@@ -77,9 +55,10 @@
     </div>
     <div id="hint">
       <strong>左上のフォルダのボタンからPDFを選ぶと、Apple Pencilで書き込めます</strong>
-      <span>ファイルアプリの「Googleドライブ」からも選べます。<br>手書きはこのiPadとGoogleドライブに自動保存され、同じPDFを開くと復元されます。<br>Googleドライブから開いたPDFには、書き込みがPDFそのものにも反映されます（30分おきと、アプリを離れたとき）。<br>左下の丸いボタンで道具パレットを開けます（ドラッグで移動）。<br>指で左右に払うとページをめくれます。指2本のピンチで拡大縮小、2回タップで拡大／元の大きさに戻せます。</span>
+      <span>ファイルアプリの「Googleドライブ」からも選べます。<br>手書きはこのiPadとGoogleドライブに自動保存され、同じPDFを開くと復元されます。<br>Googleドライブから開いたPDFには、書き込みがPDFそのものにも反映されます（30分おきと、アプリを離れたとき）。<br>左下の丸いボタンで、色・太さなどのパレットを開けます（ドラッグで移動）。<br>ページの下で指を上に引っぱると次のページへ（最後のページではページを追加）。指2本のピンチで拡大縮小、2回タップで拡大／元の大きさに戻せます。</span>
     </div>
   </div>
+  <div id="pull"><span class="ic"></span><span class="tx" id="pullText"></span></div>
 </div>
 
 <!-- ポップアップ（ボタンの下にふわっと出る） -->
@@ -112,16 +91,6 @@
     <button class="swatch" data-pick="#ffffff" style="--c:#ffffff" aria-label="白"></button>
   </div>
 </div>
-<div class="pop" id="widthPop">
-  <div class="pop-title">太さ</div>
-  <div class="width-row">
-    <button class="wopt" data-width="1.5" aria-label="極細"><i style="--d:6px"></i></button>
-    <button class="wopt" data-width="2.5" aria-label="細い"><i style="--d:8px"></i></button>
-    <button class="wopt" data-width="4" aria-label="ふつう"><i style="--d:11px"></i></button>
-    <button class="wopt" data-width="6" aria-label="太い"><i style="--d:15px"></i></button>
-    <button class="wopt" data-width="9" aria-label="極太"><i style="--d:21px"></i></button>
-  </div>
-</div>
 <div class="pop" id="searchPop">
   <!-- 文字入力欄は開いたときだけ作る（スクリブル対策） -->
   <div id="searchSlot"></div>
@@ -133,15 +102,31 @@
 <div id="palette">
   <button id="palBubble" aria-label="道具パレット" aria-expanded="false"><span id="palIcon"></span></button>
   <div id="palPanel">
-    <button class="pbtn" data-tool="pen" title="ボールペン" aria-label="ボールペン"></button>
-    <button class="pbtn" data-tool="pencil" title="えんぴつ" aria-label="えんぴつ"></button>
-    <button class="pbtn" data-tool="highlighter" title="蛍光ペン" aria-label="蛍光ペン"></button>
-    <button class="pbtn" data-tool="eraser" title="消しゴム" aria-label="消しゴム"></button>
-    <button class="pbtn" data-tool="lasso" title="投げ縄" aria-label="投げ縄"></button>
-    <span class="psep pal-pens"></span>
-    <div class="slots pal-pens" id="palSlots"></div>
-    <span class="psep"></span>
     <button class="pbtn" id="palUndo" title="元に戻す" aria-label="元に戻す"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+    <button class="pbtn" id="palRedo" title="やり直す" aria-label="やり直す"><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+    <!-- ペン3種類のとき: 色・太さ・図形 -->
+    <span class="psep g-pens"></span>
+    <div class="slots g-pens" id="palSlots"></div>
+    <span class="psep g-pens"></span>
+    <div class="widths g-pens">
+      <button class="wopt" data-width="1.5" aria-label="極細"><i style="--d:5px"></i></button>
+      <button class="wopt" data-width="2.5" aria-label="細い"><i style="--d:8px"></i></button>
+      <button class="wopt" data-width="4" aria-label="ふつう"><i style="--d:11px"></i></button>
+      <button class="wopt" data-width="6" aria-label="太い"><i style="--d:15px"></i></button>
+      <button class="wopt" data-width="9" aria-label="極太"><i style="--d:20px"></i></button>
+    </div>
+    <span class="psep g-shape"></span>
+    <button class="pbtn g-shape" id="shapeBtn" title="図形（手書きをきれいな図形に直す）" aria-label="図形"><svg viewBox="0 0 24 24"><circle cx="8" cy="15.5" r="4"/><rect x="11" y="3.5" width="8" height="8" rx="1"/><path d="M16 13.5l4 6.5h-8z"/></svg></button>
+    <!-- 消しゴムのとき: 大きさ・全部消す -->
+    <span class="psep g-eraser"></span>
+    <button class="pbtn esize g-eraser" data-esize="8" aria-label="小さい消しゴム"><i style="--d:8px"></i></button>
+    <button class="pbtn esize g-eraser" data-esize="14" aria-label="ふつうの消しゴム"><i style="--d:13px"></i></button>
+    <button class="pbtn esize g-eraser" data-esize="26" aria-label="大きい消しゴム"><i style="--d:19px"></i></button>
+    <span class="psep g-eraser"></span>
+    <button class="ptext g-eraser" id="clearPage">このページを全部消す</button>
+    <!-- 投げ縄・レーザーのとき -->
+    <span class="pnote g-lasso">囲んで選ぶ／タップで選ぶ。指でも動かせます</span>
+    <span class="pnote g-laser">書いた線はすぐに消えます</span>
   </div>
 </div>
 
@@ -175,19 +160,19 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async></script>
-<script src="js/config.js?v=19"></script>
-<script src="js/app.js?v=19"></script>
-<script src="js/shapes.js?v=19"></script>
-<script src="js/toolbar.js?v=19"></script>
-<script src="js/lasso.js?v=19"></script>
-<script src="js/pages.js?v=19"></script>
-<script src="js/google-auth.js?v=19"></script>
-<script src="js/drive.js?v=19"></script>
-<script src="js/drive-sync.js?v=19"></script>
+<script src="js/config.js?v=20"></script>
+<script src="js/app.js?v=20"></script>
+<script src="js/shapes.js?v=20"></script>
+<script src="js/toolbar.js?v=20"></script>
+<script src="js/lasso.js?v=20"></script>
+<script src="js/pages.js?v=20"></script>
+<script src="js/google-auth.js?v=20"></script>
+<script src="js/drive.js?v=20"></script>
+<script src="js/drive-sync.js?v=20"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"></script>
-<script src="js/pdf-open.js?v=19"></script>
-<script src="js/pdf-write.js?v=19"></script>
-<script src="js/share.js?v=19"></script>
-<script src="js/palette.js?v=19"></script>
+<script src="js/pdf-open.js?v=20"></script>
+<script src="js/pdf-write.js?v=20"></script>
+<script src="js/share.js?v=20"></script>
+<script src="js/palette.js?v=20"></script>
 </body>
 </html>
