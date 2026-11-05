@@ -72,10 +72,12 @@
     $('sideBtn').classList.toggle('on', v);
   }
   $('sideBtn').addEventListener('click', function () {
+    if (bk.suppress) { bk.suppress = false; return; }
     if (!S.hasFile) { App.setStatus('先にPDFを開いてください'); return; }
     setSide(!sideOpen);
   });
   thumbs.addEventListener('click', function (e) {
+    if (bk.suppress) { bk.suppress = false; return; }
     var t = e.target.closest('.thumb'); if (t) App.goPage(+t.dataset.n);
   });
   var dt = null;
@@ -88,100 +90,263 @@
   App.on('layout', function () { built = false; if (sideOpen) build(); });
   App.on('open', function () { textCache = {}; query = ''; clearMarks(); built = false; if (sideOpen) build(); });
 
-  /* ---------- 右端の小口でパラパラめくる ----------
-     指（またはペン）で上下になぞると、そのあたりのページを大きめに見せる。離したらそのページへ */
-  var flip = $('flip'), card = $('flipCard'), pv = card.querySelector('.pv'), no = card.querySelector('.no');
-  var PV_W = 174, MANY = 4;
-  var fl = { id: null, n: 0, shown: 0 }, pvCache = {}, pvOrder = [], pvBusy = false, pvWant = 0;
+  /* ---------- 長押しで出る「本の小口」でパラパラめくる ----------
+     ページ一覧のボタンや小さな絵を長押しすると、本を横から見たような画面になる。
+     開いている見開き（2ページ）は半分ずつ、ほかのページは端（小口）だけが少し見える。
+     指でなぞるとパラパラめくれて、指を離したらそのページへ移る */
+  var book = $('book'), stage = $('bookStage'), edge = $('bookEdge');
+  var bk = {
+    on: false, f: 1, show: 1, intro: 1, introAt: 0, raf: 0, leaves: {}, nums: {}, g: null,
+    W: 300, H: 420, top: 0, cx: 0, sw: 0, cache: {}, order: [], busy: false, closing: 0, suppress: false
+  };
+  var BK_KEEP = 40;
 
-  function flipSetup() {
-    flip.classList.toggle('many', S.hasFile && S.total >= MANY);
-    flipMark();
+  function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }
+  function pageAspect() {
+    var w = $('wrap');
+    return (w && w.offsetWidth && w.offsetHeight) ? w.offsetWidth / w.offsetHeight : 0.707;
   }
-  function flipPos(n) { return S.total > 1 ? (n - 0.5) / S.total : 0.5; }
-  function flipMark(n) {
-    flip.querySelector('.mark').style.top = (flipPos(n || S.page) * 100) + '%';
+  // ページ i が見える幅（ページの幅に対する割合）。見開きの2ページは半分、ほかは5%（遠くはもっと細く）
+  function visFrac(i, f, u) {
+    if (i < 1 || i > S.total) return 0;
+    var d = i - f - 0.5, ad = Math.abs(d);
+    var k = clamp(1.5 - ad, 0, 1);
+    var base = ad < 10 ? 0.05 : ad > 26 ? 0.022 : 0.05 - 0.028 * (ad - 10) / 16;
+    base *= u;
+    return { v: base + (0.5 - base) * k, k: k };
   }
-  function pageAt(y) {
-    var r = flip.getBoundingClientRect();
-    var f = Math.min(0.9999, Math.max(0, (y - r.top) / r.height));
-    return 1 + Math.floor(f * S.total);
+  function measure() {
+    var r = stage.getBoundingClientRect();
+    bk.sw = r.width; bk.cx = r.width / 2;
+    var a = pageAspect();
+    var H = Math.max(120, r.height - 46), W = H * a;
+    if (W > r.width * 0.44) { W = r.width * 0.44; H = W / a; }
+    bk.W = W; bk.H = H; bk.top = Math.max(6, (r.height - 30 - H) / 2);
   }
-  // 小さな絵は作ったものを取っておく（多すぎたら古いものから捨てる）
-  function pvDrop(n) {
-    if (!pvCache[n]) return;
-    delete pvCache[n]; pvOrder = pvOrder.filter(function (k) { return k !== n; });
+
+  /* 小さな絵: 開いているあたりから順に描く。作ったものは取っておく */
+  function bkCanvas(n) { return bk.cache[n] || null; }
+  function bkDrop(n) {
+    if (!bk.cache[n]) return;
+    delete bk.cache[n]; bk.order = bk.order.filter(function (k) { return k !== n; });
   }
-  function pvShow(n) {
-    var c = pvCache[n];
-    if (c) {
-      c.style.opacity = '';
-      if (pv.firstChild !== c) { pv.textContent = ''; pv.appendChild(c); }
-      fl.shown = n;
-      return;
+  function bkPump() {
+    if (bk.busy || !bk.on) return;
+    var c0 = Math.round(bk.show), want = 0;
+    for (var d = 0; d <= 8 && !want; d++) {
+      var list = d ? [c0 + d, c0 - d, c0 + d + 1] : [c0, c0 + 1];
+      for (var j = 0; j < list.length; j++) {
+        var n = list[j];
+        if (n >= 1 && n <= S.total && !bk.cache[n]) { want = n; break; }
+      }
     }
-    pvWant = n;
-    pvNext();
-  }
-  function pvNext() {
-    if (pvBusy || !pvWant) return;
-    var n = pvWant; pvWant = 0;
-    if (pvCache[n]) { if (fl.n === n) pvShow(n); return; }
-    pvBusy = true;
+    if (!want) return;
+    bk.busy = true;
     var c = document.createElement('canvas');
-    App.renderThumb(c, n, PV_W).then(function () {
-      pvCache[n] = c; pvOrder.push(n);
-      while (pvOrder.length > 80) delete pvCache[pvOrder.shift()];
+    App.renderThumb(c, want, Math.round(Math.min(bk.W, 230))).then(function () {
+      bk.cache[want] = c; bk.order.push(want);
+      while (bk.order.length > BK_KEEP) {
+        var old = bk.order.shift();
+        if (Math.abs(old - bk.show) < 6) { bk.order.push(old); break; } // 見えているものは捨てない
+        delete bk.cache[old];
+      }
+      var el = bk.leaves[want];
+      if (el) putCanvas(el, want);
     }).catch(function (e) { console.error(e); }).then(function () {
-      pvBusy = false;
-      // なぞっている間に別のページへ進んでいたら、いま指しているページを描く
-      if (fl.id !== null && pvCache[fl.n]) pvShow(fl.n);
-      else if (fl.id !== null && fl.n !== n) { pvWant = fl.n; }
-      pvNext();
+      bk.busy = false;
+      if (bk.on) setTimeout(bkPump, 0);
     });
   }
-  function flipTo(y) {
-    var n = pageAt(y);
-    var r = $('main').getBoundingClientRect();
-    var h = card.offsetHeight || 260;
-    var top = Math.min(r.height - h - 8, Math.max(8, y - r.top - h / 2));
-    card.style.top = top + 'px';
-    if (n === fl.n) return;
-    fl.n = n;
-    no.innerHTML = n + '<small>/ ' + S.total + '</small>';
-    flipMark(n);
-    card.classList.remove('tick'); void card.offsetWidth; card.classList.add('tick');
-    if (!pvCache[n] && fl.shown && pv.firstChild) pv.firstChild.style.opacity = '.35'; // 描けるまで前の絵を薄く
-    pvShow(n);
+  function putCanvas(el, n) {
+    var c = bkCanvas(n);
+    if (!c || c.parentNode === el) return;
+    c.style.width = ''; c.style.height = '';
+    el.insertBefore(c, el.firstChild);
+    var ph = el.querySelector('.ph'); if (ph) ph.remove();
   }
-  flip.addEventListener('pointerdown', function (e) {
-    if (!S.hasFile || fl.id !== null) return;
-    e.preventDefault();
-    fl.id = e.pointerId; fl.n = 0;
-    try { flip.setPointerCapture(e.pointerId); } catch (err) {}
-    flip.classList.add('on');
-    flipTo(e.clientY);
-    card.classList.add('show');
-  });
-  flip.addEventListener('pointermove', function (e) {
-    if (e.pointerId !== fl.id) return;
-    e.preventDefault();
-    flipTo(e.clientY);
-  });
-  function flipEnd(e, go) {
-    if (e.pointerId !== fl.id) return;
-    fl.id = null;
-    flip.classList.remove('on'); card.classList.remove('show');
-    if (go && fl.n) App.goPage(fl.n); else flipMark();
+  function makeLeaf(n) {
+    var el = document.createElement('div');
+    el.className = 'leaf'; el.dataset.n = n;
+    if (bkCanvas(n)) putCanvas(el, n);
+    else {
+      var ph = document.createElement('span'); ph.className = 'ph'; ph.textContent = n;
+      el.appendChild(ph);
+    }
+    stage.appendChild(el);
+    return el;
   }
-  flip.addEventListener('pointerup', function (e) { flipEnd(e, true); });
-  flip.addEventListener('pointercancel', function (e) { flipEnd(e, false); });
-  flip.addEventListener('touchmove', function (e) { e.preventDefault(); }, { passive: false });
-  App.on('data', function () { pvDrop(S.page); });
-  App.on('page', flipMark);
-  App.on('layout', function () { pvCache = {}; pvOrder = []; flipSetup(); });
-  App.on('open', function () { pvCache = {}; pvOrder = []; flipSetup(); });
-  flipSetup();
+
+  /* 並べて描く（毎フレーム） */
+  function layout() {
+    var f = bk.show, u = bk.intro;
+    var W = bk.W, H = bk.H, cx = bk.cx;
+    var t0 = f + 1, m = Math.floor(t0), fr = t0 - m;
+    var xs = {}, vm = visFrac(m, f, u);
+    xs[m] = cx - fr * (vm ? vm.v * W : 0);
+    var used = {}, sel = clamp(Math.round(bk.f), 1, S.total);
+    function place(i, x) {
+      var q = visFrac(i, f, u); if (!q) return;
+      var w = q.v * W;
+      if (x + w < -20 || x > bk.sw + 20) return;
+      used[i] = 1;
+      var el = bk.leaves[i] || (bk.leaves[i] = makeLeaf(i));
+      var sy = 0.84 + 0.16 * q.k, h = H * sy;
+      var left = (x + w / 2) < cx;
+      el.style.width = Math.max(1, w) + 'px';
+      el.style.height = h + 'px';
+      el.style.transform = 'translate3d(' + x + 'px,' + (bk.top + (H - h) / 2) + 'px,0)';
+      el.style.zIndex = String(1000 - Math.round(Math.abs(i - f - 0.5) * 2));
+      el.style.setProperty('--dir', left ? '90deg' : '270deg');
+      el.style.setProperty('--ex', left ? '-1px' : '1px');
+      el.style.setProperty('--sh', ((1 - q.k) * 0.28).toFixed(3));
+      el.classList.toggle('mid', q.k > 0.5);
+      el.classList.toggle('sel', i === sel && q.k > 0.5);
+      var ph = el.firstChild && el.firstChild.className === 'ph' ? el.firstChild : null;
+      if (ph) { ph.style.opacity = q.k; }
+    }
+    var x = xs[m];
+    for (var i = m; i <= S.total + 1; i++) {
+      var q = visFrac(i, f, u); if (!q) { if (i > S.total) break; continue; }
+      if (x > bk.sw + 20) break;
+      place(i, x); x += q.v * W;
+    }
+    x = xs[m];
+    for (i = m - 1; i >= 1; i--) {
+      q = visFrac(i, f, u); if (!q) continue;
+      x -= q.v * W;
+      if (x + q.v * W < -20) break;
+      place(i, x);
+    }
+    Object.keys(bk.leaves).forEach(function (k) {
+      if (!used[k]) { bk.leaves[k].remove(); delete bk.leaves[k]; if (bk.nums[k]) { bk.nums[k].remove(); delete bk.nums[k]; } }
+    });
+    Object.keys(bk.nums).forEach(function (k) { if (!used[k]) { bk.nums[k].remove(); delete bk.nums[k]; } });
+    $('bookNo').textContent = sel;
+    $('bookOf').textContent = '/ ' + S.total + ' ページ';
+    edge.querySelector('.mark').style.left = (S.total > 1 ? (bk.f - 1) / (S.total - 1) * 100 : 50) + '%';
+  }
+  function tick() {
+    bk.raf = 0;
+    if (!bk.on) return;
+    var now = performance.now();
+    if (bk.intro < 1) { var t = clamp((now - bk.introAt) / 280, 0, 1); bk.intro = 1 - Math.pow(1 - t, 3); }
+    var diff = bk.f - bk.show;
+    bk.show += Math.abs(diff) < 0.003 ? diff : diff * 0.38;
+    layout();
+    bkPump();
+    if (bk.intro < 1 || bk.show !== bk.f || bk.g) bk.raf = requestAnimationFrame(tick);
+  }
+  function kick() { if (!bk.raf) bk.raf = requestAnimationFrame(tick); }
+
+  function bookOpen(n) {
+    if (!S.hasFile || bk.on) return;
+    clearTimeout(bk.closing);
+    bk.on = true; bk.f = bk.show = clamp(n || S.page, 1, S.total);
+    bk.intro = 0; bk.introAt = performance.now();
+    book.classList.add('on'); document.body.classList.add('book-open');
+    App.toolbar && App.toolbar.closePops && App.toolbar.closePops();
+    measure();
+    void book.offsetWidth; book.classList.add('show');
+    kick();
+  }
+  function bookClose(go) {
+    if (!bk.on) return;
+    var n = clamp(Math.round(bk.f), 1, S.total);
+    bk.on = false; bk.g = null;
+    book.classList.remove('show'); document.body.classList.remove('book-open');
+    if (go && n !== S.page) App.goPage(n);
+    bk.closing = setTimeout(function () {
+      book.classList.remove('on');
+      stage.textContent = ''; bk.leaves = {}; bk.nums = {};
+    }, 200);
+  }
+
+  /* なぞる */
+  function pagePx() { return Math.max(12, bk.W * 0.05); }
+  function gStart(e, mode) {
+    bk.g = { id: e.pointerId, mode: mode, x0: e.clientX, y0: e.clientY, f0: bk.f, moved: mode === 'abs', axis: null };
+    if (mode === 'abs') absMove(e.clientX);
+    kick();
+  }
+  function absMove(x) {
+    var r = edge.getBoundingClientRect();
+    bk.f = 1 + clamp((x - r.left) / r.width, 0, 1) * (S.total - 1);
+    kick();
+  }
+  function gMove(e) {
+    var g = bk.g; if (!g || e.pointerId !== g.id) return;
+    e.preventDefault();
+    if (g.mode === 'abs') { absMove(e.clientX); return; }
+    var dx = e.clientX - g.x0, dy = e.clientY - g.y0;
+    if (!g.axis) {
+      if (Math.hypot(dx, dy) < 8) return;
+      g.axis = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y'; g.moved = true;
+      g.x0 = e.clientX; g.y0 = e.clientY; dx = dy = 0;
+    }
+    // 横: 指についてページが流れる（右へなぞると前のページ）。縦: 下へなぞると後ろのページ
+    var df = g.axis === 'x' ? -dx / pagePx() : dy / pagePx();
+    bk.f = clamp(g.f0 + df, 1, S.total);
+    kick();
+  }
+  function gEnd(e, cancel) {
+    var g = bk.g; if (!g || e.pointerId !== g.id) return;
+    bk.g = null;
+    if (cancel) { kick(); return; }
+    if (g.moved) {
+      bk.f = clamp(Math.round(bk.f), 1, S.total); kick();
+      setTimeout(function () { bookClose(true); }, 120);
+      return;
+    }
+    if (g.mode === 'press') return; // 長押ししただけ: 開いたままにして、なぞるのを待つ
+    // タップ: 押したページへ。ページの外なら閉じる
+    var hit = document.elementFromPoint(e.clientX, e.clientY);
+    var leaf = hit && hit.closest && hit.closest('#bookStage .leaf');
+    if (leaf) { bk.f = +leaf.dataset.n; kick(); setTimeout(function () { bookClose(true); }, 140); }
+    else if (hit === stage) bookClose(false);
+  }
+  stage.addEventListener('pointerdown', function (e) { if (bk.on && !bk.g) { e.preventDefault(); gStart(e, 'rel'); } });
+  edge.addEventListener('pointerdown', function (e) { if (bk.on && !bk.g) { e.preventDefault(); gStart(e, 'abs'); } });
+  window.addEventListener('pointermove', gMove, { passive: false });
+  window.addEventListener('pointerup', function (e) { gEnd(e, false); });
+  window.addEventListener('pointercancel', function (e) { gEnd(e, true); });
+  // なぞっている間は、画面がスクロールしないように
+  document.addEventListener('touchmove', function (e) { if (bk.g || bk.on) e.preventDefault(); }, { passive: false });
+  $('bookClose').addEventListener('click', function () { bookClose(false); });
+  book.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  window.addEventListener('resize', function () { if (bk.on) { measure(); kick(); } });
+
+  /* 長押し: ページ一覧のボタン・ページ一覧の小さな絵 */
+  function longPress(el, pageOf) {
+    var t = null, sx = 0, sy = 0;
+    el.addEventListener('pointerdown', function (e) {
+      bk.suppress = false;
+      if (!S.hasFile || bk.on || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      sx = e.clientX; sy = e.clientY;
+      var target = e.target, ev = e;
+      clearTimeout(t);
+      t = setTimeout(function () {
+        t = null; bk.suppress = true;
+        bookOpen(pageOf(target));
+        gStart(ev, 'press');
+      }, 420);
+    });
+    el.addEventListener('pointermove', function (e) {
+      if (t && Math.hypot(e.clientX - sx, e.clientY - sy) > 10) { clearTimeout(t); t = null; }
+    });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (k) {
+      el.addEventListener(k, function () { if (t) { clearTimeout(t); t = null; } });
+    });
+    el.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  }
+  longPress($('sideBtn'), function () { return S.page; });
+  longPress(side, function (target) {
+    var th = target && target.closest && target.closest('.thumb');
+    return th ? +th.dataset.n : S.page;
+  });
+  App.on('data', function () { bkDrop(S.page); });
+  App.on('layout', function () { bk.cache = {}; bk.order = []; if (bk.on) bookClose(false); });
+  App.on('open', function () { bk.cache = {}; bk.order = []; if (bk.on) bookClose(false); });
+  App.bookOpen = bookOpen;
 
   /* ---------- 検索 ---------- */
   var textCache = {}, query = '', input = null, timer = null;

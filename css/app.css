@@ -286,40 +286,59 @@ header { position: relative; z-index: 10; background: var(--bg); }
 }
 #hint strong { color: var(--text); font-size: 17px; font-weight: 600; }
 
-/* 右端の「本の小口」。なぞるとページをパラパラ見られる */
-#flip {
-  position: absolute; right: 0; top: 10px; bottom: 10px; width: 26px; z-index: 5; display: none;
-  touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; cursor: ns-resize;
+/* ページ一覧の長押しで出る「本の小口」。開いている見開きは半分ずつ、ほかのページは端だけ見える */
+#book {
+  position: absolute; inset: 0; z-index: 9; display: none; flex-direction: column; overflow: hidden;
+  background: color-mix(in srgb, var(--stage) 92%, transparent);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  opacity: 0; transition: opacity .18s;
 }
-.has-file #flip.many { display: block; }
-#flip .edge {
-  position: absolute; right: 3px; top: 0; bottom: 0; width: 9px; border-radius: 3px 0 0 3px;
-  background: repeating-linear-gradient(to bottom, #fbf9f5 0 2px, #ddd6ca 2px 3px);
-  box-shadow: inset 1px 0 0 rgba(52,44,34,.12), -1px 0 3px rgba(52,44,34,.10); opacity: .75;
-  transition: width .18s, opacity .18s;
+#book.on { display: flex; }
+#book.show { opacity: 1; }
+#book .top { display: flex; align-items: center; justify-content: center; padding: 14px 16px 0; position: relative; }
+#book .lbl { display: flex; align-items: baseline; gap: 6px; color: var(--text); font-variant-numeric: tabular-nums; }
+#book .lbl b { font-size: 30px; font-weight: 700; letter-spacing: .5px; }
+#book .lbl span { font-size: 15px; color: var(--muted); }
+#bookClose {
+  position: absolute; right: 14px; top: 12px; width: 38px; height: 38px; border-radius: 50%; border: 0;
+  background: var(--bar); color: var(--text); font-size: 22px; line-height: 1; box-shadow: 0 1px 4px rgba(52,44,34,.15); cursor: pointer;
 }
-#flip.on .edge { width: 16px; opacity: 1; }
-#flip .mark {
-  position: absolute; right: 0; width: 16px; height: 3px; margin-top: -1.5px; border-radius: 2px 0 0 2px;
-  background: var(--accent); transition: width .18s;
+#bookStage { flex: 1; position: relative; min-height: 0; cursor: ew-resize; }
+#bookStage .leaf {
+  position: absolute; left: 0; top: 0; background: #fff; overflow: hidden; will-change: transform, width;
+  transform-origin: 0 50%;
 }
-#flip.on .mark { width: 24px; }
-#flipCard {
-  position: absolute; right: 38px; top: 0; z-index: 7; pointer-events: none; width: 190px;
-  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 8px 7px;
-  background: var(--bar); border-radius: 12px; box-shadow: var(--pop-shadow);
-  opacity: 0; transform: translate3d(12px, 0, 0) scale(.94); transition: opacity .14s, transform .14s;
+#bookStage .leaf canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
+/* ページの端の線（小口の紙の重なり） */
+#bookStage .leaf::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(var(--dir, 90deg), rgba(60,50,38,0) 0%, rgba(60,50,38,var(--sh, 0)) 100%);
+  box-shadow: inset var(--ex, 1px) 0 0 rgba(60,50,38,.28);
 }
-#flipCard.show { opacity: 1; transform: translate3d(0, 0, 0); }
-#flipCard .pv {
-  width: 174px; min-height: 120px; background: #fff; border-radius: 4px; overflow: hidden;
-  box-shadow: 0 1px 3px rgba(52,44,34,.2); display: flex; align-items: center; justify-content: center;
+#bookStage .leaf .ph {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 34px; font-weight: 700; color: #d6cfc3; font-variant-numeric: tabular-nums;
 }
-#flipCard .pv canvas { display: block; }
-#flipCard .no { font-size: 15px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
-#flipCard .no small { font-weight: 500; color: var(--muted); font-size: 12px; margin-left: 3px; }
-#flipCard.tick .pv { animation: flipTick .12s ease-out; }
-@keyframes flipTick { from { transform: translateY(-3px) rotate(-.6deg); } to { transform: none; } }
+#bookStage .leaf.mid { box-shadow: 0 6px 22px rgba(52,44,34,.22); }
+#bookStage .leaf.sel { outline: 3px solid var(--accent); outline-offset: 0; }
+#bookStage .pno {
+  position: absolute; transform: translateX(-50%); font-size: 13px; font-weight: 600; color: var(--muted);
+  font-variant-numeric: tabular-nums; pointer-events: none; white-space: nowrap;
+}
+#bookStage .pno.sel { color: var(--accent); }
+#bookEdge {
+  position: relative; height: 34px; margin: 0 max(24px, 8%) 10px; border-radius: 6px; cursor: ew-resize;
+  background: repeating-linear-gradient(to right, #fbf9f5 0 2px, #d9d1c4 2px 3px);
+  box-shadow: inset 0 0 0 1px rgba(52,44,34,.12), 0 2px 6px rgba(52,44,34,.10);
+}
+#bookEdge .mark {
+  position: absolute; top: -5px; bottom: -5px; width: 4px; margin-left: -2px; border-radius: 2px; background: var(--accent);
+  box-shadow: 0 0 0 2px var(--bar);
+}
+#book .tip { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16px 14px; }
+.book-open #palette { visibility: hidden; }
+#sideBtn, .thumb { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 
 /* 上下に引っぱってページを移る・増やす */
 #pull {
