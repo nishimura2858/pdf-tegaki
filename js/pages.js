@@ -88,6 +88,101 @@
   App.on('layout', function () { built = false; if (sideOpen) build(); });
   App.on('open', function () { textCache = {}; query = ''; clearMarks(); built = false; if (sideOpen) build(); });
 
+  /* ---------- 右端の小口でパラパラめくる ----------
+     指（またはペン）で上下になぞると、そのあたりのページを大きめに見せる。離したらそのページへ */
+  var flip = $('flip'), card = $('flipCard'), pv = card.querySelector('.pv'), no = card.querySelector('.no');
+  var PV_W = 174, MANY = 4;
+  var fl = { id: null, n: 0, shown: 0 }, pvCache = {}, pvOrder = [], pvBusy = false, pvWant = 0;
+
+  function flipSetup() {
+    flip.classList.toggle('many', S.hasFile && S.total >= MANY);
+    flipMark();
+  }
+  function flipPos(n) { return S.total > 1 ? (n - 0.5) / S.total : 0.5; }
+  function flipMark(n) {
+    flip.querySelector('.mark').style.top = (flipPos(n || S.page) * 100) + '%';
+  }
+  function pageAt(y) {
+    var r = flip.getBoundingClientRect();
+    var f = Math.min(0.9999, Math.max(0, (y - r.top) / r.height));
+    return 1 + Math.floor(f * S.total);
+  }
+  // 小さな絵は作ったものを取っておく（多すぎたら古いものから捨てる）
+  function pvDrop(n) {
+    if (!pvCache[n]) return;
+    delete pvCache[n]; pvOrder = pvOrder.filter(function (k) { return k !== n; });
+  }
+  function pvShow(n) {
+    var c = pvCache[n];
+    if (c) {
+      c.style.opacity = '';
+      if (pv.firstChild !== c) { pv.textContent = ''; pv.appendChild(c); }
+      fl.shown = n;
+      return;
+    }
+    pvWant = n;
+    pvNext();
+  }
+  function pvNext() {
+    if (pvBusy || !pvWant) return;
+    var n = pvWant; pvWant = 0;
+    if (pvCache[n]) { if (fl.n === n) pvShow(n); return; }
+    pvBusy = true;
+    var c = document.createElement('canvas');
+    App.renderThumb(c, n, PV_W).then(function () {
+      pvCache[n] = c; pvOrder.push(n);
+      while (pvOrder.length > 80) delete pvCache[pvOrder.shift()];
+    }).catch(function (e) { console.error(e); }).then(function () {
+      pvBusy = false;
+      // なぞっている間に別のページへ進んでいたら、いま指しているページを描く
+      if (fl.id !== null && pvCache[fl.n]) pvShow(fl.n);
+      else if (fl.id !== null && fl.n !== n) { pvWant = fl.n; }
+      pvNext();
+    });
+  }
+  function flipTo(y) {
+    var n = pageAt(y);
+    var r = $('main').getBoundingClientRect();
+    var h = card.offsetHeight || 260;
+    var top = Math.min(r.height - h - 8, Math.max(8, y - r.top - h / 2));
+    card.style.top = top + 'px';
+    if (n === fl.n) return;
+    fl.n = n;
+    no.innerHTML = n + '<small>/ ' + S.total + '</small>';
+    flipMark(n);
+    card.classList.remove('tick'); void card.offsetWidth; card.classList.add('tick');
+    if (!pvCache[n] && fl.shown && pv.firstChild) pv.firstChild.style.opacity = '.35'; // 描けるまで前の絵を薄く
+    pvShow(n);
+  }
+  flip.addEventListener('pointerdown', function (e) {
+    if (!S.hasFile || fl.id !== null) return;
+    e.preventDefault();
+    fl.id = e.pointerId; fl.n = 0;
+    try { flip.setPointerCapture(e.pointerId); } catch (err) {}
+    flip.classList.add('on');
+    flipTo(e.clientY);
+    card.classList.add('show');
+  });
+  flip.addEventListener('pointermove', function (e) {
+    if (e.pointerId !== fl.id) return;
+    e.preventDefault();
+    flipTo(e.clientY);
+  });
+  function flipEnd(e, go) {
+    if (e.pointerId !== fl.id) return;
+    fl.id = null;
+    flip.classList.remove('on'); card.classList.remove('show');
+    if (go && fl.n) App.goPage(fl.n); else flipMark();
+  }
+  flip.addEventListener('pointerup', function (e) { flipEnd(e, true); });
+  flip.addEventListener('pointercancel', function (e) { flipEnd(e, false); });
+  flip.addEventListener('touchmove', function (e) { e.preventDefault(); }, { passive: false });
+  App.on('data', function () { pvDrop(S.page); });
+  App.on('page', flipMark);
+  App.on('layout', function () { pvCache = {}; pvOrder = []; flipSetup(); });
+  App.on('open', function () { pvCache = {}; pvOrder = []; flipSetup(); });
+  flipSetup();
+
   /* ---------- 検索 ---------- */
   var textCache = {}, query = '', input = null, timer = null;
   // 全角の英数字を半角に、大文字を小文字にそろえる（文字数は変えない）

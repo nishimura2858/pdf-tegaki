@@ -286,6 +286,41 @@ header { position: relative; z-index: 10; background: var(--bg); }
 }
 #hint strong { color: var(--text); font-size: 17px; font-weight: 600; }
 
+/* 右端の「本の小口」。なぞるとページをパラパラ見られる */
+#flip {
+  position: absolute; right: 0; top: 10px; bottom: 10px; width: 26px; z-index: 5; display: none;
+  touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; cursor: ns-resize;
+}
+.has-file #flip.many { display: block; }
+#flip .edge {
+  position: absolute; right: 3px; top: 0; bottom: 0; width: 9px; border-radius: 3px 0 0 3px;
+  background: repeating-linear-gradient(to bottom, #fbf9f5 0 2px, #ddd6ca 2px 3px);
+  box-shadow: inset 1px 0 0 rgba(52,44,34,.12), -1px 0 3px rgba(52,44,34,.10); opacity: .75;
+  transition: width .18s, opacity .18s;
+}
+#flip.on .edge { width: 16px; opacity: 1; }
+#flip .mark {
+  position: absolute; right: 0; width: 16px; height: 3px; margin-top: -1.5px; border-radius: 2px 0 0 2px;
+  background: var(--accent); transition: width .18s;
+}
+#flip.on .mark { width: 24px; }
+#flipCard {
+  position: absolute; right: 38px; top: 0; z-index: 7; pointer-events: none; width: 190px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 8px 7px;
+  background: var(--bar); border-radius: 12px; box-shadow: var(--pop-shadow);
+  opacity: 0; transform: translate3d(12px, 0, 0) scale(.94); transition: opacity .14s, transform .14s;
+}
+#flipCard.show { opacity: 1; transform: translate3d(0, 0, 0); }
+#flipCard .pv {
+  width: 174px; min-height: 120px; background: #fff; border-radius: 4px; overflow: hidden;
+  box-shadow: 0 1px 3px rgba(52,44,34,.2); display: flex; align-items: center; justify-content: center;
+}
+#flipCard .pv canvas { display: block; }
+#flipCard .no { font-size: 15px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+#flipCard .no small { font-weight: 500; color: var(--muted); font-size: 12px; margin-left: 3px; }
+#flipCard.tick .pv { animation: flipTick .12s ease-out; }
+@keyframes flipTick { from { transform: translateY(-3px) rotate(-.6deg); } to { transform: none; } }
+
 /* 上下に引っぱってページを移る・増やす */
 #pull {
   position: absolute; left: 50%; bottom: 76px; z-index: 4; pointer-events: none;
