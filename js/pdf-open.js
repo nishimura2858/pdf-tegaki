@@ -2,7 +2,10 @@
    - 手書きは「PDFの中身」から作った識別子（SHA-256）で結びつける。置き場所や名前が変わっても同じ手書きが出る
    - 書き込み入りPDF（元のPDFに書き込みを反映したもの）を開いたときは、元のPDF＋手書きデータとして開く
    - 開いたPDFはこの端末（IndexedDB）に控えを取る。ログインで画面を離れて戻ったときや、
-     次にアプリを開いたときに、前回のPDFを自動で開き直すため */
+     次にアプリを開いたときに、前回のPDFを自動で開き直すため
+   - 最近開いたPDF（12個まで）も控えておき、「開く」ボタンからタップ1回で開ける
+     IndexedDB: 'recentIndex' = [{ id, name, at }]（id はファイルの中身の SHA-256）,
+                'recent:<id>' = { name, data }, 'thumb:<id>' = 1ページ目の小さな絵（data URL） */
 (function () {
   'use strict';
   var App = window.App;
@@ -108,7 +111,7 @@
       pending = { base: sha, name: name, fileMd5: fileMd5, origBytes: buf, origMd5: fileMd5, doc: doc };
       App.openDoc(doc, name, 'strokes:pdf:' + sha);
       putOrigLocal(sha, buf);
-      return true;
+      return sha;
     }
     var orig = null;
     try { orig = await getOriginal(base); } catch (e) { console.error(e); if (e.status === 401) GAuth.invalidate(); }
@@ -119,13 +122,124 @@
       App.setStatus(needLogin
         ? '書き込み入りのPDFです。続きを書くには「Driveにログイン」を押してください（元のPDFを取り寄せます）'
         : '書き込み入りのPDFですが、元のPDFが見つからないため、このまま表示しています');
-      return true;
+      return sha;
     }
     var odoc = await load(orig);
     pending = { base: base, name: name, fileMd5: fileMd5, origBytes: orig, origMd5: md5(orig), doc: odoc };
     App.openDoc(odoc, name, 'strokes:pdf:' + base);
-    return true;
+    return sha;
   }
+
+  /* ---------- 最近開いたPDF ---------- */
+  var RECENT_MAX = 12, curRecent = null;
+  function recentIndex() {
+    return idb('readonly', function (st) { return st.get('recentIndex'); })
+      .then(function (l) { return Array.isArray(l) ? l : []; }, function () { return []; });
+  }
+  function addRecent(id, name, buf) {
+    return idb('readwrite', function (st) {
+      st.put({ name: name, data: buf }, 'recent:' + id);
+      var g = st.get('recentIndex');
+      g.onsuccess = function () {
+        var list = (Array.isArray(g.result) ? g.result : []).filter(function (x) { return x.id !== id; });
+        list.unshift({ id: id, name: name, at: Date.now() });
+        list.slice(RECENT_MAX).forEach(function (x) { st.delete('recent:' + x.id); st.delete('thumb:' + x.id); });
+        st.put(list.slice(0, RECENT_MAX), 'recentIndex');
+      };
+    }).catch(function (err) { console.error(err); });
+  }
+  function removeRecent(id) {
+    return idb('readwrite', function (st) {
+      st.delete('recent:' + id); st.delete('thumb:' + id);
+      var g = st.get('recentIndex');
+      g.onsuccess = function () {
+        st.put((Array.isArray(g.result) ? g.result : []).filter(function (x) { return x.id !== id; }), 'recentIndex');
+      };
+    }).catch(function (err) { console.error(err); });
+  }
+  function thumbs(ids) {
+    var out = {};
+    return idb('readonly', function (st) {
+      ids.forEach(function (id) { var r = st.get('thumb:' + id); r.onsuccess = function () { if (r.result) out[id] = r.result; }; });
+    }).then(function () { return out; }, function () { return out; });
+  }
+  // いま開いているPDFの1ページ目（手書きも入れて）を小さな絵にして取っておく
+  var thumbTimer = null;
+  function saveThumb(delay) {
+    clearTimeout(thumbTimer);
+    thumbTimer = setTimeout(function () {
+      var id = curRecent; if (!id || !App.S.hasFile) return;
+      var c = document.createElement('canvas');
+      App.renderThumb(c, 1, 120).then(function () {
+        var url = c.toDataURL('image/jpeg', 0.75);
+        c.width = c.height = 0;
+        if (id !== curRecent) return;
+        return idb('readwrite', function (st) { st.put(url, 'thumb:' + id); });
+      }).catch(function (err) { console.error(err); });
+    }, delay);
+  }
+  App.on('data', function () { saveThumb(4000); });
+  // 開いたPDFを「最近」の先頭に入れる
+  function remember(id, name, buf) {
+    curRecent = id || null;
+    if (!id) return;
+    addRecent(id, name, buf).then(function () { saveThumb(1200); });
+  }
+
+  function esc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function when(at) {
+    var d = new Date(at), now = new Date();
+    if (d.toDateString() === now.toDateString()) return d.getHours() + ':' + ('0' + d.getMinutes()).slice(-2);
+    return (d.getMonth() + 1) + '/' + d.getDate();
+  }
+  async function renderRecent(el) {
+    var list = await recentIndex(), th = await thumbs(list.map(function (x) { return x.id; }));
+    el.innerHTML = list.map(function (x) {
+      var name = String(x.name || 'PDF').replace(/\.pdf$/i, '');
+      return '<div class="recent' + (x.id === curRecent ? ' on' : '') + '" data-rid="' + x.id + '">' +
+        '<button class="r-open" data-rid="' + x.id + '"><span class="r-thumb">' +
+        (th[x.id] ? '<img alt="" src="' + th[x.id] + '">' : '') + '</span>' +
+        '<span class="r-name">' + esc(name) + '</span><span class="r-when">' + when(x.at) + '</span></button>' +
+        '<button class="r-del" data-del="' + x.id + '" aria-label="一覧から外す">×</button></div>';
+    }).join('');
+    return list.length;
+  }
+  async function openRecent(id) {
+    try {
+      var rec = await idb('readonly', function (st) { return st.get('recent:' + id); });
+      if (!rec || !rec.data) { App.setStatus('このPDFの控えが見つかりませんでした'); removeRecent(id); return; }
+      App.setStatus('読み込み中…');
+      var sha = await openBytes(rec.data, rec.name);
+      remember(sha, rec.name, rec.data);
+      saveLast({ name: rec.name, data: rec.data, at: Date.now() }).catch(function (err) { console.error(err); });
+    } catch (err) {
+      console.error(err);
+      App.setStatus('PDFを開けませんでした');
+    }
+  }
+  function onListClick(e) {
+    var del = e.target.closest('[data-del]');
+    if (del) {
+      var row = del.closest('.recent'); if (row) row.remove();
+      removeRecent(del.dataset.del);
+      return;
+    }
+    var b = e.target.closest('.r-open'); if (!b) return;
+    App.toolbar.closePops();
+    openRecent(b.dataset.rid);
+  }
+  var $ = function (id) { return document.getElementById(id); };
+  $('recentList').addEventListener('click', onListClick);
+  $('hintRecent').addEventListener('click', onListClick);
+  // 「開く」ボタン: 最近のPDFがあれば一覧を出す。なければ、すぐファイルアプリを開く
+  $('openBtn').addEventListener('click', async function (e) {
+    var btn = e.currentTarget, pop = $('recentPop');
+    if (pop.classList.contains('open')) { App.toolbar.closePops(); return; }
+    var n = await renderRecent($('recentList'));
+    if (!n) { $('file').click(); return; }
+    App.toolbar.showPop(pop, btn);
+  });
+  $('pickFile').addEventListener('click', function () { App.toolbar.closePops(); $('file').click(); });
 
   document.getElementById('file').addEventListener('change', async function (e) {
     var f = e.target.files[0]; e.target.value = '';
@@ -133,7 +247,8 @@
     try {
       App.setStatus('読み込み中…');
       var buf = await f.arrayBuffer();
-      await openBytes(buf, f.name);
+      var sha = await openBytes(buf, f.name);
+      remember(sha, f.name, buf);
       saveLast({ name: f.name, data: buf, at: Date.now() }).catch(function (err) { console.error(err); });
     } catch (err) {
       console.error(err);
@@ -146,7 +261,7 @@
     try {
       var rec = await loadLast();
       if (!rec || !rec.data) { if (!quietIfNone) App.setStatus('PDFを開き直せませんでした。「ファイルから開く」で選んでください'); return false; }
-      await openBytes(rec.data, rec.name);
+      curRecent = await openBytes(rec.data, rec.name);
       return true;
     } catch (err) {
       console.error(err);
@@ -160,6 +275,7 @@
     var r = await GAuth.consumeRedirect();
     if (r) GAuth.takeAfter();
     var opened = await reopenLast(!r);
+    if (!opened) renderRecent($('hintRecent')).catch(function () {}); // 何も開いていなければ、最初の画面に最近のPDFを並べる
     if (r && r.error) App.setStatus(message(r.error));
     else if (r && opened && !needLogin) App.setStatus('ログインしました');
   })();

@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="css/app.css?v=23">
+<link rel="stylesheet" href="css/app.css?v=24">
 </head>
 <body>
 <header>
@@ -22,7 +22,7 @@
     <div class="side left">
       <button class="btn icon" id="sideBtn" title="ページ一覧" aria-label="ページ一覧"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9 4v16M5.6 8.5h1.2M5.6 12h1.2M5.6 15.5h1.2"/></svg></button>
       <button class="btn icon" id="searchBtn" title="検索" aria-label="検索"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg></button>
-      <label class="btn icon" for="file" id="openLabel" title="ファイルから開く" aria-label="ファイルから開く"><svg viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2h7.5A2.5 2.5 0 0 1 21 9.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg></label>
+      <button class="btn icon" id="openBtn" title="開く" aria-label="開く"><svg viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2h7.5A2.5 2.5 0 0 1 21 9.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg></button>
       <input id="file" type="file" accept="application/pdf" hidden>
       <button class="btn icon" id="undo" title="元に戻す" aria-label="元に戻す"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
       <button class="btn icon" id="redo" title="やり直す" aria-label="やり直す"><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
@@ -62,6 +62,7 @@
       </div>
     </div>
     <div id="hint">
+      <div class="recent-list big" id="hintRecent"></div>
       <strong>左上のフォルダのボタンからPDFを選ぶと、Apple Pencilで書き込めます</strong>
       <span>ファイルアプリの「Googleドライブ」からも選べます。<br>手書きはこのiPadとGoogleドライブに自動保存され、同じPDFを開くと復元されます。<br>Googleドライブから開いたPDFには、書き込みがPDFそのものにも反映されます（30分おきと、アプリを離れたとき）。<br>左下の丸いボタンで、色・太さなどのパレットを開けます（ドラッグで移動）。<br>ページの下で指を上に引っぱると次のページへ（最後のページではページを追加）。指2本のピンチで拡大縮小、2回タップで拡大／元の大きさに戻せます。</span>
     </div>
@@ -74,10 +75,13 @@
   <button class="item" id="blankBtn">白紙のノートを開く</button>
   <button class="item" id="delPageBtn">このページを削除（追加したページだけ）</button>
   <button class="item" id="jsonBtn">手書きデータ（JSON）</button>
+  <div class="ver" id="verText"></div>
 </div>
 <div class="pop menu" id="addMenu">
   <button class="item" data-add="same">同じページを次に追加</button>
   <button class="item" data-add="blank">白紙のページを次に追加</button>
+  <button class="item" data-add="grid">方眼のページを次に追加</button>
+  <button class="item" data-add="lined">罫線のページを次に追加</button>
 </div>
 <div class="pop" id="colorPop">
   <div class="pop-title">色</div>
@@ -98,6 +102,11 @@
     <button class="swatch" data-pick="#8d6e63" style="--c:#8d6e63" aria-label="茶"></button>
     <button class="swatch" data-pick="#ffffff" style="--c:#ffffff" aria-label="白"></button>
   </div>
+</div>
+<div class="pop" id="recentPop">
+  <button class="item open-file" id="pickFile">ファイルアプリから選ぶ…</button>
+  <div class="pop-title" id="recentTitle">最近開いたPDF</div>
+  <div class="recent-list" id="recentList"></div>
 </div>
 <div class="pop" id="searchPop">
   <!-- 文字入力欄は開いたときだけ作る（スクリブル対策） -->
@@ -168,19 +177,23 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async></script>
-<script src="js/config.js?v=23"></script>
-<script src="js/app.js?v=23"></script>
-<script src="js/shapes.js?v=23"></script>
-<script src="js/toolbar.js?v=23"></script>
-<script src="js/lasso.js?v=23"></script>
-<script src="js/pages.js?v=23"></script>
-<script src="js/google-auth.js?v=23"></script>
-<script src="js/drive.js?v=23"></script>
-<script src="js/drive-sync.js?v=23"></script>
+<script src="js/config.js?v=24"></script>
+<script src="js/app.js?v=24"></script>
+<script src="js/shapes.js?v=24"></script>
+<script src="js/toolbar.js?v=24"></script>
+<script src="js/lasso.js?v=24"></script>
+<script src="js/pages.js?v=24"></script>
+<script src="js/google-auth.js?v=24"></script>
+<script src="js/drive.js?v=24"></script>
+<script src="js/drive-sync.js?v=24"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"></script>
-<script src="js/pdf-open.js?v=23"></script>
-<script src="js/pdf-write.js?v=23"></script>
-<script src="js/share.js?v=23"></script>
-<script src="js/palette.js?v=23"></script>
+<script src="js/pdf-open.js?v=24"></script>
+<script src="js/pdf-write.js?v=24"></script>
+<script src="js/share.js?v=24"></script>
+<script src="js/palette.js?v=24"></script>
+<script>
+// 電波がなくても開けるように、アプリの部品をこの端末に取っておく（sw.js）
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function (e) { console.error(e); });
+</script>
 </body>
 </html>

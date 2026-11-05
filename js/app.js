@@ -202,6 +202,35 @@
     if (S.live && S.live.tool === 'pen') segs(ictx, S.live, ink.width, ink.height, 1);
   }
 
+  /* ---------- 方眼・罫線の紙 ----------
+     追加した白紙のページに引く線。ページの単位（PDFの点、左上が原点）で [x1, y1, x2, y2] の並びを返す。
+     画面（app.js）とPDFへの書き出し（pdf-write.js）で同じ線を使う */
+  var MM = 72 / 25.4;
+  function paperLines(w, h, bg) {
+    var out = [], x, y;
+    if (bg === 'grid') {
+      var g = 5 * MM;
+      for (x = g; x < w - 0.5; x += g) out.push([x, 0, x, h]);
+      for (y = g; y < h - 0.5; y += g) out.push([0, y, w, y]);
+    } else if (bg === 'lined') {
+      var gap = 8 * MM, top = 25 * MM, side = 12 * MM;
+      for (y = top; y < h - 15 * MM; y += gap) out.push([side, y, w - side, y]);
+    }
+    return out;
+  }
+  var PAPER_COLOR = '#c7d1de';
+  function drawPaper(ctx, W, H, e) {
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+    if (!e || !e.bg) return;
+    var pw = e.w || A4.w, ph = e.h || A4.h, kx = W / pw, ky = H / ph;
+    ctx.save();
+    ctx.strokeStyle = PAPER_COLOR; ctx.lineWidth = Math.max(1, 0.6 * kx);
+    ctx.beginPath();
+    paperLines(pw, ph, e.bg).forEach(function (l) { ctx.moveTo(l[0] * kx, l[1] * ky); ctx.lineTo(l[2] * kx, l[3] * ky); });
+    ctx.stroke();
+    ctx.restore();
+  }
+
   /* ---------- ページの並び ---------- */
   function defaultLayout() {
     if (!S.pdf) return [{ src: 0, w: A4.w, h: A4.h }];
@@ -272,7 +301,7 @@
       off.width = off.height = 0;
       if (token !== renderToken) return;
     } else {
-      pctx.fillStyle = '#fff'; pctx.fillRect(0, 0, pdfC.width, pdfC.height);
+      drawPaper(pctx, pdfC.width, pdfC.height, entry());
     }
     dbg('ページ描き直し ' + Math.round(performance.now() - t0) + 'ms（倍率' + Math.round(S.zoom * 100) + '%）');
     updateUI();
@@ -286,7 +315,7 @@
     canvas.width = W; canvas.height = H;
     canvas.style.width = cssWidth + 'px'; canvas.style.height = (cssWidth * info.h / info.w) + 'px';
     var ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+    drawPaper(ctx, W, H, info.page ? null : entry(n));
     if (info.page) await info.page.render({ canvasContext: ctx, viewport: info.page.getViewport({ scale: W / info.w }) }).promise;
     drawList(ctx, S.strokes[n] || [], W, H);
   }
@@ -359,7 +388,10 @@
         var src = Math.floor(+(e && e.src));
         if (!(src >= 0 && src <= max)) ok = false;
         var o = { src: src };
-        if (src === 0) { o.w = num(e.w, 50, 5000, A4.w); o.h = num(e.h, 50, 5000, A4.h); }
+        if (src === 0) {
+          o.w = num(e.w, 50, 5000, A4.w); o.h = num(e.h, 50, 5000, A4.h);
+          if (e.bg === 'grid' || e.bg === 'lined') o.bg = e.bg;
+        }
         if (e && e.added) o.added = true;
         return o;
       });
@@ -496,9 +528,12 @@
     if (!S.hasFile) return Promise.resolve();
     flushSave();
     var cur = entry();
-    var e = kind === 'blank' || !(cur.src > 0)
+    // 'same': 今のページと同じもの（白紙・方眼・罫線のページなら同じ紙）。'blank' / 'grid' / 'lined': その紙
+    var e = kind !== 'same' || !(cur.src > 0)
       ? { src: 0, w: Math.round(S.pageSize.w), h: Math.round(S.pageSize.h), added: true }
       : { src: cur.src, added: true };
+    var bg = kind === 'same' ? cur.bg : kind;
+    if (e.src === 0 && (bg === 'grid' || bg === 'lined')) e.bg = bg;
     var at = S.page; // この番号の次に入る
     S.layout.splice(at, 0, e);
     var ns = {};
@@ -508,7 +543,8 @@
     scheduleSave(at + 1);
     emit('layout');
     var done = goPage(at + 1);
-    setStatus(kind === 'blank' ? '白紙のページを追加しました' : '同じページを追加しました');
+    var PAPER = { blank: '白紙のページ', grid: '方眼のページ', lined: '罫線のページ' };
+    setStatus(PAPER[kind] ? PAPER[kind] + 'を追加しました' : '同じページを追加しました');
     return done;
   }
   /* 今のページを削除する（追加したページだけ） */
@@ -951,7 +987,7 @@
     goPage: goPage, updateUI: updateUI, pushUndo: pushUndo, commit: commit,
     scheduleSave: scheduleSave, flushSave: flushSave, exportData: exportData,
     setTool: setTool, insertPage: insertPage, deletePage: deletePage, addImage: addImage,
-    pageEntry: entry, openJson: openJson, liveCtx: lctx, liveCanvas: lc, wrap: wrap, stage: stage,
+    pageEntry: entry, paperLines: paperLines, openJson: openJson, liveCtx: lctx, liveCanvas: lc, wrap: wrap, stage: stage,
     blank: function () { openDoc(null, '白紙', 'strokes:__blank__'); },
     currentKey: function () { return S.hasFile ? S.key : ''; },
     hasStrokes: function () { for (var k in S.strokes) if (S.strokes[k].length) return true; return false; },

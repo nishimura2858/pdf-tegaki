@@ -79,6 +79,13 @@
         pdf.insertPage(idx, pg);
       } else {
         pg = pdf.insertPage(idx, [e.w || 595, e.h || 842]);
+        // 方眼・罫線のページは、画面と同じ線を引く（PDFは左下が原点なので上下を反転）
+        if (e.bg && App.paperLines) {
+          var ph = e.h || 842, lc = L.rgb(0xc7 / 255, 0xd1 / 255, 0xde / 255);
+          App.paperLines(e.w || 595, ph, e.bg).forEach(function (l) {
+            pg.drawLine({ start: { x: l[0], y: ph - l[1] }, end: { x: l[2], y: ph - l[3] }, thickness: 0.6, color: lc });
+          });
+        }
       }
       vp = e.src > 0 && c.doc ? (await c.doc.getPage(e.src)).getViewport({ scale: 1 }) : flatView(e.w || 595, e.h || 842);
       plan.push({ page: pg, vp: vp });

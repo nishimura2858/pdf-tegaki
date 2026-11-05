@@ -21,6 +21,9 @@
   function keepBackup(id, json) { try { localStorage.setItem('strokes:backup:' + id, json); } catch (e) {} }
 
   function show(s, text) {
+    var warn = s === 'login' || s === 'error' || s === 'relogin';
+    // 注意が必要な状態に変わったときは、下のお知らせでも伝える（縦向きではボタンに文字が出ないため）
+    if (warn && s !== state) App.setStatus(text);
     state = s;
     btn.hidden = false;
     document.getElementById('syncText').textContent = text;

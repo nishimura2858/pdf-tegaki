@@ -177,6 +177,10 @@
     }
   });
 
+  // 「その他」のいちばん下に、バージョン番号（読み込んだ app.js の ?v=）を出す
+  var vm = /[?&]v=(\d+)/.exec((document.querySelector('script[src*="js/app.js"]') || {}).src || '');
+  $('verText').textContent = 'バージョン ' + (vm ? vm[1] : '?');
+
   App.on('open', function () { closePops(); });
   App.toolbar = { setTool: setTool, closePops: closePops, showPop: showPop };
   S.tool = cfg.tool;
