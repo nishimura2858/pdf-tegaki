@@ -96,7 +96,7 @@
      指でなぞるとパラパラめくれて、指を離したらそのページへ移る */
   var book = $('book'), stage = $('bookStage'), edge = $('bookEdge');
   var bk = {
-    on: false, f: 1, show: 1, intro: 1, introAt: 0, raf: 0, leaves: {}, nums: {}, g: null,
+    on: false, f: 1, show: 1, intro: 1, introAt: 0, raf: 0, leaves: {}, g: null,
     W: 300, H: 420, top: 0, cx: 0, sw: 0, cache: {}, order: [], busy: false, closing: 0, suppress: false
   };
   var BK_KEEP = 40;
@@ -106,22 +106,25 @@
     var w = $('wrap');
     return (w && w.offsetWidth && w.offsetHeight) ? w.offsetWidth / w.offsetHeight : 0.707;
   }
-  // ページ i が見える幅（ページの幅に対する割合）。見開きの2ページは半分、ほかは5%（遠くはもっと細く）
-  function visFrac(i, f, u) {
-    if (i < 1 || i > S.total) return 0;
-    var d = i - f - 0.5, ad = Math.abs(d);
-    var k = clamp(1.5 - ad, 0, 1);
-    var base = ad < 10 ? 0.05 : ad > 26 ? 0.022 : 0.05 - 0.028 * (ad - 10) / 16;
-    base *= u;
-    return { v: base + (0.5 - base) * k, k: k };
+  /* 本のしくみ: どのページも真ん中の「背」でとじてある。
+     開いている見開きは手前に起き上がっていて（真正面からは半分くらいの幅に見える）、
+     その下のページは少しずつ寝ていくので、外側の端（小口）だけが重なって見える。
+     ページ i の位置 s = i - f - 0.5（マイナスは左側）から、背からの角度 θ を決める。
+     θ: 0° = 右に寝ている、90° = まっすぐ立っている、180° = 左に寝ている */
+  function edgeFrac(a) { return 1 - 0.5 * Math.exp(-0.1 * (a - 0.5)); } // 正面から見える幅（ページの幅に対する割合）
+  function leafAngle(s) {
+    var as = Math.abs(s);
+    if (as < 0.5) return 90 - 60 * s;                 // めくっている途中のページ（背を軸に回る）
+    var th = Math.acos(edgeFrac(as)) * 180 / Math.PI;  // 開いた見開きは60°、下のページほど寝ていく
+    return s > 0 ? th : 180 - th;
   }
   function measure() {
     var r = stage.getBoundingClientRect();
     bk.sw = r.width; bk.cx = r.width / 2;
     var a = pageAspect();
-    var H = Math.max(120, r.height - 46), W = H * a;
-    if (W > r.width * 0.44) { W = r.width * 0.44; H = W / a; }
-    bk.W = W; bk.H = H; bk.top = Math.max(6, (r.height - 30 - H) / 2);
+    var H = Math.max(120, r.height * 0.68), W = H * a;
+    if (W > r.width * 0.4) { W = r.width * 0.4; H = W / a; }
+    bk.W = W; bk.H = H; bk.top = Math.max(6, (r.height - H) / 2);
   }
 
   /* 小さな絵: 開いているあたりから順に描く。作ったものは取っておく */
@@ -178,52 +181,43 @@
 
   /* 並べて描く（毎フレーム） */
   function layout() {
-    var f = bk.show, u = bk.intro;
-    var W = bk.W, H = bk.H, cx = bk.cx;
-    var t0 = f + 1, m = Math.floor(t0), fr = t0 - m;
-    var xs = {}, vm = visFrac(m, f, u);
-    xs[m] = cx - fr * (vm ? vm.v * W : 0);
+    var f = bk.show, u = bk.intro, W = bk.W, H = bk.H, cx = bk.cx;
     var used = {}, sel = clamp(Math.round(bk.f), 1, S.total);
-    function place(i, x) {
-      var q = visFrac(i, f, u); if (!q) return;
-      var w = q.v * W;
-      if (x + w < -20 || x > bk.sw + 20) return;
+    var lo = Math.max(1, Math.floor(f) - 34), hi = Math.min(S.total, Math.ceil(f) + 35);
+    function place(i) {
+      var sp = i - f - 0.5;
+      var th = 90 + (leafAngle(sp) - 90) * u;          // 開くときは、立った本から広がる
       used[i] = 1;
       var el = bk.leaves[i] || (bk.leaves[i] = makeLeaf(i));
-      var sy = 0.84 + 0.16 * q.k, h = H * sy;
-      var left = (x + w / 2) < cx;
-      el.style.width = Math.max(1, w) + 'px';
-      el.style.height = h + 'px';
-      el.style.transform = 'translate3d(' + x + 'px,' + (bk.top + (H - h) / 2) + 'px,0)';
-      el.style.zIndex = String(1000 - Math.round(Math.abs(i - f - 0.5) * 2));
-      el.style.setProperty('--dir', left ? '90deg' : '270deg');
-      el.style.setProperty('--ex', left ? '-1px' : '1px');
-      el.style.setProperty('--sh', ((1 - q.k) * 0.28).toFixed(3));
-      el.classList.toggle('mid', q.k > 0.5);
-      el.classList.toggle('sel', i === sel && q.k > 0.5);
+      var right = th <= 90;
+      var lift = right ? th : 180 - th;                 // 寝た状態から何度起きているか
+      el.style.width = W + 'px'; el.style.height = H + 'px';
+      el.style.transformOrigin = right ? '0 50%' : '100% 50%';
+      el.style.transform = 'translate3d(' + (right ? cx : cx - W) + 'px,' + bk.top + 'px,0) rotateY(' + (right ? -lift : lift) + 'deg)';
+      el.style.zIndex = String(2000 - Math.round(Math.abs(sp) * 20));
+      el.style.setProperty('--dir', right ? '270deg' : '90deg');
+      el.style.setProperty('--ex', right ? '-1px' : '1px');
+      var l = lift / 90;
+      el.style.setProperty('--sh', (0.06 + 0.34 * l * l).toFixed(3));
+      el.classList.toggle('mid', Math.abs(sp) < 1.5);
+      el.classList.toggle('sel', i === sel && Math.abs(sp) < 1.5);
       var ph = el.firstChild && el.firstChild.className === 'ph' ? el.firstChild : null;
-      if (ph) { ph.style.opacity = q.k; }
+      if (ph) ph.style.opacity = Math.abs(sp) < 3 ? 1 : 0;
     }
-    var x = xs[m];
-    for (var i = m; i <= S.total + 1; i++) {
-      var q = visFrac(i, f, u); if (!q) { if (i > S.total) break; continue; }
-      if (x > bk.sw + 20) break;
-      place(i, x); x += q.v * W;
-    }
-    x = xs[m];
-    for (i = m - 1; i >= 1; i--) {
-      q = visFrac(i, f, u); if (!q) continue;
-      x -= q.v * W;
-      if (x + q.v * W < -20) break;
-      place(i, x);
-    }
+    for (var i = lo; i <= hi; i++) place(i);
+    // いちばん下（表紙・裏表紙側）のページは、遠くても敷いておく
+    if (lo > 1) place(1);
+    if (hi < S.total) place(S.total);
     Object.keys(bk.leaves).forEach(function (k) {
-      if (!used[k]) { bk.leaves[k].remove(); delete bk.leaves[k]; if (bk.nums[k]) { bk.nums[k].remove(); delete bk.nums[k]; } }
+      if (!used[k]) { bk.leaves[k].remove(); delete bk.leaves[k]; }
     });
-    Object.keys(bk.nums).forEach(function (k) { if (!used[k]) { bk.nums[k].remove(); delete bk.nums[k]; } });
     $('bookNo').textContent = sel;
     $('bookOf').textContent = '/ ' + S.total + ' ページ';
     edge.querySelector('.mark').style.left = (S.total > 1 ? (bk.f - 1) / (S.total - 1) * 100 : 50) + '%';
+    // 1枚めくれるごとに、紙の音
+    var whole = Math.floor(f + 0.5);
+    if (bk.lastWhole !== undefined && whole !== bk.lastWhole && bk.g) flick(Math.abs(whole - bk.lastWhole));
+    bk.lastWhole = whole;
   }
   function tick() {
     bk.raf = 0;
@@ -257,13 +251,42 @@
     if (go && n !== S.page) App.goPage(n);
     bk.closing = setTimeout(function () {
       book.classList.remove('on');
-      stage.textContent = ''; bk.leaves = {}; bk.nums = {};
+      stage.textContent = ''; bk.leaves = {}; bk.lastWhole = undefined;
     }, 200);
   }
 
+  /* 紙をめくる音（とても小さく）。音のもとは、さわったときに作る（iPadの決まり） */
+  var audio = null, noise = null, lastFlick = 0;
+  function audioInit() {
+    if (audio) { if (audio.state === 'suspended') audio.resume(); return; }
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+      audio = new AC();
+      var len = Math.round(audio.sampleRate * 0.05);
+      noise = audio.createBuffer(1, len, audio.sampleRate);
+      var d = noise.getChannelData(0);
+      for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+    } catch (e) { audio = null; }
+  }
+  function flick(n) {
+    if (!audio || audio.state !== 'running') return;
+    var now = performance.now();
+    if (now - lastFlick < 28) return; // 速くめくっているときは間引く
+    lastFlick = now;
+    try {
+      var src = audio.createBufferSource(); src.buffer = noise;
+      src.playbackRate.value = 0.8 + Math.random() * 0.5;
+      var bp = audio.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2400 + Math.random() * 1600; bp.Q.value = 0.8;
+      var g = audio.createGain(); g.gain.value = 0.22;
+      src.connect(bp); bp.connect(g); g.connect(audio.destination);
+      src.start();
+    } catch (e) {}
+  }
+
   /* なぞる */
-  function pagePx() { return Math.max(12, bk.W * 0.05); }
+  function pagePx() { return Math.max(12, bk.W * 0.06); }
   function gStart(e, mode) {
+    audioInit();
     bk.g = { id: e.pointerId, mode: mode, x0: e.clientX, y0: e.clientY, f0: bk.f, moved: mode === 'abs', axis: null };
     if (mode === 'abs') absMove(e.clientX);
     kick();
@@ -323,6 +346,7 @@
       if (!S.hasFile || bk.on || (e.pointerType === 'mouse' && e.button !== 0)) return;
       sx = e.clientX; sy = e.clientY;
       var target = e.target, ev = e;
+      audioInit();
       clearTimeout(t);
       t = setTimeout(function () {
         t = null; bk.suppress = true;

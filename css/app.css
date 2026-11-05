@@ -304,10 +304,10 @@ header { position: relative; z-index: 10; background: var(--bg); }
   position: absolute; right: 14px; top: 12px; width: 38px; height: 38px; border-radius: 50%; border: 0;
   background: var(--bar); color: var(--text); font-size: 22px; line-height: 1; box-shadow: 0 1px 4px rgba(52,44,34,.15); cursor: pointer;
 }
-#bookStage { flex: 1; position: relative; min-height: 0; cursor: ew-resize; }
+#bookStage { flex: 1; position: relative; min-height: 0; cursor: ew-resize; perspective: 1500px; perspective-origin: 50% 45%; }
 #bookStage .leaf {
-  position: absolute; left: 0; top: 0; background: #fff; overflow: hidden; will-change: transform, width;
-  transform-origin: 0 50%;
+  position: absolute; left: 0; top: 0; background: #fff; overflow: hidden; will-change: transform;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
 }
 #bookStage .leaf canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
 /* ページの端の線（小口の紙の重なり） */
@@ -320,7 +320,7 @@ header { position: relative; z-index: 10; background: var(--bg); }
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   font-size: 34px; font-weight: 700; color: #d6cfc3; font-variant-numeric: tabular-nums;
 }
-#bookStage .leaf.mid { box-shadow: 0 6px 22px rgba(52,44,34,.22); }
+#bookStage .leaf.mid { box-shadow: 0 10px 30px rgba(52,44,34,.20); }
 #bookStage .leaf.sel { outline: 3px solid var(--accent); outline-offset: 0; }
 #bookStage .pno {
   position: absolute; transform: translateX(-50%); font-size: 13px; font-weight: 600; color: var(--muted);
