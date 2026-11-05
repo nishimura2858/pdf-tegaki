@@ -231,13 +231,15 @@
   var $ = function (id) { return document.getElementById(id); };
   $('recentList').addEventListener('click', onListClick);
   $('hintRecent').addEventListener('click', onListClick);
-  // 「開く」ボタン: 最近のPDFがあれば一覧を出す。なければ、すぐファイルアプリを開く
-  $('openBtn').addEventListener('click', async function (e) {
-    var btn = e.currentTarget, pop = $('recentPop');
+  // 「開く」ボタン: すぐにメニューを出し、最近のPDFはあとから並べる。
+  // （iPadでは、タップから少しでも待つとファイルアプリを開かせてもらえないので、
+  //   ファイルアプリはメニューの「ファイルアプリから選ぶ」を押したときに開く）
+  $('openBtn').addEventListener('click', function (e) {
+    var pop = $('recentPop');
     if (pop.classList.contains('open')) { App.toolbar.closePops(); return; }
-    var n = await renderRecent($('recentList'));
-    if (!n) { $('file').click(); return; }
-    App.toolbar.showPop(pop, btn);
+    $('recentTitle').hidden = true;
+    App.toolbar.showPop(pop, e.currentTarget);
+    renderRecent($('recentList')).then(function (n) { $('recentTitle').hidden = !n; }).catch(function (err) { console.error(err); });
   });
   $('pickFile').addEventListener('click', function () { App.toolbar.closePops(); $('file').click(); });
 
@@ -262,6 +264,7 @@
       var rec = await loadLast();
       if (!rec || !rec.data) { if (!quietIfNone) App.setStatus('PDFを開き直せませんでした。「ファイルから開く」で選んでください'); return false; }
       curRecent = await openBytes(rec.data, rec.name);
+      if (curRecent) addRecent(curRecent, rec.name, rec.data).then(function () { saveThumb(1500); }); // 前のバージョンで開いたPDFも一覧に入れる
       return true;
     } catch (err) {
       console.error(err);
