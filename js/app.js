@@ -14,7 +14,7 @@
   var S = {
     pdf: null, hasFile: false, name: '', key: '',
     page: 1, total: 1, zoom: 1,
-    tool: 'pen', color: '#e53935', width: 4, finger: false,
+    tool: 'pen', color: '#e53935', width: 4, finger: false, // 指で書く機能は使わない（指はスクロール・ページめくり用）
     strokes: {}, undo: [], redo: [], cache: {}, dirty: {},
     cssW: 0, cssH: 0, live: null, rc: null, anchor: null
   };
@@ -286,21 +286,28 @@
     loadSaved();
     $('hint').style.display = 'none'; wrap.style.display = 'block';
     $('pager').hidden = false;
+    document.body.classList.add('has-file');
     stage.scrollTo(0, 0);
     renderPage();
     if (hooks.opened) hooks.opened(key, name);
   }
-  $('blankBtn').addEventListener('click', function () { closeMenu(); openDoc(null, '白紙', 'strokes:__blank__'); });
+  $('blankBtn').addEventListener('click', function () { closePops(); openDoc(null, '白紙', 'strokes:__blank__'); });
 
-  /* ---------- その他メニュー ---------- */
-  function closeMenu() { $('moreMenu').hidden = true; $('moreBtn').setAttribute('aria-expanded', 'false'); }
-  $('moreBtn').addEventListener('click', function (e) {
-    e.stopPropagation();
-    var open = $('moreMenu').hidden;
-    $('moreMenu').hidden = !open; $('moreBtn').setAttribute('aria-expanded', String(open));
+  /* ---------- ポップアップ（その他メニュー・色・太さ） ---------- */
+  function closePops(except) {
+    document.querySelectorAll('.pop.open').forEach(function (p) { if (p !== except) p.classList.remove('open'); });
+  }
+  document.querySelectorAll('[data-pop]').forEach(function (b) {
+    b.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (b.disabled) return;
+      var pop = $(b.dataset.pop);
+      closePops(pop);
+      pop.classList.toggle('open');
+    });
   });
   document.addEventListener('pointerdown', function (e) {
-    if (!$('moreMenu').hidden && !e.target.closest('.menu-wrap')) closeMenu();
+    if (!e.target.closest('.pop-wrap')) closePops();
   }, true);
 
   /* ---------- 操作 ---------- */
@@ -318,34 +325,47 @@
     renderPage();
   }
 
-  document.querySelectorAll('[data-tool]').forEach(function (b) {
-    b.onclick = function () {
-      S.tool = b.dataset.tool;
-      document.querySelectorAll('[data-tool]').forEach(function (x) { x.classList.toggle('on', x === b); });
-      document.querySelector('header').classList.toggle('eraser', S.tool === 'eraser');
-    };
+  /* ---------- 道具・色・太さ ----------
+     ペンと蛍光ペンは、それぞれ最後に使った色と太さを覚えておく（この端末に保存） */
+  var cfg = { pen: { c: '#e53935', w: 4 }, highlighter: { c: '#f2c500', w: 4 } };
+  try {
+    var saved = JSON.parse(localStorage.getItem('ui:tools'));
+    if (saved && saved.pen) cfg.pen = saved.pen;
+    if (saved && saved.highlighter) cfg.highlighter = saved.highlighter;
+    if (saved && /^(pen|highlighter|eraser)$/.test(saved.tool)) S.tool = saved.tool;
+  } catch (e) {}
+  function applyCfg() { var c = cfg[S.tool]; if (c) { S.color = c.c; S.width = c.w; } }
+  function syncTools() {
+    document.querySelectorAll('[data-tool]').forEach(function (x) { x.classList.toggle('on', x.dataset.tool === S.tool); });
+    document.querySelectorAll('[data-color]').forEach(function (x) { x.classList.toggle('on', S.tool !== 'eraser' && x.dataset.color.toLowerCase() === S.color.toLowerCase()); });
+    document.querySelectorAll('[data-width]').forEach(function (x) { x.classList.toggle('on', +x.dataset.width === S.width); });
+    var root = document.documentElement.style;
+    root.setProperty('--cur', S.color);
+    root.setProperty('--curd', Math.round(3 + S.width * 2) + 'px');
+    var er = S.tool === 'eraser';
+    setDis($('colorBtn'), er); setDis($('widthBtn'), er);
+    document.documentElement.classList.toggle('tool-eraser', er);
+    var src = document.querySelector('header [data-tool="' + S.tool + '"] svg');
+    if (src && $('palIcon')) $('palIcon').innerHTML = src.outerHTML;
+    try { localStorage.setItem('ui:tools', JSON.stringify({ tool: S.tool, pen: cfg.pen, highlighter: cfg.highlighter })); } catch (e) {}
+  }
+  function setTool(t) { S.tool = t; applyCfg(); syncTools(); }
+  function setColor(c) {
+    if (S.tool === 'eraser') { S.tool = 'pen'; applyCfg(); } // 消しゴム中に色を選んだらペンに戻す
+    S.color = c; cfg[S.tool].c = c; syncTools();
+  }
+  function setWidth(w) { if (cfg[S.tool]) { S.width = w; cfg[S.tool].w = w; syncTools(); } }
+  // 上のバーとパレットのボタンをまとめて受け付ける
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-tool],[data-color],[data-width]');
+    if (!b) return;
+    if (b.dataset.tool) setTool(b.dataset.tool);
+    else if (b.dataset.color) setColor(b.dataset.color);
+    else setWidth(+b.dataset.width);
+    var pop = b.closest('.pop');
+    if (pop) setTimeout(function () { pop.classList.remove('open'); }, 160);
   });
-  document.querySelectorAll('[data-color]').forEach(function (b) {
-    b.onclick = function () {
-      S.color = b.dataset.color;
-      document.querySelector('header').style.setProperty('--cur', S.color);
-      document.querySelectorAll('[data-color]').forEach(function (x) { x.classList.toggle('on', x === b); });
-    };
-  });
-  document.querySelectorAll('[data-width]').forEach(function (b) {
-    b.onclick = function () {
-      S.width = +b.dataset.width;
-      document.querySelectorAll('[data-width]').forEach(function (x) { x.classList.toggle('on', x === b); });
-    };
-  });
-  $('finger').onclick = function () {
-    S.finger = !S.finger;
-    this.classList.toggle('on', S.finger);
-    this.setAttribute('aria-pressed', String(S.finger));
-    // 指で書くあいだは指でめくれないので、ページの矢印を出しておく
-    $('pager').classList.toggle('arrows', S.finger);
-    setStatus(S.finger ? '指でも書けます（ページは右下の矢印でめくれます）' : '指ではスクロール・ページめくり・拡大縮小をします');
-  };
+  applyCfg(); syncTools();
 
   function pushUndo() {
     S.undo.push({ page: S.page, strokes: pages().slice() });
@@ -552,7 +572,7 @@
 
   /* ---------- JSONダイアログ ---------- */
   $('jsonBtn').onclick = function () {
-    closeMenu();
+    closePops();
     if (!S.hasFile) { setStatus('先にPDFを開いてください'); return; }
     // 文字入力欄はページに常に置かず、開いたときだけ作る（スクリブルが反応しにくくなるように）
     var ta = document.createElement('textarea');

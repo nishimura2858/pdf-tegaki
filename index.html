@@ -2,42 +2,60 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
+<meta name="theme-color" content="#24304d">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>PDF手書きノート</title>
-<link rel="stylesheet" href="css/app.css?v=16">
+<link rel="stylesheet" href="css/app.css?v=18">
 </head>
 <body>
 <header>
   <div class="row">
     <label class="btn icon" for="file" id="openLabel" title="ファイルから開く" aria-label="ファイルから開く"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2h7.5A2.5 2.5 0 0 1 21 9.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg></label>
     <input id="file" type="file" accept="application/pdf" hidden>
-    <div class="menu-wrap">
-      <button class="btn icon" id="moreBtn" title="その他" aria-label="その他" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.4" class="fill"/><circle cx="12" cy="12" r="1.4" class="fill"/><circle cx="19" cy="12" r="1.4" class="fill"/></svg></button>
-      <div class="menu" id="moreMenu" hidden>
+    <div class="pop-wrap">
+      <button class="btn icon" data-pop="moreMenu" title="その他" aria-label="その他"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5" class="fill"/><circle cx="12" cy="12" r="1.5" class="fill"/><circle cx="19" cy="12" r="1.5" class="fill"/></svg></button>
+      <div class="pop menu" id="moreMenu">
         <button class="item" id="blankBtn">白紙で試す</button>
         <button class="item" id="jsonBtn">手書きデータ（JSON）</button>
       </div>
     </div>
     <span class="sep"></span>
     <div class="group">
-      <button class="btn icon on" data-tool="pen" title="ペン" aria-label="ペン"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1-4.5L15.5 5a2.1 2.1 0 0 1 3 0l.5.5a2.1 2.1 0 0 1 0 3L8.5 19z"/><path d="M13.5 7l3.5 3.5"/></svg></button>
+      <button class="btn icon" data-tool="pen" title="ペン" aria-label="ペン"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1-4.5L15.5 5a2.1 2.1 0 0 1 3 0l.5.5a2.1 2.1 0 0 1 0 3L8.5 19z"/><path d="M13.5 7l3.5 3.5"/></svg></button>
       <button class="btn icon" data-tool="highlighter" title="蛍光ペン" aria-label="蛍光ペン"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14.5l7.5-10 3 2.5-7.5 10z"/><path d="M9 14.5l-1 3 3 .5 1-1.5"/><path d="M4 21h16" class="hl"/></svg></button>
       <button class="btn icon" data-tool="eraser" title="消しゴム" aria-label="消しゴム"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 19.5L3.8 15.8a1.8 1.8 0 0 1 0-2.6L13 4a1.8 1.8 0 0 1 2.6 0l4.4 4.4a1.8 1.8 0 0 1 0 2.6l-8.5 8.5z"/><path d="M8.5 8.5l7 7"/><path d="M11.5 19.5H20"/></svg></button>
     </div>
     <span class="sep"></span>
-    <div class="group" id="colors">
-      <button class="swatch" data-color="#1b2430" style="background:#1b2430" title="黒" aria-label="黒"></button>
-      <button class="swatch on" data-color="#e53935" style="background:#e53935" title="赤" aria-label="赤"></button>
-      <button class="swatch" data-color="#1e5fd6" style="background:#1e5fd6" title="青" aria-label="青"></button>
-      <button class="swatch" data-color="#2e9e55" style="background:#2e9e55" title="緑" aria-label="緑"></button>
-      <button class="swatch" data-color="#f2c500" style="background:#f2c500" title="黄" aria-label="黄"></button>
+    <div class="pop-wrap">
+      <button class="btn icon" id="colorBtn" data-pop="colorPop" title="色" aria-label="色"><span class="cur-color"></span></button>
+      <div class="pop" id="colorPop">
+        <div class="pop-title">色</div>
+        <div class="color-grid">
+          <button class="swatch" data-color="#1b2430" style="--c:#1b2430" title="黒" aria-label="黒"></button>
+          <button class="swatch" data-color="#6b7280" style="--c:#6b7280" title="グレー" aria-label="グレー"></button>
+          <button class="swatch" data-color="#e53935" style="--c:#e53935" title="赤" aria-label="赤"></button>
+          <button class="swatch" data-color="#f57c00" style="--c:#f57c00" title="オレンジ" aria-label="オレンジ"></button>
+          <button class="swatch" data-color="#f2c500" style="--c:#f2c500" title="黄" aria-label="黄"></button>
+          <button class="swatch" data-color="#2e9e55" style="--c:#2e9e55" title="緑" aria-label="緑"></button>
+          <button class="swatch" data-color="#00a3a3" style="--c:#00a3a3" title="青緑" aria-label="青緑"></button>
+          <button class="swatch" data-color="#1e5fd6" style="--c:#1e5fd6" title="青" aria-label="青"></button>
+          <button class="swatch" data-color="#7e57c2" style="--c:#7e57c2" title="紫" aria-label="紫"></button>
+          <button class="swatch" data-color="#e91e8c" style="--c:#e91e8c" title="ピンク" aria-label="ピンク"></button>
+        </div>
+      </div>
     </div>
-    <span class="sep"></span>
-    <div class="group" id="widths">
-      <button class="btn icon width" data-width="2" title="細い" aria-label="細い"><i style="--d:4px"></i></button>
-      <button class="btn icon width on" data-width="4" title="ふつう" aria-label="ふつう"><i style="--d:7px"></i></button>
-      <button class="btn icon width" data-width="6" title="やや太い" aria-label="やや太い"><i style="--d:11px"></i></button>
-      <button class="btn icon width" data-width="9" title="太い" aria-label="太い"><i style="--d:16px"></i></button>
+    <div class="pop-wrap">
+      <button class="btn icon" id="widthBtn" data-pop="widthPop" title="太さ" aria-label="太さ"><span class="cur-width"></span></button>
+      <div class="pop" id="widthPop">
+        <div class="pop-title">太さ</div>
+        <div class="width-row">
+          <button class="wopt" data-width="1.5" title="極細" aria-label="極細"><i style="--d:6px"></i></button>
+          <button class="wopt" data-width="2.5" title="細い" aria-label="細い"><i style="--d:8px"></i></button>
+          <button class="wopt" data-width="4" title="ふつう" aria-label="ふつう"><i style="--d:11px"></i></button>
+          <button class="wopt" data-width="6" title="太い" aria-label="太い"><i style="--d:15px"></i></button>
+          <button class="wopt" data-width="9" title="極太" aria-label="極太"><i style="--d:21px"></i></button>
+        </div>
+      </div>
     </div>
     <span class="sep"></span>
     <div class="group">
@@ -45,8 +63,6 @@
       <button class="btn icon" id="redo" title="やり直す" aria-label="やり直す"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
       <button class="btn icon" id="clearPage" title="このページを消去" aria-label="このページを消去"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 12.5A1.5 1.5 0 0 0 8.5 21h7a1.5 1.5 0 0 0 1.5-1.5L18 7"/><path d="M9 7V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V7"/></svg></button>
     </div>
-    <span class="sep"></span>
-    <button class="btn icon" id="finger" title="指でも書く" aria-label="指でも書く" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12.5V5a1.5 1.5 0 0 1 3 0v6"/><path d="M12 10.5V9a1.5 1.5 0 0 1 3 0v2.5"/><path d="M15 11a1.5 1.5 0 0 1 3 0v3.5a6.5 6.5 0 0 1-6.5 6.5H11a6 6 0 0 1-5-2.7l-2.2-3.4a1.5 1.5 0 0 1 2.4-1.8L9 15.5"/></svg></button>
     <button class="btn icon" id="syncBtn" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18.5a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9.5a4.5 4.5 0 0 1-.5 9z"/><path class="ok" d="M9.5 13.5l2 2 3.5-3.5"/><path class="up" d="M12 16v-5M9.8 13.2L12 11l2.2 2.2"/></svg><span id="syncText"></span></button>
   </div>
 </header>
@@ -59,13 +75,30 @@
   </div>
   <div id="hint">
     <strong>左上のフォルダのボタンからPDFを選ぶと、Apple Pencilで書き込めます</strong>
-    <span>ファイルアプリの「Googleドライブ」からも選べます。<br>手書きはこのiPadとGoogleドライブに自動保存され、同じPDFを開くと復元されます。<br>Googleドライブから開いたPDFには、書き込みがPDFそのものにも反映されます（30分おきと、アプリを離れたとき）。<br>指で左右に払うとページをめくれます。指2本のピンチで拡大縮小、2回タップで拡大／元の大きさに戻せます。</span>
+    <span>ファイルアプリの「Googleドライブ」からも選べます。<br>手書きはこのiPadとGoogleドライブに自動保存され、同じPDFを開くと復元されます。<br>Googleドライブから開いたPDFには、書き込みがPDFそのものにも反映されます（30分おきと、アプリを離れたとき）。<br>左下の丸いボタンで道具パレットを開けます（ドラッグで移動）。<br>指で左右に払うとページをめくれます。指2本のピンチで拡大縮小、2回タップで拡大／元の大きさに戻せます。</span>
   </div>
 </div>
 <div id="pager" hidden>
   <button class="pg" id="prev" aria-label="前のページ">‹</button>
   <span id="pageLabel">- / -</span>
   <button class="pg" id="next" aria-label="次のページ">›</button>
+</div>
+<!-- 動かせる道具パレット（丸いボタンをタップすると開く・ドラッグで移動） -->
+<div id="palette">
+  <button id="palBubble" aria-label="道具パレット" aria-expanded="false"><span id="palIcon"></span></button>
+  <div id="palPanel">
+    <button class="pbtn" data-tool="pen" title="ペン" aria-label="ペン"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1-4.5L15.5 5a2.1 2.1 0 0 1 3 0l.5.5a2.1 2.1 0 0 1 0 3L8.5 19z"/><path d="M13.5 7l3.5 3.5"/></svg></button>
+    <button class="pbtn" data-tool="highlighter" title="蛍光ペン" aria-label="蛍光ペン"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14.5l7.5-10 3 2.5-7.5 10z"/><path d="M9 14.5l-1 3 3 .5 1-1.5"/><path d="M4 21h16" class="hl"/></svg></button>
+    <button class="pbtn" data-tool="eraser" title="消しゴム" aria-label="消しゴム"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 19.5L3.8 15.8a1.8 1.8 0 0 1 0-2.6L13 4a1.8 1.8 0 0 1 2.6 0l4.4 4.4a1.8 1.8 0 0 1 0 2.6l-8.5 8.5z"/><path d="M8.5 8.5l7 7"/><path d="M11.5 19.5H20"/></svg></button>
+    <span class="psep"></span>
+    <button class="swatch" data-color="#1b2430" style="--c:#1b2430" title="黒" aria-label="黒"></button>
+    <button class="swatch" data-color="#e53935" style="--c:#e53935" title="赤" aria-label="赤"></button>
+    <button class="swatch" data-color="#1e5fd6" style="--c:#1e5fd6" title="青" aria-label="青"></button>
+    <button class="swatch" data-color="#2e9e55" style="--c:#2e9e55" title="緑" aria-label="緑"></button>
+    <button class="swatch" data-color="#f2c500" style="--c:#f2c500" title="黄" aria-label="黄"></button>
+    <span class="psep"></span>
+    <button class="pbtn" id="palUndo" title="元に戻す" aria-label="元に戻す"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+  </div>
 </div>
 <div id="status" role="status">PDFを開いてください</div>
 
@@ -86,13 +119,14 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async></script>
-<script src="js/config.js?v=16"></script>
-<script src="js/app.js?v=16"></script>
-<script src="js/google-auth.js?v=16"></script>
-<script src="js/drive.js?v=16"></script>
-<script src="js/drive-sync.js?v=16"></script>
+<script src="js/config.js?v=18"></script>
+<script src="js/app.js?v=18"></script>
+<script src="js/google-auth.js?v=18"></script>
+<script src="js/drive.js?v=18"></script>
+<script src="js/drive-sync.js?v=18"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"></script>
-<script src="js/pdf-open.js?v=16"></script>
-<script src="js/pdf-write.js?v=16"></script>
+<script src="js/pdf-open.js?v=18"></script>
+<script src="js/pdf-write.js?v=18"></script>
+<script src="js/palette.js?v=18"></script>
 </body>
 </html>
