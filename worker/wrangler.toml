@@ -1,0 +1,8 @@
+# ログインを続けるための小さなサーバー（Cloudflare Workers）
+# 秘密の鍵 GOOGLE_CLIENT_SECRET は、ここには書かずに Cloudflare の「シークレット」に登録する
+name = "pdf-tegaki-auth"
+main = "index.js"
+compatibility_date = "2025-09-01"
+
+[vars]
+GOOGLE_CLIENT_ID = "519206114844-hu35q7mhj8bgakg8a7pq0aub40un4oh3.apps.googleusercontent.com"

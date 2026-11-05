@@ -15,7 +15,10 @@
     scope_denied: 'Driveへのアクセスが許可されていません。ログイン時にチェックを入れてください',
     state_mismatch: 'ログインの確認に失敗しました。もう一度お試しください',
     admin_policy_enforced: 'このアカウントでは管理者が外部アプリの利用を制限しています',
-    org_internal: 'このアカウントでは利用できません（組織の制限）'
+    org_internal: 'このアカウントでは利用できません（組織の制限）',
+    token_exchange_failed: 'ログインの仕上げに失敗しました。もう一度お試しください',
+    not_configured: 'ログインサーバーの準備ができていません',
+    invalid_grant: 'ログインの有効期限が切れました。もう一度お試しください'
   };
   function message(code) { return MESSAGES[code] || ('ログインできませんでした（' + (code || '不明なエラー') + '）'); }
 
@@ -81,7 +84,7 @@
   async function getOriginal(base) {
     var data = await getOrigLocal(base);
     if (data) return data;
-    var token = GAuth.current();
+    var token = await GAuth.ensure();
     if (!token) return null;
     var f = await Drive.findOriginal(base, token);
     if (!f) return null;
@@ -111,7 +114,7 @@
     try { orig = await getOriginal(base); } catch (e) { console.error(e); if (e.status === 401) GAuth.invalidate(); }
     if (!orig) {
       // 元のPDFが手元にない（ほかの端末で書き込んだPDFなど）。ログインすれば取り寄せられる
-      pending = null; needLogin = !GAuth.current();
+      pending = null; needLogin = !GAuth.hasToken();
       App.openDoc(doc, name, 'strokes:view:' + sha);
       App.setStatus(needLogin
         ? '書き込み入りのPDFです。続きを書くには「Driveにログイン」を押してください（元のPDFを取り寄せます）'
@@ -154,7 +157,7 @@
 
   // 起動時: ログインから戻ってきたときは結果を伝え、どちらの場合も前回のPDFを開く
   (async function () {
-    var r = GAuth.consumeRedirect();
+    var r = await GAuth.consumeRedirect();
     if (r) GAuth.takeAfter();
     var opened = await reopenLast(!r);
     if (r && r.error) App.setStatus(message(r.error));

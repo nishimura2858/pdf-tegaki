@@ -9,5 +9,7 @@ window.APP_CONFIG = {
   // プロジェクト番号（PickerのappIdに使う）
   APP_ID: '519206114844',
   // Drive全体（元のPDFに書き込みを反映するため。Google Cloud の「データアクセス」にも同じものを登録）
-  SCOPE: 'https://www.googleapis.com/auth/drive'
+  SCOPE: 'https://www.googleapis.com/auth/drive',
+  // ログインを続けるためのサーバー（worker/ フォルダ。Cloudflare Workers）
+  AUTH_SERVER: 'https://pdf-tegaki-auth.nishimura2858.workers.dev'
 };

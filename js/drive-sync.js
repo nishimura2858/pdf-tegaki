@@ -39,8 +39,14 @@
     if (!cur) return;
     if (busy) { again = true; return; }
     clearTimeout(timer); timer = null;
-    var token = GAuth.current();
+    var c0 = cur;
+    busy = true;
+    var token = await GAuth.ensure(); // 切れていれば、画面を出さずに自動更新
+    busy = false;
+    if (c0 !== cur) { if (again) { again = false; schedule(500); } return; }
     if (!token) {
+      // 更新用の鍵はあるのに更新できなかった（通信できないなど）→ あとで再試行
+      if (GAuth.hasToken()) { show('error', 'Drive保存失敗・再試行'); return; }
       show('login', readMeta(cur.pdfHash).dirty ? 'Drive未保存・ログイン' : 'Driveにログイン');
       return;
     }

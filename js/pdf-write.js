@@ -103,10 +103,15 @@
     if (busy) { again = c; return; }
     var m = readMeta(c.base);
     if (!m.dirty && !(force && m.conflict)) return;
-    var token = GAuth.current();
-    if (!token) { if (force) note('PDFへの反映は、Driveにログインしてから行います'); return; }
-    if (c === cur) { clearTimeout(timer); timer = null; }
     busy = true;
+    var token = await GAuth.ensure(); // 切れていれば、画面を出さずに自動更新
+    if (!token) {
+      busy = false;
+      if (force) note('PDFへの反映は、Driveにログインしてから行います');
+      if (again) { var a0 = again; again = null; flush(a0); }
+      return;
+    }
+    if (c === cur) { clearTimeout(timer); timer = null; }
     var dirtyAt = m.dirtyAt;
     try {
       // 1. 書き換えるPDFを探す
