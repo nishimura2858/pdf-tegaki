@@ -40,54 +40,115 @@
     return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255];
   }
 
-  /* 元のPDFに手書きを描き込んだPDFを作る（画面と同じ太さ・色・蛍光ペンの透明度で） */
+  function dataBytes(url) {
+    var b = atob(url.slice(url.indexOf(',') + 1)), a = new Uint8Array(b.length);
+    for (var i = 0; i < b.length; i++) a[i] = b.charCodeAt(i);
+    return a;
+  }
+  // 白紙のページ用: 画面上の位置（割合）→ PDF内の座標
+  function flatView(w, h) {
+    return { width: w, height: h, convertToPdfPoint: function (x, y) { return [x, h - y]; } };
+  }
+
+  /* 元のPDFに手書きを描き込んだPDFを作る（画面と同じ太さ・色・透明度で）
+     c.origBytes がなければ（白紙のノート）、新しいPDFを作る。
+     data.layout があれば、追加したページ（同じページ・白紙）も入れる */
   async function bake(c, data) {
     await loadLib();
     var L = PDFLib;
-    var pdf = await L.PDFDocument.load(c.origBytes.slice(0), { updateMetadata: false });
-    var pages = pdf.getPages(), all = (data && data.pages) || {};
-    for (var k in all) {
-      var n = +k, list = all[k];
-      if (!(n >= 1 && n <= pages.length) || !Array.isArray(list) || !list.length) continue;
-      // 画面上の位置 → PDF内の座標（ページの回転や表示範囲も pdf.js に合わせて変換）
-      var vp = (await c.doc.getPage(n)).getViewport({ scale: 1 });
-      var page = pages[n - 1], ops = [], gs = null;
+    data = data || { pages: {} };
+    var hasOrig = !!(c && c.origBytes);
+    var pdf = hasOrig ? await L.PDFDocument.load(c.origBytes.slice(0), { updateMetadata: false }) : await L.PDFDocument.create();
+    var count = pdf.getPageCount();
+    var layout = Array.isArray(data.layout) && data.layout.length ? data.layout : null;
+    if (layout && layout.filter(function (e) { return !e.added; }).length !== count) layout = null; // 並びが合わなければ使わない
+    if (!layout) {
+      layout = [];
+      for (var q = 1; q <= count; q++) layout.push({ src: q });
+      if (!count) layout.push({ src: 0, w: 595, h: 842 });
+    }
+    // ページを並びどおりに用意する（元のページはそのまま、追加したページだけ差し込む）
+    var srcPdf = null, plan = [], idx = 0;
+    for (var li = 0; li < layout.length; li++) {
+      var e = layout[li], pg, vp;
+      if (!e.added && e.src > 0) {
+        pg = pdf.getPage(idx);
+      } else if (e.src > 0 && hasOrig) {
+        if (!srcPdf) srcPdf = await L.PDFDocument.load(c.origBytes.slice(0), { updateMetadata: false });
+        pg = (await pdf.copyPages(srcPdf, [e.src - 1]))[0];
+        pdf.insertPage(idx, pg);
+      } else {
+        pg = pdf.insertPage(idx, [e.w || 595, e.h || 842]);
+      }
+      vp = e.src > 0 && c.doc ? (await c.doc.getPage(e.src)).getViewport({ scale: 1 }) : flatView(e.w || 595, e.h || 842);
+      plan.push({ page: pg, vp: vp });
+      idx++;
+    }
+
+    var all = data.pages || {}, images = data.images || {}, embedded = {};
+    for (var n = 1; n <= plan.length; n++) {
+      var list = all[n];
+      if (!Array.isArray(list) || !list.length) continue;
+      var page = plan[n - 1].page, v = plan[n - 1].vp, ops = [], gsHl = null, gsPc = null;
+      var conv = function (x, y) { return v.convertToPdfPoint(x * v.width, y * v.height); };
       page.node.normalize(); // 元の描画内容の座標設定が、追加分に影響しないようにする
+      // 画像（線より下）
+      for (var ii = 0; ii < list.length; ii++) {
+        var im = list[ii];
+        if (!im || im.tool !== 'image' || !images[im.id]) continue;
+        if (!embedded[im.id]) {
+          var url = images[im.id];
+          embedded[im.id] = /^data:image\/png/.test(url) ? await pdf.embedPng(dataBytes(url)) : await pdf.embedJpg(dataBytes(url));
+        }
+        var name = page.node.newXObject('Image', embedded[im.id].ref);
+        var bl = conv(im.x, im.y + im.h), br = conv(im.x + im.w, im.y + im.h), tl = conv(im.x, im.y);
+        ops.push(L.pushGraphicsState(),
+          L.concatTransformationMatrix(br[0] - bl[0], br[1] - bl[1], tl[0] - bl[0], tl[1] - bl[1], bl[0], bl[1]),
+          L.drawObject(name), L.popGraphicsState());
+      }
+      // 線
       list.forEach(function (s) {
-        if (!s || !Array.isArray(s.points) || !s.points.length) return;
-        var p = s.points, col = rgb(s.color), base = (+s.width || 4) * vp.width / 1000;
-        var pts = p.map(function (q) { return vp.convertToPdfPoint(q[0] * vp.width, q[1] * vp.height); });
+        if (!s || s.tool === 'image' || !Array.isArray(s.points) || !s.points.length) return;
+        var p = s.points, col = rgb(s.color), base = (+s.width || 4) * v.width / 1000;
+        var pts = p.map(function (pt) { return conv(pt[0], pt[1]); });
         var pr = function (j) { return isFinite(p[j][2]) ? p[j][2] : 0.5; };
+        var wAt = s.tool === 'pencil' ? function (x) { return base * (0.45 + 0.9 * x); } : function (x) { return base * (0.6 + 0.8 * x); };
         ops.push(L.pushGraphicsState(), L.setStrokingRgbColor(col[0], col[1], col[2]),
           L.setLineCap(L.LineCapStyle.Round), L.setLineJoin(L.LineJoinStyle.Round));
         if (s.tool === 'highlighter') {
-          if (!gs) gs = page.maybeEmbedGraphicsState({ opacity: 0.35, borderOpacity: 0.35 });
-          ops.push(L.setGraphicsState(gs), L.setLineWidth(base * 5), L.moveTo(pts[0][0], pts[0][1]));
+          if (!gsHl) gsHl = page.maybeEmbedGraphicsState({ opacity: 0.35, borderOpacity: 0.35 });
+          ops.push(L.setGraphicsState(gsHl), L.setLineWidth(base * 5), L.moveTo(pts[0][0], pts[0][1]));
           for (var i = 1; i < pts.length; i++) ops.push(L.lineTo(pts[i][0], pts[i][1]));
           if (pts.length === 1) ops.push(L.lineTo(pts[0][0] + 0.01, pts[0][1]));
           ops.push(L.stroke());
-        } else if (pts.length === 1) {
-          ops.push(L.setLineWidth(base * (0.6 + 0.8 * pr(0))), L.moveTo(pts[0][0], pts[0][1]),
-            L.lineTo(pts[0][0] + 0.01, pts[0][1]), L.stroke());
         } else {
-          // 筆圧で太さが変わる。同じ太さが続く部分はまとめて1本で描く
-          var lastW = null;
-          for (var j = 1; j < pts.length; j++) {
-            var w = Math.round(base * (0.6 + 0.8 * ((pr(j) + pr(j - 1)) / 2)) * 20) / 20;
-            if (w !== lastW) {
-              if (lastW !== null) ops.push(L.stroke());
-              ops.push(L.setLineWidth(w), L.moveTo(pts[j - 1][0], pts[j - 1][1]));
-              lastW = w;
-            }
-            ops.push(L.lineTo(pts[j][0], pts[j][1]));
+          if (s.tool === 'pencil') {
+            if (!gsPc) gsPc = page.maybeEmbedGraphicsState({ opacity: 0.85, borderOpacity: 0.85 });
+            ops.push(L.setGraphicsState(gsPc));
           }
-          ops.push(L.stroke());
+          if (pts.length === 1) {
+            ops.push(L.setLineWidth(wAt(pr(0))), L.moveTo(pts[0][0], pts[0][1]),
+              L.lineTo(pts[0][0] + 0.01, pts[0][1]), L.stroke());
+          } else {
+            // 筆圧で太さが変わる。同じ太さが続く部分はまとめて1本で描く
+            var lastW = null;
+            for (var j = 1; j < pts.length; j++) {
+              var w = Math.round(wAt((pr(j) + pr(j - 1)) / 2) * 20) / 20;
+              if (w !== lastW) {
+                if (lastW !== null) ops.push(L.stroke());
+                ops.push(L.setLineWidth(w), L.moveTo(pts[j - 1][0], pts[j - 1][1]));
+                lastW = w;
+              }
+              ops.push(L.lineTo(pts[j][0], pts[j][1]));
+            }
+            ops.push(L.stroke());
+          }
         }
         ops.push(L.popGraphicsState());
       });
       if (ops.length) page.pushOperators.apply(page, ops);
     }
-    pdf.getInfoDict().set(L.PDFName.of('TegakiBase'), L.PDFString.of(c.base));
+    if (c && c.base) pdf.getInfoDict().set(L.PDFName.of('TegakiBase'), L.PDFString.of(c.base));
     return pdf.save();
   }
 
@@ -215,5 +276,5 @@
     if (cur && GAuth.hasToken()) flush(cur, true);
   });
 
-  window.PdfWrite = { flush: function (force) { return flush(cur, force); }, bake: bake, current: function () { return cur; } };
+  window.PdfWrite = { flush: function (force) { return flush(cur, force); }, bake: bake, loadLib: loadLib, current: function () { return cur; } };
 })();

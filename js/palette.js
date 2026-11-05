@@ -59,7 +59,7 @@
 
   // 道具・色を選んだら閉じる（元に戻すは続けて押せるように閉じない）
   panel.addEventListener('click', function (e) {
-    if (e.target.closest('[data-tool],[data-color]')) setTimeout(function () { setOpen(false); }, 140);
+    if (e.target.closest('[data-tool],[data-slot]')) setTimeout(function () { setOpen(false); }, 140);
   });
   // ペンで書き始めたら閉じる
   document.getElementById('ink').addEventListener('pointerdown', function (e) {
