@@ -13,8 +13,8 @@
   --head-text: #34312c;
   --head-muted: #a39b8e;
   --head-line: #e4ded3;
-  --chip: #34312c;         /* 選んでいる道具の背景 */
-  --chip-text: #f7f4ee;
+  --chip: #ec6f69;         /* 選んでいる道具の背景（コーラル） */
+  --chip-text: #ffffff;
   --pal: #34312c;          /* パレット（こげ茶） */
   --pal-2: #2b2925;
   --pal-text: #f4efe6;
@@ -34,7 +34,7 @@
     --bg: #1a1916; --bar: #26241f; --text: #f1ece3; --muted: #a8a093; --line: #3a372f;
     --accent: #f07a73; --accent-text: #1a1916; --stage: #141310;
     --head: #2a2823; --head-2: #24221e; --head-text: #f1ece3; --head-muted: #8f8779; --head-line: #3a372f;
-    --chip: #f1ece3; --chip-text: #2a2823; --sel: #4a2f2c;
+    --chip: #f07a73; --chip-text: #ffffff; --sel: #4a2f2c;
     --pal: #3a372f; --pal-2: #302d27;
     --pop-shadow: 0 14px 36px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.3);
   }
@@ -43,7 +43,7 @@
   --bg: #1a1916; --bar: #26241f; --text: #f1ece3; --muted: #a8a093; --line: #3a372f;
   --accent: #f07a73; --accent-text: #1a1916; --stage: #141310;
   --head: #2a2823; --head-2: #24221e; --head-text: #f1ece3; --head-muted: #8f8779; --head-line: #3a372f;
-  --chip: #f1ece3; --chip-text: #2a2823; --sel: #4a2f2c;
+  --chip: #f07a73; --chip-text: #ffffff; --sel: #4a2f2c;
   --pal: #3a372f; --pal-2: #302d27;
   --pop-shadow: 0 14px 36px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.3);
 }
@@ -88,12 +88,13 @@ header { position: relative; z-index: 10; background: var(--bg); }
 .topbar .btn.icon svg { width: 26px; height: 26px; stroke-width: 2.1; }
 .topbar .btn.icon:active { transform: scale(.92); }
 .topbar .btn.icon:not(.on):hover { background: rgba(52,49,44,.06); }
-.topbar .btn.icon.on { background: var(--chip); color: var(--chip-text); box-shadow: 0 3px 10px rgba(52,44,34,.22); }
-/* 選んでいる道具の下に、コーラルの小さな印 */
+.topbar .btn.icon.on { background: var(--chip); color: var(--chip-text); box-shadow: 0 3px 10px rgba(236,111,105,.35); }
+/* 選んでいるペンは、アイコンは白一色にして、下にいまの色の小さな印を出す（コーラルの上では色が見えにくいので） */
 .topbar .btn.icon { position: relative; }
-.topbar .btn.icon.on::after {
-  content: ""; position: absolute; left: 50%; bottom: -5px; width: 14px; height: 3px; border-radius: 2px;
-  background: var(--accent); transform: translateX(-50%);
+.topbar .btn.icon.on .tip { stroke: currentColor; opacity: 1; }
+:root[data-group="pens"] .topbar .btn.icon.on::after {
+  content: ""; position: absolute; left: 50%; bottom: -6px; width: 16px; height: 3.5px; border-radius: 2px;
+  background: var(--cur); transform: translateX(-50%); box-shadow: 0 0 0 1px rgba(255,255,255,.7);
 }
 
 /* Drive: ふだんは雲のアイコンだけ。ログインが必要なときなどは文字も出す */
