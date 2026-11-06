@@ -287,22 +287,29 @@ header { position: relative; z-index: 10; background: var(--bg); }
 #hint strong { color: var(--text); font-size: 17px; font-weight: 600; }
 
 /* ページ一覧の長押しで出る「本の小口」。開いている見開きは半分ずつ、ほかのページは端だけ見える */
+#bookShade {
+  position: absolute; inset: 0; z-index: 8; display: none; background: rgba(40,34,26,.16);
+  opacity: 0; transition: opacity .2s; touch-action: none;
+}
+#bookShade.on { display: block; }
+#bookShade.show { opacity: 1; }
 #book {
-  position: absolute; inset: 0; z-index: 9; display: none; flex-direction: column; overflow: hidden;
-  background: color-mix(in srgb, var(--stage) 92%, transparent);
-  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  position: absolute; left: 12px; top: 8px; width: 700px; height: 480px; z-index: 9; display: none;
+  flex-direction: column; overflow: hidden; border-radius: 22px;
+  background: var(--bar); box-shadow: 0 24px 60px rgba(52,44,34,.28), 0 4px 14px rgba(52,44,34,.12);
   touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
-  opacity: 0; transition: opacity .18s;
+  opacity: 0; transform: scale(.4);
+  transition: opacity .16s, transform .26s cubic-bezier(.2,1.25,.4,1);
 }
 #book.on { display: flex; }
-#book.show { opacity: 1; }
-#book .top { display: flex; align-items: center; justify-content: center; padding: 14px 16px 0; position: relative; }
+#book.show { opacity: 1; transform: none; }
+#book .top { display: flex; align-items: center; justify-content: center; padding: 10px 16px 0; position: relative; }
 #book .lbl { display: flex; align-items: baseline; gap: 6px; color: var(--text); font-variant-numeric: tabular-nums; }
-#book .lbl b { font-size: 30px; font-weight: 700; letter-spacing: .5px; }
+#book .lbl b { font-size: 26px; font-weight: 700; letter-spacing: .5px; }
 #book .lbl span { font-size: 15px; color: var(--muted); }
 #bookClose {
-  position: absolute; right: 14px; top: 12px; width: 38px; height: 38px; border-radius: 50%; border: 0;
-  background: var(--bar); color: var(--text); font-size: 22px; line-height: 1; box-shadow: 0 1px 4px rgba(52,44,34,.15); cursor: pointer;
+  position: absolute; right: 12px; top: 10px; width: 34px; height: 34px; border-radius: 50%; border: 0;
+  background: var(--bg); color: var(--text); font-size: 22px; line-height: 1; box-shadow: 0 1px 4px rgba(52,44,34,.15); cursor: pointer;
 }
 #bookStage { flex: 1; position: relative; min-height: 0; cursor: ew-resize; perspective: 1500px; perspective-origin: 50% 45%; }
 #bookStage .leaf {
@@ -328,7 +335,7 @@ header { position: relative; z-index: 10; background: var(--bg); }
 }
 #bookStage .pno.sel { color: var(--accent); }
 #bookEdge {
-  position: relative; height: 34px; margin: 0 max(24px, 8%) 10px; border-radius: 6px; cursor: ew-resize;
+  position: relative; height: 28px; margin: 0 max(20px, 7%) 8px; border-radius: 6px; cursor: ew-resize;
   background: repeating-linear-gradient(to right, #fbf9f5 0 2px, #d9d1c4 2px 3px);
   box-shadow: inset 0 0 0 1px rgba(52,44,34,.12), 0 2px 6px rgba(52,44,34,.10);
 }
@@ -336,7 +343,7 @@ header { position: relative; z-index: 10; background: var(--bg); }
   position: absolute; top: -5px; bottom: -5px; width: 4px; margin-left: -2px; border-radius: 2px; background: var(--accent);
   box-shadow: 0 0 0 2px var(--bar);
 }
-#book .tip { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16px 14px; }
+#book .tip { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16px 12px; }
 .book-open #palette { visibility: hidden; }
 #sideBtn, .thumb { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 

@@ -97,9 +97,8 @@
   var book = $('book'), stage = $('bookStage'), edge = $('bookEdge');
   var bk = {
     on: false, f: 1, show: 1, intro: 1, introAt: 0, raf: 0, leaves: {}, g: null,
-    W: 300, H: 420, top: 0, cx: 0, sw: 0, cache: {}, order: [], busy: false, closing: 0, suppress: false
+    W: 300, H: 420, top: 0, cx: 0, sw: 0, closing: 0, suppress: false
   };
-  var BK_KEEP = 40;
 
   function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }
   function pageAspect() {
@@ -119,62 +118,101 @@
     return s > 0 ? th : 180 - th;
   }
   function measure() {
-    var r = stage.getBoundingClientRect();
+    var r = { width: stage.offsetWidth, height: stage.offsetHeight }; // 広がる途中でも、本来の大きさで
     bk.sw = r.width; bk.cx = r.width / 2;
     var a = pageAspect();
-    var H = Math.max(120, r.height * 0.68), W = H * a;
+    var H = Math.max(120, r.height * 0.76), W = H * a;
     if (W > r.width * 0.4) { W = r.width * 0.4; H = W / a; }
     bk.W = W; bk.H = H; bk.top = Math.max(6, (r.height - H) / 2);
   }
 
-  /* 小さな絵: 開いているあたりから順に描く。作ったものは取っておく */
-  function bkCanvas(n) { return bk.cache[n] || null; }
+  /* 小さな絵は2段構え。
+     - 粗い絵（lo）: 全ページぶんを先に、少しずつ描いておく（速くめくっても数字だけにならないように）
+     - きれいな絵（hi）: 開いているあたりだけ描く。描けたら差しかえる */
+  var lo = {}, hi = {}, hiOrder = [], HI_KEEP = 40, LO_MAX = 360, LO_W = 66, rBusy = false, rTimer = 0;
   function bkDrop(n) {
-    if (!bk.cache[n]) return;
-    delete bk.cache[n]; bk.order = bk.order.filter(function (k) { return k !== n; });
+    delete lo[n];
+    if (hi[n]) { delete hi[n]; hiOrder = hiOrder.filter(function (k) { return k !== n; }); }
+    var el = bk.leaves[n];
+    if (el) { el.textContent = ''; fillLeaf(el, n); }
+    pumpSoon(1500);
   }
-  function bkPump() {
-    if (bk.busy || !bk.on) return;
-    var c0 = Math.round(bk.show), want = 0;
-    for (var d = 0; d <= 8 && !want; d++) {
-      var list = d ? [c0 + d, c0 - d, c0 + d + 1] : [c0, c0 + 1];
-      for (var j = 0; j < list.length; j++) {
-        var n = list[j];
-        if (n >= 1 && n <= S.total && !bk.cache[n]) { want = n; break; }
+  function bkClear() { lo = {}; hi = {}; hiOrder = []; pumpSoon(1500); }
+  function loRange() { // 粗い絵を用意する範囲（ページがとても多いときは、今のページのまわりだけ）
+    var c = bk.on ? Math.round(bk.show) : S.page, half = LO_MAX / 2;
+    var a = Math.max(1, c - half), b = Math.min(S.total, a + LO_MAX - 1);
+    return [Math.max(1, b - LO_MAX + 1), b];
+  }
+  function nextJob() {
+    if (!S.hasFile || !S.total) return null;
+    var c0 = bk.on ? Math.round(bk.show) : S.page, dir = bk.on ? (bk.f >= bk.show ? 1 : -1) : 1, d, n, k;
+    if (bk.on) {
+      // 1) 見開きと、すぐ隣はきれいな絵で
+      for (d = 0; d <= 2; d++) for (k = 0; k < 2; k++) {
+        n = c0 + (k ? -d : d + 1); if (n >= 1 && n <= S.total && !hi[n]) return { n: n, hi: true };
+      }
+      // 2) めくっている向きの先は、粗い絵を急いで
+      for (d = 0; d <= 40; d++) {
+        n = c0 + dir * d; if (n >= 1 && n <= S.total && !lo[n] && !hi[n]) return { n: n };
+        n = c0 - dir * d; if (d <= 12 && n >= 1 && n <= S.total && !lo[n] && !hi[n]) return { n: n };
+      }
+      // 3) 少し先まで、きれいな絵で
+      for (d = 3; d <= 7; d++) for (k = 0; k < 2; k++) {
+        n = c0 + (k ? -d : d + 1); if (n >= 1 && n <= S.total && !hi[n]) return { n: n, hi: true };
       }
     }
-    if (!want) return;
-    bk.busy = true;
-    var c = document.createElement('canvas');
-    App.renderThumb(c, want, Math.round(Math.min(bk.W, 230))).then(function () {
-      bk.cache[want] = c; bk.order.push(want);
-      while (bk.order.length > BK_KEEP) {
-        var old = bk.order.shift();
-        if (Math.abs(old - bk.show) < 6) { bk.order.push(old); break; } // 見えているものは捨てない
-        delete bk.cache[old];
-      }
-      var el = bk.leaves[want];
-      if (el) putCanvas(el, want);
+    // 4) 残りの粗い絵（今のページに近い順）
+    var r = loRange();
+    for (d = 0; d <= S.total; d++) {
+      n = c0 + d; if (n >= r[0] && n <= r[1] && !lo[n]) return { n: n };
+      n = c0 - d; if (n >= r[0] && n <= r[1] && !lo[n]) return { n: n };
+      if (c0 + d > r[1] && c0 - d < r[0]) break;
+    }
+    return null;
+  }
+  function pumpSoon(ms) { clearTimeout(rTimer); rTimer = setTimeout(bkPump, ms || 0); }
+  function bkPump() {
+    if (rBusy) return;
+    var job = nextJob(); if (!job) return;
+    rBusy = true;
+    var c = document.createElement('canvas'), n = job.n;
+    var w = job.hi ? Math.round(Math.min(bk.W, 230)) : LO_W;
+    App.renderThumb(c, n, w).then(function () {
+      if (job.hi) {
+        hi[n] = c; hiOrder.push(n);
+        while (hiOrder.length > HI_KEEP) {
+          var old = hiOrder.shift();
+          if (bk.on && Math.abs(old - bk.show) < 8) { hiOrder.push(old); break; } // 見えているものは捨てない
+          delete hi[old];
+        }
+      } else lo[n] = c;
+      var el = bk.leaves[n];
+      if (el) fillLeaf(el, n);
     }).catch(function (e) { console.error(e); }).then(function () {
-      bk.busy = false;
-      if (bk.on) setTimeout(bkPump, 0);
+      rBusy = false;
+      // 本を開いている間はすぐ次へ。閉じているときは、書く邪魔にならないよう間をあけて
+      if (bk.on) setTimeout(bkPump, 0); else pumpSoon(60);
     });
   }
-  function putCanvas(el, n) {
-    var c = bkCanvas(n);
-    if (!c || c.parentNode === el) return;
-    c.style.width = ''; c.style.height = '';
-    el.insertBefore(c, el.firstChild);
-    var ph = el.querySelector('.ph'); if (ph) ph.remove();
+  // いちばんきれいな絵を入れる（なければ数字だけの紙）
+  function fillLeaf(el, n) {
+    var c = hi[n] || lo[n];
+    var cur = el.querySelector('canvas');
+    if (c) {
+      if (cur === c) return;
+      c.style.width = ''; c.style.height = '';
+      if (cur) cur.remove();
+      el.insertBefore(c, el.firstChild);
+      var ph = el.querySelector('.ph'); if (ph) ph.remove();
+    } else if (!el.querySelector('.ph')) {
+      var p2 = document.createElement('span'); p2.className = 'ph'; p2.textContent = n;
+      el.appendChild(p2);
+    }
   }
   function makeLeaf(n) {
     var el = document.createElement('div');
     el.className = 'leaf'; el.dataset.n = n;
-    if (bkCanvas(n)) putCanvas(el, n);
-    else {
-      var ph = document.createElement('span'); ph.className = 'ph'; ph.textContent = n;
-      el.appendChild(ph);
-    }
+    fillLeaf(el, n);
     stage.appendChild(el);
     return el;
   }
@@ -214,10 +252,6 @@
     $('bookNo').textContent = sel;
     $('bookOf').textContent = '/ ' + S.total + ' ページ';
     edge.querySelector('.mark').style.left = (S.total > 1 ? (bk.f - 1) / (S.total - 1) * 100 : 50) + '%';
-    // 1枚めくれるごとに、紙の音
-    var whole = Math.floor(f + 0.5);
-    if (bk.lastWhole !== undefined && whole !== bk.lastWhole && bk.g) flick(Math.abs(whole - bk.lastWhole));
-    bk.lastWhole = whole;
   }
   function tick() {
     bk.raf = 0;
@@ -232,61 +266,47 @@
   }
   function kick() { if (!bk.raf) bk.raf = requestAnimationFrame(tick); }
 
-  function bookOpen(n) {
+  // ポップアップの大きさと位置: 長押ししたものの右（または下）に、そこから広がるように出す
+  function placePop(from) {
+    var m = $('main').getBoundingClientRect();
+    var w = Math.min(m.width - 24, 780), h = Math.min(m.height - 20, Math.max(360, Math.min(560, m.height * 0.72)));
+    var r = from ? from.getBoundingClientRect() : { left: m.left + 12, right: m.left + 12, top: m.top, bottom: m.top, width: 0, height: 0 };
+    var ax = r.left + r.width / 2 - m.left, ay = r.top + r.height / 2 - m.top;
+    var left, top;
+    if (r.bottom <= m.top + 2) { left = r.left - m.left - 8; top = 8; }            // 上のボタンから: 真下に
+    else { left = r.right - m.left + 12; top = ay - h * 0.4; }                       // ページ一覧から: 右どなりに
+    left = clamp(left, 12, m.width - w - 12); top = clamp(top, 8, m.height - h - 10);
+    book.style.left = left + 'px'; book.style.top = top + 'px';
+    book.style.width = w + 'px'; book.style.height = h + 'px';
+    book.style.transformOrigin = (ax - left) + 'px ' + (ay - top) + 'px';
+  }
+  function bookOpen(n, from) {
     if (!S.hasFile || bk.on) return;
     clearTimeout(bk.closing);
     bk.on = true; bk.f = bk.show = clamp(n || S.page, 1, S.total);
     bk.intro = 0; bk.introAt = performance.now();
-    book.classList.add('on'); document.body.classList.add('book-open');
     App.toolbar && App.toolbar.closePops && App.toolbar.closePops();
+    placePop(from);
+    book.classList.add('on'); $('bookShade').classList.add('on'); document.body.classList.add('book-open');
     measure();
-    void book.offsetWidth; book.classList.add('show');
-    kick();
+    void book.offsetWidth; book.classList.add('show'); $('bookShade').classList.add('show');
+    kick(); bkPump();
   }
   function bookClose(go) {
     if (!bk.on) return;
     var n = clamp(Math.round(bk.f), 1, S.total);
-    bk.on = false; bk.g = null;
-    book.classList.remove('show'); document.body.classList.remove('book-open');
+    bk.on = false; bk.g = null; pumpSoon(400);
+    book.classList.remove('show'); $('bookShade').classList.remove('show'); document.body.classList.remove('book-open');
     if (go && n !== S.page) App.goPage(n);
     bk.closing = setTimeout(function () {
-      book.classList.remove('on');
-      stage.textContent = ''; bk.leaves = {}; bk.lastWhole = undefined;
+      book.classList.remove('on'); $('bookShade').classList.remove('on');
+      stage.textContent = ''; bk.leaves = {};
     }, 200);
-  }
-
-  /* 紙をめくる音（とても小さく）。音のもとは、さわったときに作る（iPadの決まり） */
-  var audio = null, noise = null, lastFlick = 0;
-  function audioInit() {
-    if (audio) { if (audio.state === 'suspended') audio.resume(); return; }
-    try {
-      var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-      audio = new AC();
-      var len = Math.round(audio.sampleRate * 0.05);
-      noise = audio.createBuffer(1, len, audio.sampleRate);
-      var d = noise.getChannelData(0);
-      for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
-    } catch (e) { audio = null; }
-  }
-  function flick(n) {
-    if (!audio || audio.state !== 'running') return;
-    var now = performance.now();
-    if (now - lastFlick < 28) return; // 速くめくっているときは間引く
-    lastFlick = now;
-    try {
-      var src = audio.createBufferSource(); src.buffer = noise;
-      src.playbackRate.value = 0.8 + Math.random() * 0.5;
-      var bp = audio.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2400 + Math.random() * 1600; bp.Q.value = 0.8;
-      var g = audio.createGain(); g.gain.value = 0.22;
-      src.connect(bp); bp.connect(g); g.connect(audio.destination);
-      src.start();
-    } catch (e) {}
   }
 
   /* なぞる */
   function pagePx() { return Math.max(12, bk.W * 0.06); }
   function gStart(e, mode) {
-    audioInit();
     bk.g = { id: e.pointerId, mode: mode, x0: e.clientX, y0: e.clientY, f0: bk.f, moved: mode === 'abs', axis: null };
     if (mode === 'abs') absMove(e.clientX);
     kick();
@@ -335,22 +355,22 @@
   // なぞっている間は、画面がスクロールしないように
   document.addEventListener('touchmove', function (e) { if (bk.g || bk.on) e.preventDefault(); }, { passive: false });
   $('bookClose').addEventListener('click', function () { bookClose(false); });
+  $('bookShade').addEventListener('pointerdown', function (e) { if (bk.on && !bk.g) { e.preventDefault(); bookClose(false); } });
   book.addEventListener('contextmenu', function (e) { e.preventDefault(); });
-  window.addEventListener('resize', function () { if (bk.on) { measure(); kick(); } });
+  window.addEventListener('resize', function () { if (bk.on) bookClose(false); });
 
   /* 長押し: ページ一覧のボタン・ページ一覧の小さな絵 */
-  function longPress(el, pageOf) {
+  function longPress(el, pageOf, fromOf) {
     var t = null, sx = 0, sy = 0;
     el.addEventListener('pointerdown', function (e) {
       bk.suppress = false;
       if (!S.hasFile || bk.on || (e.pointerType === 'mouse' && e.button !== 0)) return;
       sx = e.clientX; sy = e.clientY;
       var target = e.target, ev = e;
-      audioInit();
       clearTimeout(t);
       t = setTimeout(function () {
         t = null; bk.suppress = true;
-        bookOpen(pageOf(target));
+        bookOpen(pageOf(target), fromOf ? fromOf(target) : el);
         gStart(ev, 'press');
       }, 420);
     });
@@ -366,10 +386,12 @@
   longPress(side, function (target) {
     var th = target && target.closest && target.closest('.thumb');
     return th ? +th.dataset.n : S.page;
+  }, function (target) {
+    return (target && target.closest && target.closest('.thumb')) || side;
   });
   App.on('data', function () { bkDrop(S.page); });
-  App.on('layout', function () { bk.cache = {}; bk.order = []; if (bk.on) bookClose(false); });
-  App.on('open', function () { bk.cache = {}; bk.order = []; if (bk.on) bookClose(false); });
+  App.on('layout', function () { if (bk.on) bookClose(false); bkClear(); });
+  App.on('open', function () { if (bk.on) bookClose(false); bkClear(); });
   App.bookOpen = bookOpen;
 
   /* ---------- 検索 ---------- */
