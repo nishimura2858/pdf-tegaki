@@ -72,12 +72,10 @@
     $('sideBtn').classList.toggle('on', v);
   }
   $('sideBtn').addEventListener('click', function () {
-    if (bk.suppress) { bk.suppress = false; return; }
     if (!S.hasFile) { App.setStatus('先にPDFを開いてください'); return; }
     setSide(!sideOpen);
   });
   thumbs.addEventListener('click', function (e) {
-    if (bk.suppress) { bk.suppress = false; return; }
     var t = e.target.closest('.thumb'); if (t) App.goPage(+t.dataset.n);
   });
   var dt = null;
@@ -90,14 +88,14 @@
   App.on('layout', function () { built = false; if (sideOpen) build(); });
   App.on('open', function () { textCache = {}; query = ''; clearMarks(); built = false; if (sideOpen) build(); });
 
-  /* ---------- 長押しで出る「本の小口」でパラパラめくる ----------
-     ページ一覧のボタンや小さな絵を長押しすると、本を横から見たような画面になる。
+  /* ---------- 本のボタンで出る「本の小口」でパラパラめくる ----------
+     上の本のボタンを押すと、本を開いたようなポップアップが出る。
      開いている見開き（2ページ）は半分ずつ、ほかのページは端（小口）だけが少し見える。
      指でなぞるとパラパラめくれて、指を離したらそのページへ移る */
   var book = $('book'), stage = $('bookStage'), edge = $('bookEdge');
   var bk = {
     on: false, f: 1, show: 1, intro: 1, introAt: 0, raf: 0, leaves: {}, g: null,
-    W: 300, H: 420, top: 0, cx: 0, sw: 0, closing: 0, suppress: false
+    W: 300, H: 420, top: 0, cx: 0, sw: 0, closing: 0
   };
 
   function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }
@@ -121,7 +119,7 @@
     var r = { width: stage.offsetWidth, height: stage.offsetHeight }; // 広がる途中でも、本来の大きさで
     bk.sw = r.width; bk.cx = r.width / 2;
     var a = pageAspect();
-    var H = Math.max(120, r.height * 0.76), W = H * a;
+    var H = Math.max(120, r.height * 0.72), W = H * a;
     if (W > r.width * 0.4) { W = r.width * 0.4; H = W / a; }
     bk.W = W; bk.H = H; bk.top = Math.max(6, (r.height - H) / 2);
   }
@@ -266,7 +264,7 @@
   }
   function kick() { if (!bk.raf) bk.raf = requestAnimationFrame(tick); }
 
-  // ポップアップの大きさと位置: 長押ししたものの右（または下）に、そこから広がるように出す
+  // ポップアップの大きさと位置: 押したボタンの下に、そこから広がるように出す
   function placePop(from) {
     var m = $('main').getBoundingClientRect();
     var w = Math.min(m.width - 24, 780), h = Math.min(m.height - 20, Math.max(360, Math.min(560, m.height * 0.72)));
@@ -287,7 +285,7 @@
     bk.intro = 0; bk.introAt = performance.now();
     App.toolbar && App.toolbar.closePops && App.toolbar.closePops();
     placePop(from);
-    book.classList.add('on'); $('bookShade').classList.add('on'); document.body.classList.add('book-open');
+    book.classList.add('on'); $('bookShade').classList.add('on'); document.body.classList.add('book-open'); $('bookBtn').classList.add('on');
     measure();
     void book.offsetWidth; book.classList.add('show'); $('bookShade').classList.add('show');
     kick(); bkPump();
@@ -296,7 +294,7 @@
     if (!bk.on) return;
     var n = clamp(Math.round(bk.f), 1, S.total);
     bk.on = false; bk.g = null; pumpSoon(400);
-    book.classList.remove('show'); $('bookShade').classList.remove('show'); document.body.classList.remove('book-open');
+    book.classList.remove('show'); $('bookShade').classList.remove('show'); document.body.classList.remove('book-open'); $('bookBtn').classList.remove('on');
     if (go && n !== S.page) App.goPage(n);
     bk.closing = setTimeout(function () {
       book.classList.remove('on'); $('bookShade').classList.remove('on');
@@ -340,7 +338,6 @@
       setTimeout(function () { bookClose(true); }, 120);
       return;
     }
-    if (g.mode === 'press') return; // 長押ししただけ: 開いたままにして、なぞるのを待つ
     // タップ: 押したページへ。ページの外なら閉じる
     var hit = document.elementFromPoint(e.clientX, e.clientY);
     var leaf = hit && hit.closest && hit.closest('#bookStage .leaf');
@@ -359,35 +356,11 @@
   book.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   window.addEventListener('resize', function () { if (bk.on) bookClose(false); });
 
-  /* 長押し: ページ一覧のボタン・ページ一覧の小さな絵 */
-  function longPress(el, pageOf, fromOf) {
-    var t = null, sx = 0, sy = 0;
-    el.addEventListener('pointerdown', function (e) {
-      bk.suppress = false;
-      if (!S.hasFile || bk.on || (e.pointerType === 'mouse' && e.button !== 0)) return;
-      sx = e.clientX; sy = e.clientY;
-      var target = e.target, ev = e;
-      clearTimeout(t);
-      t = setTimeout(function () {
-        t = null; bk.suppress = true;
-        bookOpen(pageOf(target), fromOf ? fromOf(target) : el);
-        gStart(ev, 'press');
-      }, 420);
-    });
-    el.addEventListener('pointermove', function (e) {
-      if (t && Math.hypot(e.clientX - sx, e.clientY - sy) > 10) { clearTimeout(t); t = null; }
-    });
-    ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (k) {
-      el.addEventListener(k, function () { if (t) { clearTimeout(t); t = null; } });
-    });
-    el.addEventListener('contextmenu', function (e) { e.preventDefault(); });
-  }
-  longPress($('sideBtn'), function () { return S.page; });
-  longPress(side, function (target) {
-    var th = target && target.closest && target.closest('.thumb');
-    return th ? +th.dataset.n : S.page;
-  }, function (target) {
-    return (target && target.closest && target.closest('.thumb')) || side;
+  /* 本のボタン: 押すと、ボタンの下にポップアップで開く（もう一度押すと閉じる） */
+  $('bookBtn').addEventListener('click', function (e) {
+    if (!S.hasFile) { App.setStatus('先にPDFを開いてください'); return; }
+    if (bk.on) { bookClose(false); return; }
+    bookOpen(S.page, e.currentTarget);
   });
   App.on('data', function () { bkDrop(S.page); });
   App.on('layout', function () { if (bk.on) bookClose(false); bkClear(); });
