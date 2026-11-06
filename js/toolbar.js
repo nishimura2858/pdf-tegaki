@@ -118,7 +118,11 @@
       return;
     }
     if (d.esize) { cfg.eraser = +d.esize; apply(); sync(); return; }
-    if (d.add) { closePops(); App.insertPage(d.add); return; }
+    if (d.add) {
+      closePops();
+      if (!S.hasFile) { App.setStatus('先にPDFを開いてください'); return; }
+      App.insertPage(d.add); return;
+    }
     switch (b.id) {
       case 'shapeBtn':
         cfg.shape = !cfg.shape; apply(); sync();
@@ -127,9 +131,7 @@
       case 'moreBtn':
         $('delPageBtn').disabled = !S.hasFile || !App.pageEntry().added;
         showPop($('moreMenu'), b); break;
-      case 'addPageBtn':
-        if (!S.hasFile) { App.setStatus('先にPDFを開いてください'); break; }
-        showPop($('addMenu'), b); break;
+      case 'shareBtn': closePops(); break; // 共有そのものは share.js が受け持つ
       case 'blankBtn': closePops(); App.blank(); break;
       case 'jsonBtn': closePops(); App.openJson(); break;
       case 'delPageBtn': closePops(); App.deletePage(); break;

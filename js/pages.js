@@ -450,7 +450,7 @@
     $('marks').innerHTML = html.join('');
   }
 
-  $('searchBtn').addEventListener('click', function (e) {
+  $('sideSearch').addEventListener('click', function (e) {
     if (!S.hasFile) { App.setStatus('先にPDFを開いてください'); return; }
     var pop = $('searchPop');
     App.toolbar.showPop(pop, e.currentTarget);

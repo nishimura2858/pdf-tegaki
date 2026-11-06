@@ -78,7 +78,26 @@ header { position: relative; z-index: 10; background: var(--bg); }
 }
 .topbar .side { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .topbar .right { justify-content: flex-end; }
-.topbar .center { display: flex; align-items: center; gap: 8px; }
+.topbar .center { display: flex; align-items: center; gap: 6px; }
+/* 書く道具は、うすい台の上にひとまとめにする */
+.topbar .tools {
+  padding: 3px; border-radius: 16px;
+  background: color-mix(in srgb, var(--head-text) 6%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--head-text) 7%, transparent);
+}
+.topbar .tsep { width: 1.5px; height: 24px; margin: 0 6px; border-radius: 1px; background: var(--head-line); flex: none; }
+/* ページ一覧のいちばん上の検索ボタン */
+#sidebar .side-head { position: sticky; top: 0; z-index: 1; padding: 10px 10px 4px; background: var(--bar); }
+#sideSearch {
+  width: 100%; height: 36px; display: flex; align-items: center; gap: 7px; padding: 0 10px;
+  border: 0; border-radius: 10px; background: var(--bg); color: var(--muted); font: inherit; font-size: 13px; cursor: pointer;
+}
+#sideSearch svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; flex: none; }
+/* その他メニューの見出しと区切り */
+.menu .mhead { font-size: 11.5px; color: var(--muted); padding: 10px 12px 4px; line-height: 1.4; }
+.menu .mline { height: 1px; background: var(--line); margin: 6px 4px; }
+.menu #shareBtn { display: flex; align-items: center; gap: 8px; }
+.menu #shareBtn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .topbar .btn.icon {
   width: 44px; height: 42px; min-width: 0; min-height: 0; padding: 0; flex: none;
   border: 0; border-radius: 12px; background: transparent; color: var(--head-text);
@@ -254,7 +273,7 @@ header { position: relative; z-index: 10; background: var(--bg); }
   transform: none; visibility: visible; box-shadow: 6px 0 24px rgba(52,44,34,.18);
   transition: transform .28s cubic-bezier(.2,.9,.3,1), box-shadow .28s, visibility 0s;
 }
-#thumbs { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 14px 0 80px; width: 172px; }
+#thumbs { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 8px 0 80px; width: 172px; }
 .thumb {
   border: 0; background: transparent; padding: 0; cursor: pointer; display: flex; flex-direction: column;
   align-items: center; gap: 6px; color: var(--muted); font: inherit; font-size: 12px; touch-action: manipulation;
