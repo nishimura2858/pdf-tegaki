@@ -291,8 +291,22 @@ header { position: relative; z-index: 10; background: var(--bg); }
   -webkit-overflow-scrolling: touch; position: relative;
   -webkit-touch-callout: none;
 }
+/* ページの上下に、前後のページを少しのぞかせる。flow ごと動かして、ページを移る */
+#flow { margin: 0 auto; padding: 4px 0 14px; }
+.peek { position: relative; height: var(--ph, 80px); display: none; pointer-events: none; }
+.peek.on { display: block; }
+#peekPrev { margin-bottom: 14px; }
+#peekNext { margin-top: 14px; overflow: hidden; }   /* 下側は切っておく（下へスクロールしすぎないように） */
+#flow.pulling #peekNext { overflow: visible; }
+.peek .sheet {
+  position: absolute; left: 0; width: 100%; background: #fff;
+  box-shadow: 0 1px 2px rgba(52,44,34,.10), 0 8px 24px rgba(52,44,34,.12);
+}
+#peekPrev .sheet { bottom: 0; }
+#peekNext .sheet { top: 0; }
+.peek canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
 #wrap {
-  position: relative; margin: 4px auto 14px; background: #fff; display: none;
+  position: relative; margin: 0; background: #fff; display: none;
   box-shadow: 0 1px 2px rgba(52,44,34,.10), 0 8px 24px rgba(52,44,34,.12);
 }
 #wrap canvas { position: absolute; left: 0; top: 0; display: block; }

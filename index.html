@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="css/app.css?v=31">
+<link rel="stylesheet" href="css/app.css?v=32">
 </head>
 <body>
 <header>
@@ -52,6 +52,8 @@
     <div id="thumbs"></div>
   </aside>
   <div id="stage">
+    <div id="flow">
+    <div class="peek" id="peekPrev" aria-hidden="true"></div>
     <div id="wrap">
       <canvas id="pdfc"></canvas>
       <canvas id="ink"></canvas>
@@ -62,6 +64,8 @@
         <button data-sel="dup">複製</button>
         <button data-sel="del" class="danger">削除</button>
       </div>
+    </div>
+    <div class="peek" id="peekNext" aria-hidden="true"></div>
     </div>
     <div id="hint">
       <div class="recent-list big" id="hintRecent"></div>
@@ -188,20 +192,20 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async></script>
-<script src="js/config.js?v=31"></script>
-<script src="js/app.js?v=31"></script>
-<script src="js/shapes.js?v=31"></script>
-<script src="js/toolbar.js?v=31"></script>
-<script src="js/lasso.js?v=31"></script>
-<script src="js/pages.js?v=31"></script>
-<script src="js/google-auth.js?v=31"></script>
-<script src="js/drive.js?v=31"></script>
-<script src="js/drive-sync.js?v=31"></script>
+<script src="js/config.js?v=32"></script>
+<script src="js/app.js?v=32"></script>
+<script src="js/shapes.js?v=32"></script>
+<script src="js/toolbar.js?v=32"></script>
+<script src="js/lasso.js?v=32"></script>
+<script src="js/pages.js?v=32"></script>
+<script src="js/google-auth.js?v=32"></script>
+<script src="js/drive.js?v=32"></script>
+<script src="js/drive-sync.js?v=32"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"></script>
-<script src="js/pdf-open.js?v=31"></script>
-<script src="js/pdf-write.js?v=31"></script>
-<script src="js/share.js?v=31"></script>
-<script src="js/palette.js?v=31"></script>
+<script src="js/pdf-open.js?v=32"></script>
+<script src="js/pdf-write.js?v=32"></script>
+<script src="js/share.js?v=32"></script>
+<script src="js/palette.js?v=32"></script>
 <script>
 // 電波がなくても開けるように、アプリの部品をこの端末に取っておく（sw.js）
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function (e) { console.error(e); });

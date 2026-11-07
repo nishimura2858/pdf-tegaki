@@ -250,6 +250,65 @@
     return { page: null, w: e.w || A4.w, h: e.h || A4.h };
   }
 
+  /* ---------- 前後のページをのぞかせる ----------
+     ページの上に前のページの下の端、下に次のページの上の端を見せておく。
+     引っぱると、そのページがそのまま滑りこんでくる */
+  var flow = $('flow'), peekEl = { prev: $('peekPrev'), next: $('peekNext') };
+  var peeks = { prev: null, next: null }, peekTok = { prev: 0, next: 0 };
+  function peekH() { return Math.round(Math.min(110, Math.max(56, stage.clientHeight * 0.1))); }
+  function peekKey(n) {
+    var e = entry(n);
+    return [S.key, S.total, n, e.src, e.bg || '', Math.round(S.cssW), (S.strokes[n] || []).length].join('|');
+  }
+  function setPeek(side, p) {
+    var el = peekEl[side];
+    peeks[side] = p; el.textContent = '';
+    if (!p) { el.classList.remove('on'); return; }
+    var sh = document.createElement('div'); sh.className = 'sheet'; sh.style.height = p.h + 'px';
+    if (p.base) sh.appendChild(p.base);
+    if (p.ink) sh.appendChild(p.ink);
+    el.appendChild(sh); el.classList.add('on');
+  }
+  async function renderPeek(side, n) {
+    var tok = ++peekTok[side], key = peekKey(n);
+    var info = await pageInfo(n);
+    if (tok !== peekTok[side]) return;
+    var w = S.cssW, h = w * info.h / info.w;
+    var dpr = Math.max(0.5, Math.min(Math.min(window.devicePixelRatio || 1, 2), Math.sqrt(1.6e6 / (w * h))));
+    var W = Math.floor(w * dpr), H = Math.floor(h * dpr);
+    var base = document.createElement('canvas'); base.width = W; base.height = H;
+    var bctx = base.getContext('2d');
+    drawPaper(bctx, W, H, info.page ? null : entry(n));
+    if (info.page) {
+      try { await info.page.render({ canvasContext: bctx, viewport: info.page.getViewport({ scale: W / info.w }) }).promise; }
+      catch (e) { return; }
+    }
+    if (tok !== peekTok[side]) return;
+    var ik = document.createElement('canvas'); ik.width = W; ik.height = H;
+    drawList(ik.getContext('2d'), S.strokes[n] || [], W, H);
+    setPeek(side, { key: key, n: n, h: h, base: base, ink: ik });
+  }
+  function updatePeeks() {
+    var want = { prev: S.page > 1 ? S.page - 1 : 0, next: S.page < S.total ? S.page + 1 : 0 };
+    ['prev', 'next'].forEach(function (side) {
+      var n = want[side], p = peeks[side];
+      if (!n) { peekTok[side]++; setPeek(side, null); return; }
+      if (p && p.key === peekKey(n)) return;
+      setPeek(side, { key: '', n: n, h: S.cssH }); // 描けるまでは白い紙
+      renderPeek(side, n);
+    });
+  }
+  // 今のページを写しとる（移ったあと、反対側ののぞき窓に使う）
+  function snapshotCurrent() {
+    var dpr = Math.max(0.5, Math.min(Math.min(window.devicePixelRatio || 1, 2), Math.sqrt(1.6e6 / (S.cssW * S.cssH))));
+    var W = Math.floor(S.cssW * dpr), H = Math.floor(S.cssH * dpr);
+    var base = document.createElement('canvas'); base.width = W; base.height = H;
+    base.getContext('2d').drawImage(pdfC, 0, 0, W, H);
+    var ik = document.createElement('canvas'); ik.width = W; ik.height = H;
+    ik.getContext('2d').drawImage(ink, 0, 0, W, H);
+    return { key: peekKey(S.page), n: S.page, h: S.cssH, base: base, ink: ik };
+  }
+
   async function renderPage() {
     if (!S.hasFile) return;
     var t0 = performance.now();
@@ -267,6 +326,9 @@
     var dprInk = Math.max(0.7, Math.min(dw, Math.sqrt(6e6 / area)));
     S.cssW = cssW; S.cssH = cssH;
     wrap.style.width = cssW + 'px'; wrap.style.height = cssH + 'px';
+    flow.style.width = cssW + 'px'; flow.style.setProperty('--ph', peekH() + 'px');
+    if (S.swap) { var sw = S.swap; S.swap = null; sw(); } // にゅっと移ったあとの置きかえ（同じ瞬間に）
+    updatePeeks();
     if (S.landBottom) { S.landBottom = false; stage.scrollTop = stage.scrollHeight; } // 前のページへ戻るときは、下の端から
     // 同じページの描き直し（拡大・画面の回転）では、描き終わるまで今の絵を引き伸ばして出しておく（白く点滅しないように）
     var shown = S.key + ':' + S.page + ':' + entry().src, old = null;
@@ -277,6 +339,8 @@
     lastShown = shown;
     pdfC.width = Math.floor(cssW * dprPdf); pdfC.height = Math.floor(cssH * dprPdf);
     if (old) { pctx.drawImage(old, 0, 0, pdfC.width, pdfC.height); old.width = old.height = 0; }
+    else if (S.placeholder) pctx.drawImage(S.placeholder, 0, 0, pdfC.width, pdfC.height); // のぞいていた絵を、描き終わるまでの代わりに
+    S.placeholder = null;
     [ink, lc, tmp].forEach(function (c) { c.width = Math.floor(cssW * dprInk); c.height = Math.floor(cssH * dprInk); });
     [pdfC, ink, lc].forEach(function (c) { c.style.width = cssW + 'px'; c.style.height = cssH + 'px'; });
     if (S.anchor) {
@@ -481,10 +545,11 @@
   }
 
   /* ---------- 操作 ---------- */
-  function goPage(n) {
+  function goPage(n, keepScroll) {
     n = Math.min(S.total, Math.max(1, n));
     if (n === S.page && S.hasFile) { drawInk(); updateUI(); return Promise.resolve(); }
-    S.page = n; S.live = null; stage.scrollTo(0, 0);
+    S.page = n; S.live = null;
+    if (!keepScroll) stage.scrollTo(0, 0);
     var done = renderPage();
     flashPager();
     emit('page');
@@ -712,11 +777,23 @@
     add: ['引っぱるとページを追加', '離すとページを追加'],
     prev: ['引っぱると前のページ', '離すと前のページへ']
   };
+  // のぞいている前後のページがあれば、それが指についてくる
+  function peekSide(kind) { return (kind === 'next' || kind === 'prev') && peeks[kind] ? kind : null; }
+  function snapDist() { return Math.round(Math.min(150, Math.max(80, stage.clientHeight * 0.14))); }
+  var flowY = 0;
+  function setFlow(y) { flowY = y; flow.style.transform = y ? 'translateY(' + y + 'px)' : ''; }
   // pull: 引っぱった量（正: 上へ、負: 下へ）。紙をゴムのように少し動かし、案内を出す
   function showPull(p) {
-    var off = (p > 0 ? 1 : -1) * Math.min(PULL_MAX, Math.abs(p) * 0.5);
-    wrap.style.transform = p ? 'translateY(' + (-off) + 'px)' : '';
     var kind = p ? pullKind(p) : null;
+    if (peekSide(kind)) { // 前後のページが滑りこんでくる。ある程度来たら、にゅっと移る
+      flow.classList.add('pulling'); pullEl.className = '';
+      var d = p * 0.85;
+      setFlow(-d);
+      return Math.abs(d) >= snapDist() ? kind : null;
+    }
+    var off = (p > 0 ? 1 : -1) * Math.min(PULL_MAX, Math.abs(p) * 0.5);
+    setFlow(p ? -off : 0);
+    if (!p) flow.classList.remove('pulling');
     if (!kind) { pullEl.className = ''; return null; }
     var ready = Math.abs(off) >= PULL_READY;
     pullEl.className = 'show ' + kind + (p < 0 ? ' top' : '') + (ready ? ' ready' : '');
@@ -725,6 +802,7 @@
     return ready ? kind : null;
   }
   function panMove(e) {
+    if (pan.done) return; // もう移った。指を離すまで何もしない
     var dx = e.clientX - pan.x, dy = e.clientY - pan.y;
     pan.x = e.clientX; pan.y = e.clientY;
     stage.scrollLeft -= dx;
@@ -740,37 +818,77 @@
       if ((rest > 0.5 && pan.atB) || (rest < -0.5 && pan.atT)) pan.pull += rest;
     }
     if (pan.pull || pan.ready !== undefined) pan.ready = showPull(pan.pull);
+    if (pan.ready && peekSide(pan.ready)) { pan.done = true; snapTo(pan.ready); }
   }
-  function settle() { setTimeout(function () { if (!turning) wrap.style.transition = ''; }, 460); }
+  function settle() {
+    setTimeout(function () { if (!turning) { flow.style.transition = ''; wrap.style.transition = ''; if (!flowY) flow.classList.remove('pulling'); } }, 460);
+  }
   function endPull(p, cancel) {
     var kind = cancel ? null : p.ready;
     pullEl.classList.remove('show', 'ready');
     if (!kind) {
-      wrap.style.transition = 'transform .32s cubic-bezier(.2,1.3,.4,1)';
-      wrap.style.transform = '';
+      flow.style.transition = 'transform .32s cubic-bezier(.2,1.3,.4,1)';
+      setFlow(0);
       settle();
       return;
     }
-    turnPage(kind);
+    if (peekSide(kind)) snapTo(kind); else turnPage(kind);
+  }
+  /* のぞいていたページを、ページの定位置まで にゅっと動かしてから入れかえる（見た目はつながったまま） */
+  function snapTo(kind) {
+    var dir = kind === 'next' ? 1 : -1, n = S.page + dir, p = peeks[kind];
+    var sheet = peekEl[kind].querySelector('.sheet');
+    if (!p || !sheet || n < 1 || n > S.total) { turnPage(kind); return; }
+    turning = true;
+    var sr = stage.getBoundingClientRect(), r = sheet.getBoundingClientRect();
+    var P = peekH(), G = 14, padT = 4, padB = 14, ch = stage.clientHeight, cur, target;
+    if (dir > 0) { cur = r.top - sr.top; target = padT + P + G; }       // 次のページの上の端を、ページの位置へ
+    else {                                                              // 前のページの下の端を、下の端から見た位置へ
+      cur = r.bottom - sr.top;
+      var top = padT + (n > 1 ? P + G : 0), all = top + p.h + G + P + padB;
+      target = all > ch ? ch - (padB + P + G) : top + p.h;
+    }
+    flow.classList.add('pulling');
+    flow.style.transition = 'transform .3s cubic-bezier(.3,1.22,.5,1)';
+    setFlow(flowY + (target - cur));
+    setTimeout(function () {
+      var snap = snapshotCurrent();
+      S.placeholder = p.base || null;
+      S.swap = function () {
+        flow.style.transition = 'none'; setFlow(0); flow.classList.remove('pulling');
+        // 今まで見ていたページは、反対側ののぞき窓へ
+        if (dir > 0) { peekTok.prev++; setPeek('prev', snap); stage.scrollTo(0, 0); }
+        else { peekTok.next++; setPeek('next', snap); }
+        // 入ってきたページの、その先は描き直す
+        peekTok[kind]++; setPeek(kind, null);
+      };
+      if (dir < 0) S.landBottom = true;
+      var done = goPage(n, true);
+      Promise.resolve(done).catch(function () {}).then(function () {
+        S.swap = null; S.placeholder = null;
+        flow.style.transition = ''; turning = false;
+      });
+    }, 300);
   }
   // 紙を送り出して、新しいページをにゅっと出す
   function turnPage(kind) {
     var dir = kind === 'prev' ? -1 : 1, h = stage.clientHeight;
-    turning = true;
-    wrap.style.transition = 'transform .18s ease-in, opacity .18s ease-in';
-    wrap.style.transform = 'translateY(' + (-dir * h * 0.5) + 'px)';
-    wrap.style.opacity = '0';
+    turning = true; flow.classList.remove('pulling');
+    flow.style.transition = 'transform .18s ease-in, opacity .18s ease-in';
+    setFlow(-dir * h * 0.5);
+    flow.style.opacity = '0';
     setTimeout(function () {
-      wrap.style.transition = 'none';
+      flow.style.transition = 'none';
       var done;
       if (kind === 'add') done = insertPage('same');
       else if (kind === 'prev') { S.landBottom = true; done = goPage(S.page - 1); }
       else done = goPage(S.page + 1);
-      wrap.style.transform = 'translateY(' + (dir * h * 0.45) + 'px)' + (kind === 'add' ? ' scale(.9)' : '');
+      flowY = dir * h * 0.45;
+      flow.style.transform = 'translateY(' + flowY + 'px)' + (kind === 'add' ? ' scale(.9)' : '');
       Promise.resolve(done).catch(function () {}).then(function () {
-        void wrap.offsetWidth; // 置いた位置を確定させてから動かす
-        wrap.style.transition = 'transform .46s cubic-bezier(.2,1.25,.35,1), opacity .2s ease-out';
-        wrap.style.transform = ''; wrap.style.opacity = '';
+        void flow.offsetWidth; // 置いた位置を確定させてから動かす
+        flow.style.transition = 'transform .46s cubic-bezier(.2,1.25,.35,1), opacity .2s ease-out';
+        setFlow(0); flow.style.opacity = '';
         turning = false; settle();
       });
     }, 180);
@@ -831,12 +949,13 @@
           // 縦も同じ: 端まで来てから引っぱると、ページを移る
           atT: stage.scrollTop <= 1, atB: stage.scrollTop >= stage.scrollHeight - stage.clientHeight - 1, pull: 0 };
       }
-      else if (n === 2) { if (pan && pan.pull) endPull(pan, true); pan = null; startPinch(); }
+      else if (n === 2) { if (pan && pan.pull && !pan.done) endPull(pan, true); pan = null; startPinch(); }
       return;
     }
+    if (turning) return; // ページを移っている最中は書かない
     if (drawing) { dbg('!! ペン#' + e.pointerId + ' 無視（前の線#' + drawing.id + 'が終わっていない）'); return; }
     dbg('ペン#' + e.pointerId + '(' + e.pointerType + ') 書き始め' + (Object.keys(touches).length ? '（指' + Object.keys(touches).length + '本を解除）' : ''));
-    if (pan && pan.pull) endPull(pan, true);
+    if (pan && pan.pull && !pan.done) endPull(pan, true);
     pan = null; touches = {}; if (pinch) cancelPinch();
     ink.setPointerCapture(e.pointerId);
     S.rc = ink.getBoundingClientRect(); // 書き始めに1回だけ取得
@@ -881,7 +1000,8 @@
       delete touches[e.pointerId];
       if (pinch) endPinch();
       if (pan && pan.id === e.pointerId) {
-        if (pan.pull || pan.ready) endPull(pan, e.type !== 'pointerup');
+        if (pan.done) { /* もう移った */ }
+        else if (pan.pull || pan.ready) endPull(pan, e.type !== 'pointerup');
         else if (e.type === 'pointerup') fingerUp(pan, e);
         pan = null;
       }
