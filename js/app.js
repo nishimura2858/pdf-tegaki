@@ -408,6 +408,8 @@
     wrap.style.width = cssW + 'px'; wrap.style.height = cssH + 'px';
     if (S.swap) { var sw = S.swap; S.swap = null; sw(); } // めくり終わったあとの置きかえ（同じ瞬間に）
     updateStill();
+    // 画面より小さいとき（縮小・見開き）は、上下のまん中に
+    flow.style.marginTop = Math.max(0, Math.floor((stage.clientHeight - cssH - 18) / 2)) + 'px';
     // 同じページの描き直し（拡大・画面の回転）では、描き終わるまで今の絵を引き伸ばして出しておく（白く点滅しないように）
     var shown = S.key + ':' + S.page + ':' + entry().src, changed = shown !== lastShown, old = null;
     var pw = Math.floor(cssW * dprPdf), ph = Math.floor(cssH * dprPdf);
@@ -685,7 +687,7 @@
   $('prev').onclick = function () { autoTurn(-1); };
   $('next').onclick = function () { autoTurn(1); };
   function setZoom(z) {
-    S.zoom = Math.min(MAXZOOM, Math.max(0.5, Math.round(z * 100) / 100));
+    S.zoom = Math.min(MAXZOOM, Math.max(minZoom(), Math.round(z * 100) / 100));
     flashPager(Math.round(S.zoom * 100) + '%');
     renderPage();
   }
@@ -782,6 +784,15 @@
   var drawing = null, pan = null, erased = false;
   var touches = {}, pinch = null, lastPenUp = 0, rafId = 0, drawnIdx = 0;
 
+  /* 縮小できる限界: ページ（見開きなら2ページぶん）が画面に収まって、まわりに約2.5cm残るところまで。
+     iPadの画面では 1cm ≒ 52px（CSSの単位） */
+  var CM = 52;
+  function minZoom() {
+    if (!S.cssW || !S.zoom) return 0.5;
+    var w1 = flow.offsetWidth / S.zoom, h1 = S.cssH / S.zoom, m = 2.5 * CM * 2;
+    var z = Math.min((stage.clientWidth - m) / w1, (stage.clientHeight - m) / h1);
+    return Math.max(0.3, Math.min(1, Math.round(z * 100) / 100));
+  }
   function tMetrics() {
     var ids = Object.keys(touches), a = touches[ids[0]], b = touches[ids[1]];
     return { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
@@ -794,7 +805,7 @@
   }
   function movePinch() {
     var m = tMetrics();
-    var z = Math.min(MAXZOOM, Math.max(0.5, pinch.z0 * m.d / pinch.d0));
+    var z = Math.min(MAXZOOM, Math.max(minZoom(), pinch.z0 * m.d / pinch.d0));
     pinch.s = z / pinch.z0; pinch.cx = m.cx; pinch.cy = m.cy;
     flashPager(Math.round(z * 100) + '%');
     flow.style.transform = 'translate(' + (m.cx - pinch.cx0) + 'px,' + (m.cy - pinch.cy0) + 'px) scale(' + pinch.s + ')';
@@ -962,13 +973,27 @@
     else { c = Math.max(-1, 1 - 1.8 * p / W); T.t = Math.acos(c) / Math.PI; }
     drawTurn();
   }
-  function settleTurn(go) {
+  /* 指を離したあとの続き。vt: 離したときのめくれる速さ（1ミリ秒あたりの t）
+     - 指で勢いよく払った: その速さのまま続けて、だんだんゆっくり止まる（速く払えば速くめくれる）
+     - ボタン・引っぱり・ゆっくり離した: 紙がめくれていく様子が見える速さで */
+  function settleTurn(go, vt) {
     var t = T; if (!t || t.anim) return;
     t.anim = true;
-    var from = t.t, to = go ? 1 : t.rest, t0 = performance.now(), dur = 90 + 170 * Math.abs(to - from);
+    var from = t.t, to = go ? 1 : t.rest, d = Math.abs(to - from), t0 = performance.now(), dur, ease;
+    var auto = vt === undefined;
+    if (go && vt > 0.0005) {
+      dur = Math.max(170, Math.min(560, 2 * d / vt));          // はじめの速さ = 指の速さ（2乗で減速するときの式）
+      ease = function (k) { return 1 - (1 - k) * (1 - k); };
+    } else if (go && auto) {
+      dur = 200 + 380 * d;                                   // 全部めくって 0.58秒くらい
+      ease = function (k) { return k < 0.5 ? 2 * k * k : 1 - 2 * (1 - k) * (1 - k); }; // ゆっくり始まって、ゆっくり止まる
+    } else {
+      dur = 140 + 360 * d;
+      ease = function (k) { return 1 - (1 - k) * (1 - k); };
+    }
     var y0 = stage.scrollTop, y1 = go && !S.spread ? 0 : y0; // 縦画面では、次のページの上の端から
     requestAnimationFrame(function step(now) {
-      var k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+      var k = Math.min(1, (now - t0) / dur), e = ease(k);
       t.t = from + (to - from) * e; drawTurn();
       if (y1 !== y0) stage.scrollTop = y0 + (y1 - y0) * e;
       if (k < 1) { requestAnimationFrame(step); return; }
@@ -1040,16 +1065,24 @@
   }
   function turnMove(e) {
     var g = pan.turn, now = performance.now();
-    g.hist.push([now, e.clientX]); while (g.hist.length > 6) g.hist.shift();
     if (T && !T.anim) turnFollow(e.clientX - g.x0);
+    g.hist.push([now, e.clientX, T ? T.t : 0]); while (g.hist.length > 8) g.hist.shift();
   }
   // 指を離したとき: 半分以上めくったか、めくる向きにさっと払っていれば移る
   function turnUp(g, cancel) {
     if (!T || T.anim) return;
     if (cancel) { settleTurn(false); return; }
-    var h = g.hist, v = 0;
-    if (h.length > 1) { var a = h[0], b = h[h.length - 1]; v = (b[1] - a[1]) / Math.max(1, b[0] - a[0]) * -T.dir; } // めくる向きの速さ（px/ms）
-    settleTurn(v > 0.25 ? T.t > T.rest + 0.01 : v < -0.3 ? false : T.t > T.go);
+    // 離す直前（0.1秒）の動きから、指の速さ（px/ms）と、めくれる速さ（t/ms）を出す
+    var h = g.hist, now = performance.now(), v = 0, vt = 0;
+    var r = h.filter(function (x) { return now - x[0] < 100; });
+    if (r.length > 1) {
+      var a = r[0], b = r[r.length - 1], dt = Math.max(8, b[0] - a[0]);
+      v = (b[1] - a[1]) / dt * -T.dir; vt = (b[2] - a[2]) / dt;
+    }
+    var go = v > 0.25 ? T.t > T.rest + 0.01 : v < -0.3 ? false : T.t > T.go;
+    // 払った速さが紙の動きより速いとき（指が紙より先に行った）は、指の速さで続ける
+    if (go && v > 0.25) vt = Math.max(vt, v / (T.W * (T.mode === 'spread' ? 1.1 : 1.6)));
+    settleTurn(go, vt);
   }
   function settle() { setTimeout(function () { flow.style.transition = ''; }, 460); }
   function endPull(p, cancel) {
