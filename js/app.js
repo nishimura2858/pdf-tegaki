@@ -81,13 +81,13 @@
   function flashPager(text) {
     var el = $('pager');
     if (!S.hasFile) return;
-    setText($('pageLabel'), text || (S.page + ' / ' + S.total));
+    setText($('pageLabel'), text || pageText());
     el.classList.add('show');
     clearTimeout(pagerTimer);
     pagerTimer = setTimeout(function () {
       pagerTimer = null;
       el.classList.remove('show');
-      setText($('pageLabel'), S.page + ' / ' + S.total);
+      setText($('pageLabel'), pageText());
     }, 1400);
   }
   function r4(n) { return Math.round(n * 10000) / 10000; }
@@ -250,63 +250,174 @@
     return { page: null, w: e.w || A4.w, h: e.h || A4.h };
   }
 
-  /* ---------- 前後のページをのぞかせる ----------
-     ページの上に前のページの下の端、下に次のページの上の端を見せておく。
-     引っぱると、そのページがそのまま滑りこんでくる */
-  var flow = $('flow'), peekEl = { prev: $('peekPrev'), next: $('peekNext') };
-  var peeks = { prev: null, next: null }, peekTok = { prev: 0, next: 0 };
-  function peekH() { return Math.round(Math.min(110, Math.max(56, stage.clientHeight * 0.1))); }
-  function peekKey(n) {
-    var e = entry(n);
-    return [S.key, S.total, n, e.src, e.bg || '', Math.round(S.cssW), (S.strokes[n] || []).length].join('|');
+  /* ---------- 見開き（横画面）と、ページの絵の控え ----------
+     横画面では2ページを並べる（1-2, 3-4, …）。書ける紙（wrap）は1枚だけなので、
+     もう片方は絵（still）で出しておき、ペンが触れたら見た目を変えずに一瞬で入れかえる */
+  var flow = $('flow'), still = $('still'), spine = $('spine'), turnEl = $('turn');
+  S.spread = false;
+  function isSpread() { return S.hasFile && stage.clientWidth > stage.clientHeight * 1.1; }
+  function leftOf(n) { return n % 2 ? n : n - 1; }
+  function partner(n) { var m = n % 2 ? n + 1 : n - 1; return m >= 1 && m <= S.total ? m : 0; }
+  // 前・次へ移る先（見開きなら2ページずつ。移った先は左のページ）
+  function stepPage(d) { return S.spread ? leftOf(S.page) + 2 * d : S.page + d; }
+  function canStep(d) { var n = stepPage(d); return S.hasFile && n >= 1 && n <= S.total; }
+  function pageText() {
+    var m = S.spread ? partner(S.page) : 0;
+    return (m ? Math.min(S.page, m) + '-' + Math.max(S.page, m) : S.page) + ' / ' + S.total;
   }
-  function setPeek(side, p) {
-    var el = peekEl[side];
-    peeks[side] = p; el.textContent = '';
-    if (!p) { el.classList.remove('on'); return; }
-    var sh = document.createElement('div'); sh.className = 'sheet'; sh.style.height = p.h + 'px';
-    if (p.base) sh.appendChild(p.base);
-    if (p.ink) sh.appendChild(p.ink);
-    el.appendChild(sh); el.classList.add('on');
+
+  // ページの大きさ（PDFの単位）。元のPDFのページ番号ごとに控える
+  var sizes = {};
+  function sizeKey(n) { var e = entry(n); return e.src > 0 ? 's' + e.src : 'b' + (e.w || A4.w) + 'x' + (e.h || A4.h); }
+  async function sizeOf(n) {
+    var k = sizeKey(n);
+    if (!sizes[k]) { var i = await pageInfo(n); sizes[k] = { w: i.w, h: i.h }; }
+    return sizes[k];
   }
-  async function renderPeek(side, n) {
-    var tok = ++peekTok[side], key = peekKey(n);
-    var info = await pageInfo(n);
-    if (tok !== peekTok[side]) return;
-    var w = S.cssW, h = w * info.h / info.w;
-    var dpr = Math.max(0.5, Math.min(Math.min(window.devicePixelRatio || 1, 2), Math.sqrt(1.6e6 / (w * h))));
-    var W = Math.floor(w * dpr), H = Math.floor(h * dpr);
-    var base = document.createElement('canvas'); base.width = W; base.height = H;
-    var bctx = base.getContext('2d');
-    drawPaper(bctx, W, H, info.page ? null : entry(n));
-    if (info.page) {
-      try { await info.page.render({ canvasContext: bctx, viewport: info.page.getViewport({ scale: W / info.w }) }).promise; }
-      catch (e) { return; }
-    }
-    if (tok !== peekTok[side]) return;
-    var ik = document.createElement('canvas'); ik.width = W; ik.height = H;
-    drawList(ik.getContext('2d'), S.strokes[n] || [], W, H);
-    setPeek(side, { key: key, n: n, h: h, base: base, ink: ik });
+  // 今の並べ方での、ページの表示の大きさ（見開きは高さをそろえる）
+  function cssOf(sz) {
+    return S.spread ? { w: S.cssH * sz.w / sz.h, h: S.cssH } : { w: S.cssW, h: S.cssW * sz.h / sz.w };
   }
-  function updatePeeks() {
-    var want = { prev: S.page > 1 ? S.page - 1 : 0, next: S.page < S.total ? S.page + 1 : 0 };
-    ['prev', 'next'].forEach(function (side) {
-      var n = want[side], p = peeks[side];
-      if (!n) { peekTok[side]++; setPeek(side, null); return; }
-      if (p && p.key === peekKey(n)) return;
-      setPeek(side, { key: '', n: n, h: S.cssH }); // 描けるまでは白い紙
-      renderPeek(side, n);
+  function capDpr(w, h) { return Math.max(0.5, Math.min(Math.min(window.devicePixelRatio || 1, 2), Math.sqrt(1.6e6 / (w * h)))); }
+
+  // ページの紙とPDFだけの絵（手書きは重ねるときに描く）。めくるとき・見開きの片方に使う
+  var baseCache = {}, baseList = [], BASE_KEEP = 8;
+  function baseKey(n, css) { var e = entry(n); return [S.key, sizeKey(n), e.bg || '', Math.round(css.w)].join('|'); }
+  function getBase(n) {
+    return sizeOf(n).then(function (sz) {
+      var css = cssOf(sz), key = baseKey(n, css), hit = baseCache[key];
+      if (hit) return hit.p;
+      var slot = { p: null, c: null };
+      slot.p = (async function () {
+        var info = await pageInfo(n), d = capDpr(css.w, css.h);
+        var W = Math.max(1, Math.floor(css.w * d)), H = Math.max(1, Math.floor(css.h * d));
+        var c = document.createElement('canvas'); c.width = W; c.height = H;
+        var x = c.getContext('2d');
+        drawPaper(x, W, H, info.page ? null : entry(n));
+        if (info.page) await info.page.render({ canvasContext: x, viewport: info.page.getViewport({ scale: W / info.w }) }).promise;
+        slot.c = c;
+        return c;
+      })();
+      baseCache[key] = slot; baseList.push(key);
+      while (baseList.length > BASE_KEEP) delete baseCache[baseList.shift()];
+      slot.p.catch(function () { if (baseCache[key] === slot) delete baseCache[key]; });
+      return slot.p;
     });
   }
-  // 今のページを写しとる（移ったあと、反対側ののぞき窓に使う）
+  function baseNow(n) { // もう描けていれば返す
+    var sz = sizes[sizeKey(n)]; if (!sz) return null;
+    var hit = baseCache[baseKey(n, cssOf(sz))]; return hit ? hit.c : null;
+  }
+  function blankCanvas(w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+  function copyOf(src) { var c = blankCanvas(src.width, src.height); c.getContext('2d').drawImage(src, 0, 0); return c; }
+  function inkOf(n, w, h) { var c = blankCanvas(w, h); drawList(c.getContext('2d'), S.strokes[n] || [], w, h); return c; }
+  // 紙＋手書きを1枚に
+  function compose(n, base) { var c = copyOf(base); drawList(c.getContext('2d'), S.strokes[n] || [], c.width, c.height); return c; }
+  // 今の書ける紙を写しとる
   function snapshotCurrent() {
-    var dpr = Math.max(0.5, Math.min(Math.min(window.devicePixelRatio || 1, 2), Math.sqrt(1.6e6 / (S.cssW * S.cssH))));
-    var W = Math.floor(S.cssW * dpr), H = Math.floor(S.cssH * dpr);
-    var base = document.createElement('canvas'); base.width = W; base.height = H;
-    base.getContext('2d').drawImage(pdfC, 0, 0, W, H);
-    var ik = document.createElement('canvas'); ik.width = W; ik.height = H;
-    ik.getContext('2d').drawImage(ink, 0, 0, W, H);
-    return { key: peekKey(S.page), n: S.page, h: S.cssH, base: base, ink: ik };
+    var d = capDpr(S.cssW, S.cssH), W = Math.floor(S.cssW * d), H = Math.floor(S.cssH * d);
+    var b = blankCanvas(W, H); b.getContext('2d').drawImage(pdfC, 0, 0, W, H);
+    var i = blankCanvas(W, H); i.getContext('2d').drawImage(ink, 0, 0, W, H);
+    return { n: S.page, base: b, ink: i, w: S.cssW, h: S.cssH, key: baseKey(S.page, { w: S.cssW }) };
+  }
+  // めくる紙の面に貼る絵（なければ null）
+  function faceOf(n) {
+    if (!n) return null;
+    if (n === S.page) { var s = snapshotCurrent(); s.base.getContext('2d').drawImage(s.ink, 0, 0); return s.base; }
+    if (st && st.n === n && st.base) { var c = copyOf(st.base); if (st.ink) c.getContext('2d').drawImage(st.ink, 0, 0); return c; }
+    var b = baseNow(n); return b ? compose(n, b) : null;
+  }
+
+  // 見開きのもう片方（絵）
+  var st = null, stTok = 0;
+  function setStill(o) {
+    st = o; still.textContent = '';
+    if (!o) { still.hidden = true; return; }
+    still.hidden = false; still.dataset.n = o.n;
+    still.style.width = o.w + 'px'; still.style.height = o.h + 'px';
+    if (o.base) still.appendChild(o.base);
+    if (o.ink) still.appendChild(o.ink);
+  }
+  function stillFrom(n, base) {
+    var css = cssOf(sizes[sizeKey(n)]), b = copyOf(base);
+    return { n: n, base: b, ink: inkOf(n, b.width, b.height), w: css.w, h: css.h, key: baseKey(n, css) };
+  }
+  function layoutSpread() {
+    flow.classList.toggle('spread', S.spread);
+    flow.classList.toggle('act-r', S.spread && S.page % 2 === 0);
+    var w = S.cssW, lw = S.cssW;
+    if (S.spread) {
+      if (st) { w += st.w; if (S.page % 2 === 0) lw = st.w; }
+      else w *= 2; // 最後の1ページだけのときも、左側に置く
+    }
+    flow.style.width = w + 'px';
+    spine.style.left = lw + 'px'; spine.style.height = S.cssH + 'px';
+  }
+  function updateStill() {
+    var m = S.spread ? partner(S.page) : 0;
+    if (!m) { stTok++; setStill(null); layoutSpread(); return; }
+    var sz = sizes[sizeKey(m)], css = sz ? cssOf(sz) : { w: S.cssW, h: S.cssH };
+    if (!(st && st.n === m && sz && st.key === baseKey(m, css))) {
+      var b = sz && baseNow(m), tok = ++stTok;
+      if (b) setStill(stillFrom(m, b));
+      else {
+        setStill({ n: m, w: css.w, h: css.h, key: '' }); // 描けるまでは白い紙
+        getBase(m).then(function (c) {
+          if (tok !== stTok) return;
+          setStill(stillFrom(m, c)); layoutSpread();
+        }, function () {});
+      }
+    }
+    layoutSpread();
+  }
+  on('layout', function () { if (st) st.n = -1; }); // ページの並びが変わったら、絵は描き直す
+
+  // 書ける紙の大きさ・置き場所を決めて、手書きを描く（ここまでは待たずに一度に）
+  function layoutPage(bw, bh, msz) {
+    S.pageSize = { w: bw, h: bh };
+    lastStageW = stage.clientWidth;
+    var cssW, cssH;
+    if (S.spread) {
+      var a = bw / bh + (msz ? msz.w / msz.h : bw / bh);
+      cssH = Math.max(160, Math.min(stage.clientHeight - 18, (stage.clientWidth - 24) / a) * S.zoom);
+      cssW = cssH * bw / bh;
+    } else {
+      cssW = Math.max(240, (stage.clientWidth - 24) * S.zoom);
+      cssH = cssW * bh / bw;
+    }
+    var area = cssW * cssH, dw = Math.min(window.devicePixelRatio || 1, 2);
+    var dprPdf = Math.max(0.7, Math.min(dw, Math.sqrt(9e6 / area)));
+    var dprInk = Math.max(0.7, Math.min(dw, Math.sqrt(6e6 / area)));
+    S.cssW = cssW; S.cssH = cssH;
+    wrap.style.width = cssW + 'px'; wrap.style.height = cssH + 'px';
+    if (S.swap) { var sw = S.swap; S.swap = null; sw(); } // めくり終わったあとの置きかえ（同じ瞬間に）
+    updateStill();
+    // 同じページの描き直し（拡大・画面の回転）では、描き終わるまで今の絵を引き伸ばして出しておく（白く点滅しないように）
+    var shown = S.key + ':' + S.page + ':' + entry().src, changed = shown !== lastShown, old = null;
+    var pw = Math.floor(cssW * dprPdf), ph = Math.floor(cssH * dprPdf);
+    if (pdfC.width !== pw || pdfC.height !== ph) {
+      if (!changed && pdfC.width > 0) { old = copyOf(pdfC); }
+      pdfC.width = pw; pdfC.height = ph;
+      if (old) { pctx.drawImage(old, 0, 0, pw, ph); old.width = old.height = 0; }
+    }
+    if (changed) {
+      pctx.clearRect(0, 0, pw, ph);
+      if (S.placeholder) pctx.drawImage(S.placeholder, 0, 0, pw, ph); // めくってきた絵を、描き終わるまでの代わりに
+      lctx.clearRect(0, 0, lc.width, lc.height);
+    }
+    S.placeholder = null; lastShown = shown;
+    var iw = Math.floor(cssW * dprInk), ih = Math.floor(cssH * dprInk);
+    [ink, lc, tmp].forEach(function (c) { if (c.width !== iw || c.height !== ih) { c.width = iw; c.height = ih; } });
+    [pdfC, ink, lc].forEach(function (c) { c.style.width = cssW + 'px'; c.style.height = cssH + 'px'; });
+    if (S.anchor) {
+      var an = S.anchor; S.anchor = null;
+      var rc = flow.getBoundingClientRect();
+      stage.scrollLeft += rc.left + an.fx * rc.width - an.cx;
+      stage.scrollTop += rc.top + an.fy * rc.height - an.cy;
+    }
+    drawInk();
+    emit('resize');
+    return { cssW: cssW, dprPdf: dprPdf };
   }
 
   async function renderPage() {
@@ -314,47 +425,17 @@
     var t0 = performance.now();
     var token = ++renderToken;
     if (renderTask) { try { renderTask.cancel(); } catch (e) {} renderTask = null; }
+    S.spread = isSpread();
     var info = await pageInfo(S.page);
+    var m = S.spread ? partner(S.page) : 0, msz = m ? await sizeOf(m) : null;
     if (token !== renderToken) return;
     var page = info.page, bw = info.w, bh = info.h;
-    S.pageSize = { w: bw, h: bh };
-    lastStageW = stage.clientWidth;
-    var cssW = Math.max(240, (stage.clientWidth - 24) * S.zoom);
-    var cssH = cssW * bh / bw, area = cssW * cssH;
-    var dw = Math.min(window.devicePixelRatio || 1, 2);
-    var dprPdf = Math.max(0.7, Math.min(dw, Math.sqrt(9e6 / area)));
-    var dprInk = Math.max(0.7, Math.min(dw, Math.sqrt(6e6 / area)));
-    S.cssW = cssW; S.cssH = cssH;
-    wrap.style.width = cssW + 'px'; wrap.style.height = cssH + 'px';
-    flow.style.width = cssW + 'px'; flow.style.setProperty('--ph', peekH() + 'px');
-    if (S.swap) { var sw = S.swap; S.swap = null; sw(); } // にゅっと移ったあとの置きかえ（同じ瞬間に）
-    updatePeeks();
-    if (S.landBottom) { S.landBottom = false; stage.scrollTop = stage.scrollHeight; } // 前のページへ戻るときは、下の端から
-    // 同じページの描き直し（拡大・画面の回転）では、描き終わるまで今の絵を引き伸ばして出しておく（白く点滅しないように）
-    var shown = S.key + ':' + S.page + ':' + entry().src, old = null;
-    if (page && shown === lastShown && pdfC.width > 0) {
-      old = document.createElement('canvas'); old.width = pdfC.width; old.height = pdfC.height;
-      old.getContext('2d').drawImage(pdfC, 0, 0);
-    }
-    lastShown = shown;
-    pdfC.width = Math.floor(cssW * dprPdf); pdfC.height = Math.floor(cssH * dprPdf);
-    if (old) { pctx.drawImage(old, 0, 0, pdfC.width, pdfC.height); old.width = old.height = 0; }
-    else if (S.placeholder) pctx.drawImage(S.placeholder, 0, 0, pdfC.width, pdfC.height); // のぞいていた絵を、描き終わるまでの代わりに
-    S.placeholder = null;
-    [ink, lc, tmp].forEach(function (c) { c.width = Math.floor(cssW * dprInk); c.height = Math.floor(cssH * dprInk); });
-    [pdfC, ink, lc].forEach(function (c) { c.style.width = cssW + 'px'; c.style.height = cssH + 'px'; });
-    if (S.anchor) {
-      var a = S.anchor; S.anchor = null;
-      var rc = wrap.getBoundingClientRect();
-      stage.scrollLeft += rc.left + a.fx * rc.width - a.cx;
-      stage.scrollTop += rc.top + a.fy * rc.height - a.cy;
-    }
-    drawInk();
-    emit('resize');
+    sizes[sizeKey(S.page)] = { w: bw, h: bh };
+    var L = layoutPage(bw, bh, msz);
     if (page) {
       // 別の紙に描いてから、できあがったら一度に写す
-      var off = document.createElement('canvas'); off.width = pdfC.width; off.height = pdfC.height;
-      var task = page.render({ canvasContext: off.getContext('2d'), viewport: page.getViewport({ scale: cssW / bw * dprPdf }) });
+      var off = blankCanvas(pdfC.width, pdfC.height);
+      var task = page.render({ canvasContext: off.getContext('2d'), viewport: page.getViewport({ scale: L.cssW / bw * L.dprPdf }) });
       renderTask = task;
       try {
         await task.promise;
@@ -369,6 +450,31 @@
     }
     dbg('ページ描き直し ' + Math.round(performance.now() - t0) + 'ms（倍率' + Math.round(S.zoom * 100) + '%）');
     updateUI();
+    prefetch();
+  }
+  // めくる先のページを、先に描いておく
+  var preTimer = 0;
+  function prefetch() {
+    clearTimeout(preTimer);
+    preTimer = setTimeout(function () {
+      var list = S.spread ? [stepPage(1), stepPage(1) + 1, stepPage(-1) + 1, stepPage(-1)] : [S.page + 1, S.page - 1];
+      list.filter(function (n) { return n >= 1 && n <= S.total; })
+        .reduce(function (p, n) { return p.then(function () { return getBase(n); }).catch(function () {}); }, Promise.resolve());
+    }, 150);
+  }
+  /* 見開きのもう片方を、書ける紙にする（見た目は変えずに、すぐに） */
+  function activate(n) {
+    if (!S.spread || !st || st.n !== n || !st.base || turning) return false;
+    var sz = sizes[sizeKey(n)]; if (!sz) return false;
+    var old = snapshotCurrent(), ph = st.base;
+    stTok++;
+    S.page = n; S.live = null;
+    S.placeholder = ph;
+    setStill(old);
+    layoutPage(sz.w, sz.h, sizes[sizeKey(old.n)]);
+    renderPage(); // きれいな絵に描き直す（大きさは変わらないので、手書きは消えない）
+    flashPager(); emit('page'); updateUI();
+    return true;
   }
 
   /* ページ一覧用の小さな絵（PDF＋手書き）を canvas に描く */
@@ -385,9 +491,9 @@
   }
 
   function updateUI() {
-    if (!pagerTimer) setText($('pageLabel'), S.hasFile ? (S.page + ' / ' + S.total) : '- / -');
-    setDis($('prev'), !S.hasFile || S.page <= 1);
-    setDis($('next'), !S.hasFile || S.page >= S.total);
+    if (!pagerTimer) setText($('pageLabel'), S.hasFile ? pageText() : '- / -');
+    setDis($('prev'), !canStep(-1));
+    setDis($('next'), !canStep(1));
     setDis($('undo'), !S.undo.length);
     setDis($('redo'), !S.redo.length);
     emit('ui');
@@ -533,6 +639,7 @@
     flushSave(); // 前のファイルの未保存分を、切り替える前に保存する
     S.pdf = doc; S.hasFile = true; S.name = name; S.key = key;
     S.page = 1; S.zoom = 1; S.live = null;
+    sizes = {}; baseCache = {}; baseList = []; stTok++; setStill(null); // 前のファイルの絵は使わない
     loadSaved();
     $('hint').style.display = 'none'; wrap.style.display = 'block';
     $('pager').hidden = false;
@@ -548,6 +655,8 @@
   function goPage(n, keepScroll) {
     n = Math.min(S.total, Math.max(1, n));
     if (n === S.page && S.hasFile) { drawInk(); updateUI(); return Promise.resolve(); }
+    if (turning) return Promise.resolve();
+    if (S.spread && st && st.n === n && activate(n)) return Promise.resolve(); // 同じ見開きのもう片方
     S.page = n; S.live = null;
     if (!keepScroll) stage.scrollTo(0, 0);
     var done = renderPage();
@@ -555,8 +664,8 @@
     emit('page');
     return done;
   }
-  $('prev').onclick = function () { goPage(S.page - 1); };
-  $('next').onclick = function () { goPage(S.page + 1); };
+  $('prev').onclick = function () { autoTurn(-1); };
+  $('next').onclick = function () { autoTurn(1); };
   function setZoom(z) {
     S.zoom = Math.min(MAXZOOM, Math.max(0.5, Math.round(z * 100) / 100));
     flashPager(Math.round(S.zoom * 100) + '%');
@@ -660,19 +769,19 @@
     return { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
   }
   function startPinch() {
-    var m = tMetrics(), rc = wrap.getBoundingClientRect();
+    var m = tMetrics(), rc = flow.getBoundingClientRect();
     pinch = { d0: m.d, cx0: m.cx, cy0: m.cy, cx: m.cx, cy: m.cy, z0: S.zoom, s: 1,
       fx: (m.cx - rc.left) / rc.width, fy: (m.cy - rc.top) / rc.height };
-    wrap.style.transformOrigin = (pinch.fx * 100) + '% ' + (pinch.fy * 100) + '%';
+    flow.style.transformOrigin = (pinch.fx * 100) + '% ' + (pinch.fy * 100) + '%';
   }
   function movePinch() {
     var m = tMetrics();
     var z = Math.min(MAXZOOM, Math.max(0.5, pinch.z0 * m.d / pinch.d0));
     pinch.s = z / pinch.z0; pinch.cx = m.cx; pinch.cy = m.cy;
     flashPager(Math.round(z * 100) + '%');
-    wrap.style.transform = 'translate(' + (m.cx - pinch.cx0) + 'px,' + (m.cy - pinch.cy0) + 'px) scale(' + pinch.s + ')';
+    flow.style.transform = 'translate(' + (m.cx - pinch.cx0) + 'px,' + (m.cy - pinch.cy0) + 'px) scale(' + pinch.s + ')';
   }
-  function clearPinchStyle() { wrap.style.transform = ''; wrap.style.transformOrigin = ''; }
+  function clearPinchStyle() { flow.style.transform = ''; flow.style.transformOrigin = ''; }
   function cancelPinch() { pinch = null; clearPinchStyle(); }
   function endPinch() {
     var p = pinch; cancelPinch();
@@ -767,33 +876,111 @@
     lc.style.webkitMaskImage = ''; lc.style.maskImage = '';
   }
 
-  /* ---------- 上下に引っぱってページを移る（GoodNotes風） ----------
+  /* ---------- ページをめくる ----------
+     指で左右になぞると、紙がめくれて、下からめくる先のページが見えてくる。
+     - 縦画面: 左の端でとじたノートのように、今のページが左へめくれる（戻るときは前のページが左から戻ってくる）
+     - 横画面（見開き）: 真ん中の背を軸に、右のページが左へ（戻るときは左のページが右へ）めくれる
+     半分以上めくるか、さっと払うと、そのページへ移る。途中で離すと元に戻る */
+  var T = null, turning = false;
+  function div(cls, parent) { var d = document.createElement('div'); d.className = cls; parent.appendChild(d); return d; }
+  function boxOf(node) { return { x: node.offsetLeft, y: node.offsetTop, w: node.offsetWidth, h: node.offsetHeight }; }
+  function place(node, b) { node.style.left = b.x + 'px'; node.style.top = b.y + 'px'; node.style.width = b.w + 'px'; node.style.height = b.h + 'px'; }
+  function fillFace(box, n) {
+    var c = faceOf(n);
+    if (c) { box.appendChild(c); return; }
+    getBase(n).then(function (b) { if (box.isConnected && !box.querySelector('canvas')) box.appendChild(compose(n, b)); }, function () {});
+  }
+  function startTurn(dir) {
+    if (T || turning || !canStep(dir)) return null;
+    var t = { dir: dir, dest: stepPage(dir), t: 0 };
+    var wb = boxOf(wrap), sb = st && !still.hidden ? boxOf(still) : null, box, front, back = 0, under = null, origin;
+    if (!S.spread) {
+      box = wb; origin = 'left';
+      if (dir > 0) { front = S.page; under = { b: wb, n: t.dest }; t.a0 = 0; t.a1 = -180; }
+      else { front = t.dest; t.a0 = -180; t.a1 = 0; }
+    } else {
+      var actR = S.page % 2 === 0, Lb = actR ? sb : wb, Rb = actR ? wb : sb;
+      if (!Lb || (dir > 0 && !Rb)) return null;
+      if (dir > 0) { box = Rb; origin = 'left'; front = leftOf(S.page) + 1; back = t.dest; under = { b: Rb, n: t.dest + 1 <= S.total ? t.dest + 1 : 0 }; t.a0 = 0; t.a1 = -180; }
+      else { box = Lb; origin = 'right'; front = leftOf(S.page); back = t.dest + 1; under = { b: Lb, n: t.dest }; t.a0 = 0; t.a1 = 180; }
+    }
+    turnEl.textContent = '';
+    if (under) {
+      t.u = div('tu' + (under.n ? '' : ' none'), turnEl); place(t.u, under.b);
+      t.u.style.setProperty('--gd', origin === 'left' ? '90deg' : '270deg');
+      if (under.n) fillFace(t.u, under.n);
+    }
+    t.lf = div('lf', turnEl); place(t.lf, box);
+    t.lf.style.transformOrigin = origin === 'left' ? '0 50%' : '100% 50%';
+    t.fF = div('fc', t.lf); t.fB = div('fc bk' + (back ? '' : ' blank'), t.lf);
+    fillFace(t.fF, front); if (back) fillFace(t.fB, back);
+    var sx = origin === 'left' ? box.x : box.x + box.w;
+    turnEl.style.perspectiveOrigin = sx + 'px ' + (stage.scrollTop + stage.clientHeight / 2 - flow.offsetTop) + 'px';
+    turnEl.classList.add('on');
+    // めくれ具合の決め方: 縦画面は、見えている半分（右側）だけを使う。紙の端が指についてくる
+    t.W = Math.min(box.w, stage.clientWidth);
+    t.mode = S.spread ? 'spread' : dir > 0 ? 'fwd' : 'back';
+    t.rest = t.mode === 'back' ? 0.5 : 0;                       // 戻すときの位置（縦画面で戻るときは、背に立った状態＝見えない）
+    t.go = t.mode === 'fwd' ? 0.33 : t.mode === 'back' ? 0.67 : 0.42; // ここを越えて離したら、めくる
+    t.t = t.rest;
+    T = t; turning = true;
+    drawTurn();
+    return t;
+  }
+  function drawTurn() {
+    var t = T, a = t.a0 + (t.a1 - t.a0) * t.t, back = Math.abs(a) > 90;
+    t.lf.style.transform = 'rotateY(' + a.toFixed(2) + 'deg)';
+    t.fF.style.visibility = back ? 'hidden' : '';
+    t.fB.style.visibility = back ? '' : 'hidden';
+    t.lf.style.setProperty('--sh', (0.1 * Math.sin(Math.abs(a) * Math.PI / 180)).toFixed(3)); // 立っているほど少し暗く
+    if (t.u) t.u.style.setProperty('--sh', (0.32 * (1 - t.t)).toFixed(3));              // めくっている紙の影
+  }
+  // 指の動きから、めくれ具合を決める（紙の端が指についてくるように）
+  function turnFollow(dx) {
+    var p = Math.max(0, -dx * T.dir), W = T.W, c;
+    if (T.mode === 'fwd') { c = Math.max(0, 1 - p / W); T.t = Math.acos(c) / Math.PI; }
+    else if (T.mode === 'back') { c = Math.min(1, p / W); T.t = 1 - Math.acos(c) / Math.PI; }
+    else { c = Math.max(-1, 1 - 1.25 * p / W); T.t = Math.acos(c) / Math.PI; }
+    drawTurn();
+  }
+  function settleTurn(go) {
+    var t = T; if (!t || t.anim) return;
+    t.anim = true;
+    var from = t.t, to = go ? 1 : t.rest, t0 = performance.now(), dur = 140 + 300 * Math.abs(to - from);
+    var y0 = stage.scrollTop, y1 = go && !S.spread ? 0 : y0; // 縦画面では、次のページの上の端から
+    requestAnimationFrame(function step(now) {
+      var k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+      t.t = from + (to - from) * e; drawTurn();
+      if (y1 !== y0) stage.scrollTop = y0 + (y1 - y0) * e;
+      if (k < 1) { requestAnimationFrame(step); return; }
+      if (!go) { closeTurn(); return; }
+      // めくった先へ。めくってきた絵を出したまま入れかえるので、見た目はつながる
+      S.placeholder = baseNow(t.dest);
+      S.swap = closeTurn;
+      turning = false; // goPage を通すため（置きかえが済むまでは T が残っている）
+      Promise.resolve(goPage(t.dest, true)).catch(function () {}).then(function () { if (T === t) closeTurn(); });
+    });
+  }
+  function closeTurn() { T = null; turning = false; turnEl.classList.remove('on'); turnEl.textContent = ''; }
+  // ボタンや引っぱりから: 自動でめくる
+  function autoTurn(dir) { if (startTurn(dir)) settleTurn(true); }
+
+  /* ---------- 上下に引っぱってページを移る ----------
      ページの下の端で、さらに指を上へ引っぱる → 次のページ（最後のページなら、同じページを追加）
-     ページの上の端で、さらに指を下へ引っぱる → 前のページ */
-  var pullEl = $('pull'), PULL_MAX = 150, PULL_READY = 64, turning = false;
-  function pullKind(dir) { return dir > 0 ? (S.page < S.total ? 'next' : 'add') : (S.page > 1 ? 'prev' : null); }
+     ページの上の端で、さらに指を下へ引っぱる → 前のページ（どちらも、めくって移る） */
+  var pullEl = $('pull'), PULL_MAX = 150, PULL_READY = 64;
+  function pullKind(dir) { return dir > 0 ? (canStep(1) ? 'next' : 'add') : (canStep(-1) ? 'prev' : null); }
   var PULL_TEXT = {
     next: ['引っぱると次のページ', '離すと次のページへ'],
     add: ['引っぱるとページを追加', '離すとページを追加'],
     prev: ['引っぱると前のページ', '離すと前のページへ']
   };
-  // のぞいている前後のページがあれば、それが指についてくる
-  function peekSide(kind) { return (kind === 'next' || kind === 'prev') && peeks[kind] ? kind : null; }
-  function snapDist() { return Math.round(Math.min(150, Math.max(80, stage.clientHeight * 0.14))); }
-  var flowY = 0;
-  function setFlow(y) { flowY = y; flow.style.transform = y ? 'translateY(' + y + 'px)' : ''; }
+  function setFlow(y) { flow.style.transform = y ? 'translateY(' + y + 'px)' : ''; }
   // pull: 引っぱった量（正: 上へ、負: 下へ）。紙をゴムのように少し動かし、案内を出す
   function showPull(p) {
-    var kind = p ? pullKind(p) : null;
-    if (peekSide(kind)) { // 前後のページが滑りこんでくる。ある程度来たら、にゅっと移る
-      flow.classList.add('pulling'); pullEl.className = '';
-      var d = p * 0.85;
-      setFlow(-d);
-      return Math.abs(d) >= snapDist() ? kind : null;
-    }
     var off = (p > 0 ? 1 : -1) * Math.min(PULL_MAX, Math.abs(p) * 0.5);
     setFlow(p ? -off : 0);
-    if (!p) flow.classList.remove('pulling');
+    var kind = p ? pullKind(p) : null;
     if (!kind) { pullEl.className = ''; return null; }
     var ready = Math.abs(off) >= PULL_READY;
     pullEl.className = 'show ' + kind + (p < 0 ? ' top' : '') + (ready ? ' ready' : '');
@@ -802,7 +989,20 @@
     return ready ? kind : null;
   }
   function panMove(e) {
-    if (pan.done) return; // もう移った。指を離すまで何もしない
+    if (pan.turn) { turnMove(e); return; }
+    if (!pan.axis) {
+      // 動き始めの向きで決める: 横 → (端なら) めくる / 縦 → スクロール
+      var ax = e.clientX - pan.x0, ay = e.clientY - pan.y0;
+      if (Math.hypot(ax, ay) < 10) return;
+      pan.axis = Math.abs(ax) > Math.abs(ay) ? 'x' : 'y';
+      if (pan.axis === 'x') {
+        var dir = ax < 0 ? 1 : -1;
+        if ((dir > 0 ? pan.atR : pan.atL) && startTurn(dir)) {
+          pan.turn = { x0: pan.x0, hist: [] };
+          turnMove(e); return;
+        }
+      }
+    }
     var dx = e.clientX - pan.x, dy = e.clientY - pan.y;
     pan.x = e.clientX; pan.y = e.clientY;
     stage.scrollLeft -= dx;
@@ -818,73 +1018,41 @@
       if ((rest > 0.5 && pan.atB) || (rest < -0.5 && pan.atT)) pan.pull += rest;
     }
     if (pan.pull || pan.ready !== undefined) pan.ready = showPull(pan.pull);
-    if (pan.ready && peekSide(pan.ready)) { pan.done = true; snapTo(pan.ready); }
   }
-  function settle() {
-    setTimeout(function () { if (!turning) { flow.style.transition = ''; wrap.style.transition = ''; if (!flowY) flow.classList.remove('pulling'); } }, 460);
+  function turnMove(e) {
+    var g = pan.turn, now = performance.now();
+    g.hist.push([now, e.clientX]); while (g.hist.length > 6) g.hist.shift();
+    if (T && !T.anim) turnFollow(e.clientX - g.x0);
   }
+  // 指を離したとき: 半分以上めくったか、めくる向きにさっと払っていれば移る
+  function turnUp(g, cancel) {
+    if (!T || T.anim) return;
+    if (cancel) { settleTurn(false); return; }
+    var h = g.hist, v = 0;
+    if (h.length > 1) { var a = h[0], b = h[h.length - 1]; v = (b[1] - a[1]) / Math.max(1, b[0] - a[0]) * -T.dir; } // めくる向きの速さ（px/ms）
+    settleTurn(v > 0.35 ? T.t > T.rest + 0.02 : v < -0.35 ? false : T.t > T.go);
+  }
+  function settle() { setTimeout(function () { flow.style.transition = ''; }, 460); }
   function endPull(p, cancel) {
     var kind = cancel ? null : p.ready;
     pullEl.classList.remove('show', 'ready');
-    if (!kind) {
-      flow.style.transition = 'transform .32s cubic-bezier(.2,1.3,.4,1)';
-      setFlow(0);
-      settle();
-      return;
-    }
-    if (peekSide(kind)) snapTo(kind); else turnPage(kind);
+    flow.style.transition = 'transform .32s cubic-bezier(.2,1.3,.4,1)';
+    if (kind === 'add') { addTurn(); return; }
+    setFlow(0); settle();
+    if (kind) autoTurn(kind === 'prev' ? -1 : 1);
   }
-  /* のぞいていたページを、ページの定位置まで にゅっと動かしてから入れかえる（見た目はつながったまま） */
-  function snapTo(kind) {
-    var dir = kind === 'next' ? 1 : -1, n = S.page + dir, p = peeks[kind];
-    var sheet = peekEl[kind].querySelector('.sheet');
-    if (!p || !sheet || n < 1 || n > S.total) { turnPage(kind); return; }
+  // 最後のページで引っぱったとき: ページを足して、にゅっと出す
+  function addTurn() {
+    var h = stage.clientHeight;
     turning = true;
-    var sr = stage.getBoundingClientRect(), r = sheet.getBoundingClientRect();
-    var P = peekH(), G = 14, padT = 4, padB = 14, ch = stage.clientHeight, cur, target;
-    if (dir > 0) { cur = r.top - sr.top; target = padT + P + G; }       // 次のページの上の端を、ページの位置へ
-    else {                                                              // 前のページの下の端を、下の端から見た位置へ
-      cur = r.bottom - sr.top;
-      var top = padT + (n > 1 ? P + G : 0), all = top + p.h + G + P + padB;
-      target = all > ch ? ch - (padB + P + G) : top + p.h;
-    }
-    flow.classList.add('pulling');
-    flow.style.transition = 'transform .3s cubic-bezier(.3,1.22,.5,1)';
-    setFlow(flowY + (target - cur));
-    setTimeout(function () {
-      var snap = snapshotCurrent();
-      S.placeholder = p.base || null;
-      S.swap = function () {
-        flow.style.transition = 'none'; setFlow(0); flow.classList.remove('pulling');
-        // 今まで見ていたページは、反対側ののぞき窓へ
-        if (dir > 0) { peekTok.prev++; setPeek('prev', snap); stage.scrollTo(0, 0); }
-        else { peekTok.next++; setPeek('next', snap); }
-        // 入ってきたページの、その先は描き直す
-        peekTok[kind]++; setPeek(kind, null);
-      };
-      if (dir < 0) S.landBottom = true;
-      var done = goPage(n, true);
-      Promise.resolve(done).catch(function () {}).then(function () {
-        S.swap = null; S.placeholder = null;
-        flow.style.transition = ''; turning = false;
-      });
-    }, 300);
-  }
-  // 紙を送り出して、新しいページをにゅっと出す
-  function turnPage(kind) {
-    var dir = kind === 'prev' ? -1 : 1, h = stage.clientHeight;
-    turning = true; flow.classList.remove('pulling');
     flow.style.transition = 'transform .18s ease-in, opacity .18s ease-in';
-    setFlow(-dir * h * 0.5);
-    flow.style.opacity = '0';
+    setFlow(-h * 0.5); flow.style.opacity = '0';
     setTimeout(function () {
       flow.style.transition = 'none';
-      var done;
-      if (kind === 'add') done = insertPage('same');
-      else if (kind === 'prev') { S.landBottom = true; done = goPage(S.page - 1); }
-      else done = goPage(S.page + 1);
-      flowY = dir * h * 0.45;
-      flow.style.transform = 'translateY(' + flowY + 'px)' + (kind === 'add' ? ' scale(.9)' : '');
+      turning = false;
+      var done = insertPage('same');
+      turning = true;
+      flow.style.transform = 'translateY(' + (h * 0.45) + 'px) scale(.9)';
       Promise.resolve(done).catch(function () {}).then(function () {
         void flow.offsetWidth; // 置いた位置を確定させてから動かす
         flow.style.transition = 'transform .46s cubic-bezier(.2,1.25,.35,1), opacity .2s ease-out';
@@ -894,22 +1062,15 @@
     }, 180);
   }
 
-  /* 指1本を離したとき: 左右に払った → ページをめくる / 2回タップ → 拡大・元に戻す */
+  /* 指1本を離したとき: 2回タップ → 拡大・元に戻す */
   var lastTap = null;
   function fingerUp(p, e) {
     var dx = e.clientX - p.x0, dy = e.clientY - p.y0, dt = performance.now() - p.t0;
-    if (dt < 500 && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-      if (dx < 0 && p.atR && S.page < S.total) goPage(S.page + 1);
-      else if (dx > 0 && p.atL && S.page > 1) goPage(S.page - 1);
-      else if (dx < 0 ? p.atR : p.atL) flashPager(); // 最初・最後のページ
-      lastTap = null;
-      return;
-    }
     if (dt < 300 && Math.hypot(dx, dy) < 12) {
       var now = performance.now();
       if (lastTap && now - lastTap.t < 350 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 40) {
         lastTap = null;
-        var rc = wrap.getBoundingClientRect();
+        var rc = flow.getBoundingClientRect();
         S.anchor = { fx: (e.clientX - rc.left) / rc.width, fy: (e.clientY - rc.top) / rc.height, cx: e.clientX, cy: e.clientY };
         setZoom(Math.abs(S.zoom - 1) < 0.01 ? 2 : 1);
         return;
@@ -918,7 +1079,7 @@
     } else lastTap = null;
   }
 
-  ink.addEventListener('pointerdown', function (e) {
+  function onInkDown(e) {
     if (!S.hasFile) return;
     e.preventDefault();
     // 指はスクロール・ページめくり・拡大縮小に使う（書くのはペンだけ）
@@ -949,13 +1110,17 @@
           // 縦も同じ: 端まで来てから引っぱると、ページを移る
           atT: stage.scrollTop <= 1, atB: stage.scrollTop >= stage.scrollHeight - stage.clientHeight - 1, pull: 0 };
       }
-      else if (n === 2) { if (pan && pan.pull && !pan.done) endPull(pan, true); pan = null; startPinch(); }
+      else if (n === 2) {
+        if (pan && pan.turn) turnUp(pan.turn, true);
+        else if (pan && pan.pull) endPull(pan, true);
+        pan = null; startPinch();
+      }
       return;
     }
     if (turning) return; // ページを移っている最中は書かない
     if (drawing) { dbg('!! ペン#' + e.pointerId + ' 無視（前の線#' + drawing.id + 'が終わっていない）'); return; }
     dbg('ペン#' + e.pointerId + '(' + e.pointerType + ') 書き始め' + (Object.keys(touches).length ? '（指' + Object.keys(touches).length + '本を解除）' : ''));
-    if (pan && pan.pull && !pan.done) endPull(pan, true);
+    if (pan && pan.pull) endPull(pan, true);
     pan = null; touches = {}; if (pinch) cancelPinch();
     ink.setPointerCapture(e.pointerId);
     S.rc = ink.getBoundingClientRect(); // 書き始めに1回だけ取得
@@ -969,7 +1134,19 @@
     drawnIdx = 1;
     if (S.tool !== 'pen') liveLayer(S.tool);
     drawLive(0);
+  }
+  ink.addEventListener('pointerdown', onInkDown);
+  // 見開きのもう片方（絵）: ペンが触れたら、そのページを書ける紙にしてそのまま書き始める。指はふつうに扱う
+  still.addEventListener('pointerdown', function (e) {
+    if (!S.hasFile || !st) return;
+    e.preventDefault();
+    if (e.pointerType !== 'touch') {
+      if (drawing || turning) return;
+      if (!activate(st.n)) return;
+    }
+    onInkDown(e);
   });
+  still.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   ink.addEventListener('pointermove', function (e) {
     if (touches[e.pointerId]) {
       touches[e.pointerId].x = e.clientX; touches[e.pointerId].y = e.clientY;
@@ -1000,7 +1177,7 @@
       delete touches[e.pointerId];
       if (pinch) endPinch();
       if (pan && pan.id === e.pointerId) {
-        if (pan.done) { /* もう移った */ }
+        if (pan.turn) turnUp(pan.turn, e.type !== 'pointerup');
         else if (pan.pull || pan.ready) endPull(pan, e.type !== 'pointerup');
         else if (e.type === 'pointerup') fingerUp(pan, e);
         pan = null;
@@ -1117,6 +1294,7 @@
       var res = parseData(obj); if (!res) return false;
       if (drawing) return false;
       applyData(res);
+      if (st) st.n = -1; // 見開きのもう片方も描き直す
       clearTimeout(saveTimer); saveTimer = null;
       renderPage(); updateUI(); doSave(true); emit('layout'); emit('data');
       return true;

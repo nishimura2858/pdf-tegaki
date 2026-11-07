@@ -291,20 +291,33 @@ header { position: relative; z-index: 10; background: var(--bg); }
   -webkit-overflow-scrolling: touch; position: relative;
   -webkit-touch-callout: none;
 }
-/* ページの上下に、前後のページを少しのぞかせる。flow ごと動かして、ページを移る */
-#flow { margin: 0 auto; padding: 4px 0 14px; }
-.peek { position: relative; height: var(--ph, 80px); display: none; pointer-events: none; }
-.peek.on { display: block; }
-#peekPrev { margin-bottom: 14px; }
-#peekNext { margin-top: 14px; overflow: hidden; }   /* 下側は切っておく（下へスクロールしすぎないように） */
-#flow.pulling #peekNext { overflow: visible; }
-.peek .sheet {
-  position: absolute; left: 0; width: 100%; background: #fff;
+/* flow: 書ける紙（wrap）と、見開きのもう片方（still）、めくる紙（turn）をまとめたもの */
+#flow { position: relative; margin: 0 auto; padding: 4px 0 14px; }
+#flow.spread { display: flex; align-items: flex-start; }
+#flow.spread #wrap { flex: none; }
+#flow.spread.act-r #wrap { order: 2; }
+#flow.spread.act-r #still { order: 1; }
+#still {
+  position: relative; flex: none; background: #fff; touch-action: none; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none;
   box-shadow: 0 1px 2px rgba(52,44,34,.10), 0 8px 24px rgba(52,44,34,.12);
 }
-#peekPrev .sheet { bottom: 0; }
-#peekNext .sheet { top: 0; }
-.peek canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
+#still canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
+#spine {
+  display: none; position: absolute; top: 4px; width: 44px; margin-left: -22px; pointer-events: none; z-index: 3;
+  background: linear-gradient(90deg, rgba(0,0,0,0), rgba(0,0,0,.07) 40%, rgba(0,0,0,.16) 50%, rgba(0,0,0,.07) 60%, rgba(0,0,0,0));
+}
+#flow.spread #spine { display: block; }
+#turn { display: none; position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; z-index: 6; perspective: 2400px; }
+#turn.on { display: block; }
+#turn .tu, #turn .lf { position: absolute; }
+#turn .tu { background: #fff; overflow: hidden; }
+#turn .tu.none { background: var(--stage); }
+#turn .tu::after { content: ""; position: absolute; inset: 0; opacity: var(--sh, 0); background: linear-gradient(var(--gd, 90deg), #000, rgba(0,0,0,0) 45%); }
+#turn .fc { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: #fff; overflow: hidden; box-shadow: 0 0 22px rgba(0,0,0,.22); }
+#turn .fc.bk { transform: rotateY(180deg); }
+#turn .fc.blank { background: #f1efea; }
+#turn .fc::after { content: ""; position: absolute; inset: 0; background: #000; opacity: var(--sh, 0); }
+#turn canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
 #wrap {
   position: relative; margin: 0; background: #fff; display: none;
   box-shadow: 0 1px 2px rgba(52,44,34,.10), 0 8px 24px rgba(52,44,34,.12);
