@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="css/app.css?v=32">
+<link rel="stylesheet" href="css/app.css?v=33">
 </head>
 <body>
 <header>
@@ -192,23 +192,40 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async></script>
-<script src="js/config.js?v=32"></script>
-<script src="js/app.js?v=32"></script>
-<script src="js/shapes.js?v=32"></script>
-<script src="js/toolbar.js?v=32"></script>
-<script src="js/lasso.js?v=32"></script>
-<script src="js/pages.js?v=32"></script>
-<script src="js/google-auth.js?v=32"></script>
-<script src="js/drive.js?v=32"></script>
-<script src="js/drive-sync.js?v=32"></script>
+<script src="js/config.js?v=33"></script>
+<script src="js/app.js?v=33"></script>
+<script src="js/shapes.js?v=33"></script>
+<script src="js/toolbar.js?v=33"></script>
+<script src="js/lasso.js?v=33"></script>
+<script src="js/pages.js?v=33"></script>
+<script src="js/google-auth.js?v=33"></script>
+<script src="js/drive.js?v=33"></script>
+<script src="js/drive-sync.js?v=33"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"></script>
-<script src="js/pdf-open.js?v=32"></script>
-<script src="js/pdf-write.js?v=32"></script>
-<script src="js/share.js?v=32"></script>
-<script src="js/palette.js?v=32"></script>
+<script src="js/pdf-open.js?v=33"></script>
+<script src="js/pdf-write.js?v=33"></script>
+<script src="js/share.js?v=33"></script>
+<script src="js/palette.js?v=33"></script>
 <script>
 // 電波がなくても開けるように、アプリの部品をこの端末に取っておく（sw.js）
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function (e) { console.error(e); });
+// 新しい版が届いたら: PDFを開いていなければすぐ、開いていれば、ほかのアプリから戻ってきたときに読み直す
+// （書いている最中に画面が変わらないように。手書きは離れるときに保存済み）
+if ('serviceWorker' in navigator) {
+  var hadSW = !!navigator.serviceWorker.controller, newVer = false;
+  navigator.serviceWorker.register('sw.js').then(function (reg) {
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) return;
+      if (newVer) { location.reload(); return; }
+      reg.update().catch(function () {}); // 戻ってくるたびに、新しい版がないか見る
+    });
+  }).catch(function (e) { console.error(e); });
+  navigator.serviceWorker.addEventListener('controllerchange', function () {
+    if (!hadSW) { hadSW = true; return; } // はじめて入ったときは読み直さない
+    newVer = true;
+    if (!document.body.classList.contains('has-file')) location.reload();
+    else if (window.App && App.setStatus) App.setStatus('新しい版があります。ほかのアプリに切り替えて戻ると切り替わります');
+  });
+}
 </script>
 </body>
 </html>

@@ -1,10 +1,11 @@
 /* 電波がなくても開けるようにする（サービスワーカー）
    - アプリの部品（HTML・CSS・JS・アイコン・pdf.js など）を、この端末に取っておく
    - ページ本体（index.html）は「通信できればネットから、だめなら控えから」。更新はふだんどおり届く
+   - 新しい版が入ったら、アプリに戻ってきたときに自動で読み直す（index.html の下のほう）
    - ?v= 付きの部品とライブラリは「控えがあれば控えから」（v が変われば別の物として取り直す）
    - Googleのログイン・Drive・ログインサーバーへの通信は、取っておかない（いつもネットへ）
    index.html の ?v= を上げたら、下の V も同じ番号にすること（古い控えを片づけるため） */
-var V = '32';
+var V = '33';
 var CACHE = 'tegaki-v' + V;
 var CORE = [
   './',
@@ -60,7 +61,8 @@ self.addEventListener('fetch', function (e) {
         });
       }
       var t = setTimeout(fallback, 4000);
-      fetch(req).then(function (res) {
+      // 端末の一時置き場（最大10分）を通さず、いつも最新のページを取りに行く
+      fetch(new Request(req.url, { cache: 'no-cache', credentials: 'same-origin' })).then(function (res) {
         clearTimeout(t);
         if (res && res.ok) {
           var copy = res.clone();
