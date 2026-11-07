@@ -130,8 +130,15 @@
         break;
       case 'moreBtn':
         $('delPageBtn').disabled = !S.hasFile || !App.pageEntry().added;
+        $('shiftBtn').setAttribute('aria-pressed', S.shift ? 'true' : 'false');
         showPop($('moreMenu'), b); break;
       case 'shareBtn': closePops(); break; // 共有そのものは share.js が受け持つ
+      case 'shiftBtn':
+        if (!S.hasFile) { closePops(); App.setStatus('先にPDFを開いてください'); break; }
+        App.setShift(!S.shift);
+        b.setAttribute('aria-pressed', S.shift ? 'true' : 'false');
+        App.setStatus(S.shift ? '見開きを1ページずらしました（1ページ目は右に1枚だけ）' : '見開きのずらしを元に戻しました');
+        break;
       case 'blankBtn': closePops(); App.blank(); break;
       case 'jsonBtn': closePops(); App.openJson(); break;
       case 'delPageBtn': closePops(); App.deletePage(); break;

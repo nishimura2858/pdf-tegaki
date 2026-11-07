@@ -256,10 +256,26 @@
   var flow = $('flow'), still = $('still'), spine = $('spine'), turnEl = $('turn');
   S.spread = false;
   function isSpread() { return S.hasFile && stage.clientWidth > stage.clientHeight * 1.1; }
-  function leftOf(n) { return n % 2 ? n : n - 1; }
-  function partner(n) { var m = n % 2 ? n + 1 : n - 1; return m >= 1 && m <= S.total ? m : 0; }
+  // 見開きの組み合わせ。ずらす設定（S.shift）がオンなら、1ページ目は右に1枚だけ、そのあと 2-3, 4-5, …
+  S.shift = false;
+  function isLeft(n) { return (n + (S.shift ? 1 : 0)) % 2 === 1; }
+  function leftOf(n) { return isLeft(n) ? n : n - 1; }   // 0 のときは左がない（ずらしたときの1ページ目）
+  function partner(n) { var m = isLeft(n) ? n + 1 : n - 1; return m >= 1 && m <= S.total ? m : 0; }
+  function shiftKey() { return 'spreadShift:' + S.key; }
+  function loadShift() { try { S.shift = localStorage.getItem(shiftKey()) === '1'; } catch (e) { S.shift = false; } }
+  // 「その他」から: このPDFの見開きの組み合わせを1ページずらす（PDFごとに覚えておく）
+  function setShift(v) {
+    S.shift = !!v;
+    try { if (S.shift) localStorage.setItem(shiftKey(), '1'); else localStorage.removeItem(shiftKey()); } catch (e) {}
+    if (st) st.n = -1;
+    renderPage(); updateUI();
+  }
   // 前・次へ移る先（見開きなら2ページずつ。移った先は左のページ）
-  function stepPage(d) { return S.spread ? leftOf(S.page) + 2 * d : S.page + d; }
+  function stepPage(d) {
+    if (!S.spread) return S.page + d;
+    var n = leftOf(S.page) + 2 * d;
+    return n === 0 ? 1 : n; // ずらしたときの1ページ目（右に1枚だけ）
+  }
   function canStep(d) { var n = stepPage(d); return S.hasFile && n >= 1 && n <= S.total; }
   function pageText() {
     var m = S.spread ? partner(S.page) : 0;
@@ -344,10 +360,10 @@
   }
   function layoutSpread() {
     flow.classList.toggle('spread', S.spread);
-    flow.classList.toggle('act-r', S.spread && S.page % 2 === 0);
+    flow.classList.toggle('act-r', S.spread && !isLeft(S.page));
     var w = S.cssW, lw = S.cssW;
     if (S.spread) {
-      if (st) { w += st.w; if (S.page % 2 === 0) lw = st.w; }
+      if (st) { w += st.w; if (!isLeft(S.page)) lw = st.w; }
       else w *= 2; // 最後の1ページだけのときも、左側に置く
     }
     flow.style.width = w + 'px';
@@ -457,7 +473,8 @@
   function prefetch() {
     clearTimeout(preTimer);
     preTimer = setTimeout(function () {
-      var list = S.spread ? [stepPage(1), stepPage(1) + 1, stepPage(-1) + 1, stepPage(-1)] : [S.page + 1, S.page - 1];
+      var L = leftOf(S.page);
+      var list = S.spread ? [L + 2, L + 3, L - 1, L - 2] : [S.page + 1, S.page - 1];
       list.filter(function (n) { return n >= 1 && n <= S.total; })
         .reduce(function (p, n) { return p.then(function () { return getBase(n); }).catch(function () {}); }, Promise.resolve());
     }, 150);
@@ -640,6 +657,7 @@
     S.pdf = doc; S.hasFile = true; S.name = name; S.key = key;
     S.page = 1; S.zoom = 1; S.live = null;
     sizes = {}; baseCache = {}; baseList = []; stTok++; setStill(null); // 前のファイルの絵は使わない
+    loadShift();
     loadSaved();
     $('hint').style.display = 'none'; wrap.style.display = 'block';
     $('pager').hidden = false;
@@ -899,10 +917,11 @@
       if (dir > 0) { front = S.page; under = { b: wb, n: t.dest }; t.a0 = 0; t.a1 = -180; }
       else { front = t.dest; t.a0 = -180; t.a1 = 0; }
     } else {
-      var actR = S.page % 2 === 0, Lb = actR ? sb : wb, Rb = actR ? wb : sb;
-      if (!Lb || (dir > 0 && !Rb)) return null;
-      if (dir > 0) { box = Rb; origin = 'left'; front = leftOf(S.page) + 1; back = t.dest; under = { b: Rb, n: t.dest + 1 <= S.total ? t.dest + 1 : 0 }; t.a0 = 0; t.a1 = -180; }
-      else { box = Lb; origin = 'right'; front = leftOf(S.page); back = t.dest + 1; under = { b: Lb, n: t.dest }; t.a0 = 0; t.a1 = 180; }
+      var actR = !isLeft(S.page), Lb = actR ? sb : wb, Rb = actR ? wb : sb, L = leftOf(S.page);
+      if (dir > 0 ? !Rb : !Lb) return null;
+      // 進む: 右のページ(L+1)がめくれ、裏に次の左(L+2)、下に次の右(L+3)。戻る: 左のページ(L)がめくれ、裏に前の右(L-1)、下に前の左(L-2)
+      if (dir > 0) { box = Rb; origin = 'left'; front = L + 1; back = L + 2; under = { b: Rb, n: L + 3 <= S.total ? L + 3 : 0 }; t.a0 = 0; t.a1 = -180; }
+      else { box = Lb; origin = 'right'; front = L; back = L - 1; under = { b: Lb, n: L - 2 >= 1 ? L - 2 : 0 }; t.a0 = 0; t.a1 = 180; }
     }
     turnEl.textContent = '';
     if (under) {
@@ -921,7 +940,7 @@
     t.W = Math.min(box.w, stage.clientWidth);
     t.mode = S.spread ? 'spread' : dir > 0 ? 'fwd' : 'back';
     t.rest = t.mode === 'back' ? 0.5 : 0;                       // 戻すときの位置（縦画面で戻るときは、背に立った状態＝見えない）
-    t.go = t.mode === 'fwd' ? 0.33 : t.mode === 'back' ? 0.67 : 0.42; // ここを越えて離したら、めくる
+    t.go = t.mode === 'fwd' ? 0.24 : t.mode === 'back' ? 0.6 : 0.3; // ここを越えて離したら、めくる
     t.t = t.rest;
     T = t; turning = true;
     drawTurn();
@@ -938,15 +957,15 @@
   // 指の動きから、めくれ具合を決める（紙の端が指についてくるように）
   function turnFollow(dx) {
     var p = Math.max(0, -dx * T.dir), W = T.W, c;
-    if (T.mode === 'fwd') { c = Math.max(0, 1 - p / W); T.t = Math.acos(c) / Math.PI; }
-    else if (T.mode === 'back') { c = Math.min(1, p / W); T.t = 1 - Math.acos(c) / Math.PI; }
-    else { c = Math.max(-1, 1 - 1.25 * p / W); T.t = Math.acos(c) / Math.PI; }
+    if (T.mode === 'fwd') { c = Math.max(0, 1 - 1.3 * p / W); T.t = Math.acos(c) / Math.PI; }
+    else if (T.mode === 'back') { c = Math.min(1, 1.3 * p / W); T.t = 1 - Math.acos(c) / Math.PI; }
+    else { c = Math.max(-1, 1 - 1.8 * p / W); T.t = Math.acos(c) / Math.PI; }
     drawTurn();
   }
   function settleTurn(go) {
     var t = T; if (!t || t.anim) return;
     t.anim = true;
-    var from = t.t, to = go ? 1 : t.rest, t0 = performance.now(), dur = 140 + 300 * Math.abs(to - from);
+    var from = t.t, to = go ? 1 : t.rest, t0 = performance.now(), dur = 90 + 170 * Math.abs(to - from);
     var y0 = stage.scrollTop, y1 = go && !S.spread ? 0 : y0; // 縦画面では、次のページの上の端から
     requestAnimationFrame(function step(now) {
       var k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
@@ -1030,7 +1049,7 @@
     if (cancel) { settleTurn(false); return; }
     var h = g.hist, v = 0;
     if (h.length > 1) { var a = h[0], b = h[h.length - 1]; v = (b[1] - a[1]) / Math.max(1, b[0] - a[0]) * -T.dir; } // めくる向きの速さ（px/ms）
-    settleTurn(v > 0.35 ? T.t > T.rest + 0.02 : v < -0.35 ? false : T.t > T.go);
+    settleTurn(v > 0.25 ? T.t > T.rest + 0.01 : v < -0.3 ? false : T.t > T.go);
   }
   function settle() { setTimeout(function () { flow.style.transition = ''; }, 460); }
   function endPull(p, cancel) {
@@ -1284,6 +1303,7 @@
     goPage: goPage, updateUI: updateUI, pushUndo: pushUndo, commit: commit,
     scheduleSave: scheduleSave, flushSave: flushSave, exportData: exportData,
     setTool: setTool, insertPage: insertPage, deletePage: deletePage, addImage: addImage,
+    setShift: setShift,
     pageEntry: entry, paperLines: paperLines, openJson: openJson, liveCtx: lctx, liveCanvas: lc, wrap: wrap, stage: stage,
     blank: function () { openDoc(null, '白紙', 'strokes:__blank__'); },
     currentKey: function () { return S.hasFile ? S.key : ''; },
