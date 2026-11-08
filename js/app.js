@@ -324,6 +324,29 @@
     var sz = sizes[sizeKey(n)]; if (!sz) return null;
     var hit = baseCache[baseKey(n, cssOf(sz))]; return hit ? hit.c : null;
   }
+  /* 軽い絵: 高速めくりの間だけ使う、小さく速く描ける絵（あとで、きれいな絵に差しかわる） */
+  var quick = {}, quickList = [], QUICK_KEEP = 40, QUICK_PX = 2.4e5;
+  function quickKey(n) { var e = entry(n); return [S.key, sizeKey(n), e.bg || ''].join('|'); }
+  function getQuick(n) {
+    var key = quickKey(n), hit = quick[key];
+    if (hit) return hit.p;
+    var slot = { p: null, c: null };
+    slot.p = (async function () {
+      var info = await pageInfo(n), a = info.w / info.h;
+      var W = Math.max(1, Math.round(Math.sqrt(QUICK_PX * a))), H = Math.max(1, Math.round(W / a));
+      var c = document.createElement('canvas'); c.width = W; c.height = H;
+      var x = c.getContext('2d');
+      drawPaper(x, W, H, info.page ? null : entry(n));
+      if (info.page) await info.page.render({ canvasContext: x, viewport: info.page.getViewport({ scale: W / info.w }) }).promise;
+      slot.c = c;
+      return c;
+    })();
+    quick[key] = slot; quickList.push(key);
+    while (quickList.length > QUICK_KEEP) delete quick[quickList.shift()];
+    slot.p.catch(function () { if (quick[key] === slot) delete quick[key]; });
+    return slot.p;
+  }
+  function quickNow(n) { var h = quick[quickKey(n)]; return h ? h.c : null; }
   function blankCanvas(w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
   function copyOf(src) { var c = blankCanvas(src.width, src.height); c.getContext('2d').drawImage(src, 0, 0); return c; }
   function inkOf(n, w, h) { var c = blankCanvas(w, h); drawList(c.getContext('2d'), S.strokes[n] || [], w, h); return c; }
@@ -341,7 +364,7 @@
     if (!n) return null;
     if (n === S.page) { var s = snapshotCurrent(); s.base.getContext('2d').drawImage(s.ink, 0, 0); return s.base; }
     if (st && st.n === n && st.base) { var c = copyOf(st.base); if (st.ink) c.getContext('2d').drawImage(st.ink, 0, 0); return c; }
-    var b = baseNow(n); return b ? compose(n, b) : null;
+    var b = baseNow(n) || quickNow(n); return b ? compose(n, b) : null;
   }
 
   // 見開きのもう片方（絵）
@@ -409,7 +432,10 @@
       var b = sz && baseNow(m), tok = ++stTok;
       if (b) setStill(stillFrom(m, b));
       else {
-        setStill({ n: m, w: css.w, h: css.h, key: '' }); // 描けるまでは白い紙
+        var q = quickNow(m);
+        if (q && sz) { var qs = stillFrom(m, q); qs.key = ''; setStill(qs); } // 軽い絵があれば、それを先に
+        else setStill({ n: m, w: css.w, h: css.h, key: '' }); // 描けるまでは白い紙
+        if (rapid) { laterStill(); return layoutSpread(); } // 高速めくりの間は、きれいな絵はあとで
         getBase(m).then(function (c) {
           if (tok !== stTok) return;
           setStill(stillFrom(m, c)); layoutSpread();
@@ -418,7 +444,15 @@
     }
     layoutSpread();
   }
-  on('layout', function () { if (st) st.n = -1; }); // ページの並びが変わったら、絵は描き直す
+  on('layout', function () { if (st) st.n = -1; });
+  var stillTimer = 0;
+  function laterStill() {
+    clearTimeout(stillTimer);
+    stillTimer = setTimeout(function () {
+      if (rapid || T) { laterStill(); return; }
+      if (st && !st.key) { st.n = -1; updateStill(); }
+    }, 250);
+  } // ページの並びが変わったら、絵は描き直す
 
   // 書ける紙の大きさ・置き場所を決めて、手書きを描く（ここまでは待たずに一度に）
   function layoutPage(bw, bh, msz) {
@@ -500,7 +534,7 @@
     }
     dbg('ページ描き直し ' + Math.round(performance.now() - t0) + 'ms（倍率' + Math.round(S.zoom * 100) + '%）');
     updateUI();
-    prefetch();
+    if (!rapid) prefetch();
   }
   // めくる先のページを、先に描いておく
   var preTimer = 0;
@@ -690,7 +724,7 @@
     flushSave(); // 前のファイルの未保存分を、切り替える前に保存する
     S.pdf = doc; S.hasFile = true; S.name = name; S.key = key;
     S.page = 1; S.zoom = 1; S.live = null;
-    sizes = {}; baseCache = {}; baseList = []; stTok++; setStill(null); // 前のファイルの絵は使わない
+    sizes = {}; baseCache = {}; baseList = []; quick = {}; quickList = []; stTok++; setStill(null); // 前のファイルの絵は使わない
     loadShift();
     loadSaved();
     $('hint').style.display = 'none'; wrap.style.display = 'block';
@@ -870,6 +904,48 @@
       if (segDist(px, py, p[i - 1][0] * W, p[i - 1][1] * H, p[i][0] * W, p[i][1] * H) < r) return true;
     return false;
   }
+  /* ぐちゃぐちゃ消し: ペンでジグザグに塗りつぶすように書くと、その下の線を消す（GoodNotesと同じ）
+     横（または縦）に5回以上行ったり来たりして、ふれ幅が大きく、反対の向きにはあまり進まない線を「ぐちゃぐちゃ」とみなす */
+  function swings(P, ax) { // 行ったり来たりの回数と、ふれ幅の平均
+    var v0 = P[0][ax], hi = v0, lo = v0, dir = 0, ext = v0, from = v0, n = 0, sum = 0, HYS = 6;
+    for (var i = 1; i < P.length; i++) {
+      var v = P[i][ax];
+      if (!dir) {
+        hi = Math.max(hi, v); lo = Math.min(lo, v);
+        if (hi - lo > HYS) { dir = v >= hi ? 1 : -1; from = dir > 0 ? lo : hi; ext = v; }
+      } else if (dir > 0) {
+        if (v > ext) ext = v; else if (ext - v > HYS) { n++; sum += ext - from; from = ext; dir = -1; ext = v; }
+      } else {
+        if (v < ext) ext = v; else if (v - ext > HYS) { n++; sum += from - ext; from = ext; dir = 1; ext = v; }
+      }
+    }
+    return { n: n, mean: n ? sum / n : 0 };
+  }
+  function isScribble(st) {
+    var W = S.cssW, H = S.cssH, P = st.points.map(function (p) { return [p[0] * W, p[1] * H]; });
+    if (P.length < 12) return false;
+    var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, i;
+    for (i = 0; i < P.length; i++) { x0 = Math.min(x0, P[i][0]); y0 = Math.min(y0, P[i][1]); x1 = Math.max(x1, P[i][0]); y1 = Math.max(y1, P[i][1]); }
+    var sw = [x1 - x0, y1 - y0], ok = false;
+    for (var ax = 0; ax < 2; ax++) {
+      var r = swings(P, ax), span = sw[ax], perp = sw[1 - ax];
+      if (span >= 12 && r.n >= 5 && r.mean >= span * 0.55 && perp <= span * 1.5) ok = true;
+    }
+    return ok ? { x0: x0, y0: y0, x1: x1, y1: y1, P: P } : false;
+  }
+  // ぐちゃぐちゃの下にある線を探す（線のまん中がぐちゃぐちゃの範囲に入っていて、実際に重なっているもの）
+  function underScribble(sc, width) {
+    var W = S.cssW, H = S.cssH, pad = 8, r = 5 + width;
+    return pages().filter(function (s) {
+      if (s.tool === 'image' || !s.points || !s.points.length) return false;
+      var a = 1e9, b = 1e9, c = -1e9, d = -1e9;
+      s.points.forEach(function (p) { a = Math.min(a, p[0] * W); b = Math.min(b, p[1] * H); c = Math.max(c, p[0] * W); d = Math.max(d, p[1] * H); });
+      var cx = (a + c) / 2, cy = (b + d) / 2;
+      if (cx < sc.x0 - pad || cx > sc.x1 + pad || cy < sc.y0 - pad || cy > sc.y1 + pad) return false;
+      for (var i = 0; i < sc.P.length; i += 2) if (hit(s, sc.P[i][0], sc.P[i][1], r)) return true;
+      return false;
+    });
+  }
   function eraseAt(pt) {
     var arr = pages(), px = pt[0] * S.cssW, py = pt[1] * S.cssH;
     var keep = arr.filter(function (s) { return !hit(s, px, py, S.eraser); });
@@ -1034,7 +1110,7 @@
       t.done = true;
       if (!go) { closeTurn(); return; }
       // めくった先へ。めくってきた絵を出したまま入れかえるので、見た目はつながる
-      S.placeholder = baseNow(t.dest);
+      S.placeholder = baseNow(t.dest) || quickNow(t.dest);
       S.swap = closeTurn;
       turning = false; // goPage を通すため（置きかえが済むまでは T が残っている）
       Promise.resolve(goPage(t.dest, true)).catch(function () {}).then(function () { if (T === t) closeTurn(); });
@@ -1061,10 +1137,10 @@
     else list = [S.page + dir * (1 + k)];
     return list.filter(function (n) { return n >= 1 && n <= S.total; });
   }
-  // 連続めくりの間は、先の2回ぶんの絵を順に用意しておく
+  // 連続めくりの間は、先の3回ぶんの軽い絵を順に用意しておく
   function ahead(dir) {
-    turnPages(dir, 1).concat(turnPages(dir, 2)).reduce(function (p, n) {
-      return p.then(function () { return getBase(n); }).catch(function () {});
+    turnPages(dir, 1).concat(turnPages(dir, 2), turnPages(dir, 3)).filter(function (n) { return !baseNow(n) && !quickNow(n); }).reduce(function (p, n) {
+      return p.then(function () { return getQuick(n); }).catch(function () {});
     }, Promise.resolve());
   }
   function stepsTo(n) { return S.spread ? Math.round((leftOf(n) - leftOf(S.page)) / 2) : n - S.page; }
@@ -1078,11 +1154,11 @@
       if (d !== rapid.dir) { rapid.dir = d; rapid.n = 0; }
     }
     // 次にめくる紙の絵がまだなら、描けるまで待ってからめくる（白い紙が見えないように）
-    var need = turnPages(rapid.dir, 0).filter(function (n) { return !baseNow(n); });
+    var need = turnPages(rapid.dir, 0).filter(function (n) { return !baseNow(n) && !quickNow(n); });
     if (need.length) {
       if (rapid.wait) return;
       var r0 = rapid; r0.wait = true;
-      Promise.all(need.map(function (n) { return getBase(n).catch(function () {}); })).then(function () {
+      Promise.all(need.map(function (n) { return getQuick(n).catch(function () {}); })).then(function () {
         if (rapid !== r0) return;
         r0.wait = false; rapidNext();
       });
@@ -1365,6 +1441,7 @@
     if (!evs.length) evs = [e];
     if (drawing.h) { evs.forEach(function (ev) { drawing.h.move(pos(ev), ev); }); return; }
     if (drawing.erase) { evs.forEach(function (ev) { eraseAt(pos(ev)); }); return; }
+    if (drawing.shaped) return; // 図形に直したあとは、離すまでそのまま
     var s = S.live;
     if (s.tool === 'highlighter') {
       s.points = straight(drawing.start, pos(evs[evs.length - 1]));
@@ -1376,7 +1453,26 @@
       if (Math.hypot((pt[0] - last[0]) * S.cssW, (pt[1] - last[1]) * S.cssH) > 0.6) s.points.push(pt);
     });
     if (s.points.length > drawnIdx && !rafId) rafId = requestAnimationFrame(flushDraw);
+    holdWatch(e);
   });
+  /* 書いたあと、ペンを離さずに止めておくと（約1秒）、きれいな図形に直す */
+  var SHAPE_HOLD = 1000;
+  function holdWatch(e) {
+    var d = drawing; if (!d || !S.live || S.live.tool === 'highlighter') return;
+    if (d.hx !== undefined && Math.hypot(e.clientX - d.hx, e.clientY - d.hy) < 4) return; // ほぼ止まっている
+    d.hx = e.clientX; d.hy = e.clientY;
+    clearTimeout(d.holdT);
+    d.holdT = setTimeout(function () { holdShape(d); }, SHAPE_HOLD);
+  }
+  function holdShape(d) {
+    if (drawing !== d || d.shaped || !S.live || !window.Shapes) return;
+    var s = S.live, fixed = Shapes.recognize(s.points, S.cssW, S.cssH);
+    if (!fixed) return;
+    if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+    s.points = fixed; d.shaped = true;
+    if (s.tool === 'pen') drawInk(); else lctx.clearRect(0, 0, lc.width, lc.height);
+    drawLive(0); drawnIdx = s.points.length;
+  }
   function endPointer(e) {
     if (touches[e.pointerId]) {
       dbg('指#' + e.pointerId + ' ' + (e.type === 'pointercancel' ? '取り消し' : '離す'));
@@ -1404,9 +1500,23 @@
       if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
       flushDraw();
       var s = S.live;
+      // ぐちゃぐちゃ消し: 下に線があれば、その線を消して、ぐちゃぐちゃ自体も残さない
+      if ((s.tool === 'pen' || s.tool === 'pencil') && !drawing.shaped) {
+        var sc = isScribble(s), gone = sc ? underScribble(sc, widthAt(s, S.cssW, 1) / 2) : [];
+        if (gone.length) {
+          pushUndo();
+          S.strokes[S.page] = pages().filter(function (x) { return gone.indexOf(x) < 0; });
+          S.live = null;
+          lctx.clearRect(0, 0, lc.width, lc.height); liveLayer('pen');
+          drawInk(); updateUI(); scheduleSave(); emit('data');
+          drawing = null; lastPenUp = performance.now();
+          return;
+        }
+      }
       // 図形モード: 手書きの丸・四角・三角・直線を、きれいな図形に直す
-      if (S.shape && s.tool !== 'highlighter' && window.Shapes) {
-        var fixed = Shapes.recognize(s.points, S.cssW, S.cssH);
+      var fixed = drawing.shaped || null; clearTimeout(drawing.holdT);
+      if (!fixed && S.shape && s.tool !== 'highlighter' && window.Shapes) {
+        fixed = Shapes.recognize(s.points, S.cssW, S.cssH);
         if (fixed) s.points = fixed;
       }
       pushUndo();

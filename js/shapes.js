@@ -79,5 +79,5 @@
     });
   }
 
-  window.Shapes = { recognize: recognize };
+  window.Shapes = { recognize: recognize, simplify: simplify };
 })();
