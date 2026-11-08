@@ -201,6 +201,42 @@
     drawList(ictx, pages(), ink.width, ink.height, S.xform);
     if (S.live && S.live.tool === 'pen') segs(ictx, S.live, ink.width, ink.height, 1);
   }
+  /* ---------- 見開きで、2ページにまたがる書き込み ----------
+     書き始めたページに線をそのまま（はみ出した所も）入れ、もう片方のページにも、そのページの位置に直した写しを入れる。
+     どちらも自分の紙の中だけが見えるので、見開きではつながって見え、縦画面ではそれぞれ半分ずつ見える。
+     2つの写しは link（同じ番号）で結んでおき、消すときは両方消す */
+  function refreshStillInk() {
+    if (!st || !st.ink) return;
+    var c = st.ink.getContext('2d');
+    c.clearRect(0, 0, st.ink.width, st.ink.height);
+    drawList(c, S.strokes[st.n] || [], st.ink.width, st.ink.height);
+  }
+  function crossStart() { // 書き始め: もう片方のページの位置を控える
+    if (!S.spread || !st || st.n < 1 || still.hidden) return null;
+    var rs = still.getBoundingClientRect();
+    return { n: st.n, rw: S.rc, rs: rs, right: rs.left > S.rc.left, snap: st.ink ? copyOf(st.ink) : null };
+  }
+  function crossPts(x, pts) {
+    var rw = x.rw, rs = x.rs;
+    return pts.map(function (p) {
+      return [r4((rw.left + p[0] * rw.width - rs.left) / rs.width), r4((rw.top + p[1] * rw.height - rs.top) / rs.height), p[2]];
+    });
+  }
+  function crosses(x, s) { return s.points.some(function (p) { return x.right ? p[0] > 1 : p[0] < 0; }); }
+  function crossLive(x) { // 書いている最中: はみ出した所を、もう片方の紙にも描く
+    var s = S.live; if (!s || !x.snap || !st || st.n !== x.n || !st.ink || !crosses(x, s)) return;
+    var c = st.ink.getContext('2d'), W = st.ink.width, H = st.ink.height;
+    c.clearRect(0, 0, W, H); c.drawImage(x.snap, 0, 0);
+    drawItem(c, { tool: s.tool, color: s.color, width: s.width, points: crossPts(x, s.points) }, W, H);
+  }
+  // 消した線と結ばれている、もう片方のページの写しも消す
+  function dropLinked(gone) {
+    var ids = gone.map(function (x) { return x.link; }).filter(Boolean);
+    if (!ids.length || !S.spread || !st) return;
+    var arr = S.strokes[st.n] || [], keep = arr.filter(function (x) { return !x.link || ids.indexOf(x.link) < 0; });
+    if (keep.length === arr.length) return;
+    S.strokes[st.n] = keep; scheduleSave(st.n); refreshStillInk();
+  }
 
   /* ---------- 方眼・罫線の紙 ----------
      追加した白紙のページに引く線。ページの単位（PDFの点、左上が原点）で [x1, y1, x2, y2] の並びを返す。
@@ -758,9 +794,10 @@
     renderPage();
   }
 
-  function pushUndo(page) {
+  function pushUndo(page, other) { // other: 見開きのもう片方も一緒に戻すとき、そのページ
     page = page || S.page;
-    S.undo.push({ page: page, strokes: (S.strokes[page] || []).slice() });
+    S.undo.push({ page: page, strokes: (S.strokes[page] || []).slice(),
+      also: other ? { page: other, strokes: (S.strokes[other] || []).slice() } : null });
     if (S.undo.length > 200) S.undo.shift();
     S.redo = [];
   }
@@ -769,9 +806,11 @@
   function applySnapshot(from, to) {
     var a = from.pop(); if (!a) return;
     emit('beforeUndo');
-    to.push({ page: a.page, strokes: (S.strokes[a.page] || []).slice() });
+    to.push({ page: a.page, strokes: (S.strokes[a.page] || []).slice(),
+      also: a.also ? { page: a.also.page, strokes: (S.strokes[a.also.page] || []).slice() } : null });
     S.strokes[a.page] = a.strokes;
     scheduleSave(a.page);
+    if (a.also) { S.strokes[a.also.page] = a.also.strokes; scheduleSave(a.also.page); refreshStillInk(); }
     emit('data');
     if (a.page !== S.page) { goPage(a.page); } else { drawInk(); updateUI(); }
   }
@@ -863,19 +902,27 @@
   }
   function startPinch() {
     var m = tMetrics(), rc = flow.getBoundingClientRect();
-    pinch = { d0: m.d, cx0: m.cx, cy0: m.cy, cx: m.cx, cy: m.cy, z0: S.zoom, s: 1,
+    pinch = { d0: m.d, cx0: m.cx, cy0: m.cy, cx: m.cx, cy: m.cy, z0: S.zoom, s: 1, min: minZoom(), pct: 0, raf: 0,
       fx: (m.cx - rc.left) / rc.width, fy: (m.cy - rc.top) / rc.height };
     flow.style.transformOrigin = (pinch.fx * 100) + '% ' + (pinch.fy * 100) + '%';
+    flow.classList.add('pinching'); // 紙を1枚の層にして、拡大縮小を軽く
   }
+  // 指が動くたびではなく、画面の書きかえ1回につき1回だけ動かす（カクつかないように）
   function movePinch() {
-    var m = tMetrics();
-    var z = Math.min(MAXZOOM, Math.max(minZoom(), pinch.z0 * m.d / pinch.d0));
-    pinch.s = z / pinch.z0; pinch.cx = m.cx; pinch.cy = m.cy;
-    flashPager(Math.round(z * 100) + '%');
-    flow.style.transform = 'translate(' + (m.cx - pinch.cx0) + 'px,' + (m.cy - pinch.cy0) + 'px) scale(' + pinch.s + ')';
+    if (!pinch || pinch.raf) return;
+    pinch.raf = requestAnimationFrame(function () {
+      var p = pinch; if (!p) return;
+      p.raf = 0;
+      var m = tMetrics();
+      var z = Math.min(MAXZOOM, Math.max(p.min, p.z0 * m.d / p.d0));
+      p.s = z / p.z0; p.cx = m.cx; p.cy = m.cy;
+      flow.style.transform = 'translate3d(' + (m.cx - p.cx0) + 'px,' + (m.cy - p.cy0) + 'px,0) scale(' + p.s + ')';
+      var pct = Math.round(z * 100);
+      if (pct !== p.pct) { p.pct = pct; flashPager(pct + '%'); }
+    });
   }
-  function clearPinchStyle() { flow.style.transform = ''; flow.style.transformOrigin = ''; }
-  function cancelPinch() { pinch = null; clearPinchStyle(); }
+  function clearPinchStyle() { flow.style.transform = ''; flow.style.transformOrigin = ''; flow.classList.remove('pinching'); }
+  function cancelPinch() { if (pinch && pinch.raf) cancelAnimationFrame(pinch.raf); pinch = null; clearPinchStyle(); }
   function endPinch() {
     var p = pinch; cancelPinch();
     var nz = Math.round(p.z0 * p.s * 100) / 100;
@@ -950,7 +997,8 @@
     var arr = pages(), px = pt[0] * S.cssW, py = pt[1] * S.cssH;
     var keep = arr.filter(function (s) { return !hit(s, px, py, S.eraser); });
     if (keep.length !== arr.length) {
-      if (!erased) { pushUndo(); erased = true; }
+      if (!erased) { pushUndo(S.page, S.spread && st ? st.n : 0); erased = true; }
+      dropLinked(arr.filter(function (s) { return keep.indexOf(s) < 0; }));
       S.strokes[S.page] = keep; drawInk(); updateUI(); scheduleSave();
     }
   }
@@ -1004,6 +1052,7 @@
     var s = S.live; if (!s || (s.points.length <= drawnIdx && s.tool !== 'highlighter')) return;
     drawLive(drawnIdx);
     drawnIdx = s.points.length;
+    if (drawing && drawing.x) crossLive(drawing.x);
   }
   function liveLayer(tool) {
     lctx.clearRect(0, 0, lc.width, lc.height);
@@ -1412,7 +1461,7 @@
     if (S.tool === 'eraser') { drawing = { id: e.pointerId, erase: true }; erased = false; eraseAt(pt); return; }
     if (!PENS[S.tool]) return;
     S.live = { tool: S.tool, color: S.color, width: S.width, points: [pt] };
-    drawing = { id: e.pointerId, start: pt };
+    drawing = { id: e.pointerId, start: pt, x: crossStart() };
     drawnIdx = 1;
     if (S.tool !== 'pen') liveLayer(S.tool);
     drawLive(0);
@@ -1472,6 +1521,7 @@
     s.points = fixed; d.shaped = true;
     if (s.tool === 'pen') drawInk(); else lctx.clearRect(0, 0, lc.width, lc.height);
     drawLive(0); drawnIdx = s.points.length;
+    if (d.x) crossLive(d.x);
   }
   function endPointer(e) {
     if (touches[e.pointerId]) {
@@ -1504,7 +1554,8 @@
       if ((s.tool === 'pen' || s.tool === 'pencil') && !drawing.shaped) {
         var sc = isScribble(s), gone = sc ? underScribble(sc, widthAt(s, S.cssW, 1) / 2) : [];
         if (gone.length) {
-          pushUndo();
+          pushUndo(S.page, S.spread && st ? st.n : 0);
+          dropLinked(gone); if (drawing.x) refreshStillInk(); // はみ出して描いた所も消す
           S.strokes[S.page] = pages().filter(function (x) { return gone.indexOf(x) < 0; });
           S.live = null;
           lctx.clearRect(0, 0, lc.width, lc.height); liveLayer('pen');
@@ -1519,8 +1570,14 @@
         fixed = Shapes.recognize(s.points, S.cssW, S.cssH);
         if (fixed) s.points = fixed;
       }
-      pushUndo();
+      var xo = drawing.x && crosses(drawing.x, s) ? drawing.x : null;
+      pushUndo(S.page, xo ? xo.n : 0);
       (S.strokes[S.page] = S.strokes[S.page] || []).push(s);
+      if (xo) { // もう片方のページにも写しを入れる
+        s.link = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        (S.strokes[xo.n] = S.strokes[xo.n] || []).push({ tool: s.tool, color: s.color, width: s.width, points: crossPts(xo, s.points), link: s.link });
+        scheduleSave(xo.n); refreshStillInk();
+      }
       S.live = null;
       if (s.tool !== 'pen') { lctx.clearRect(0, 0, lc.width, lc.height); liveLayer('pen'); }
       if (s.tool === 'pen' && !fixed) drawItem(ictx, s, ink.width, ink.height);

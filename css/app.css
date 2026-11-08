@@ -308,6 +308,7 @@ header { position: relative; z-index: 10; background: var(--bg); }
 /* flow: 書ける紙（wrap）と、見開きのもう片方（still）、めくる紙（turn）をまとめたもの */
 #flow { position: relative; margin: 0 auto; padding: 4px 0 44px; }
 #flow.noscrub { padding-bottom: 14px; }
+#flow.pinching { will-change: transform; }
 #flow.spread { display: flex; align-items: flex-start; }
 #flow.spread #wrap { flex: none; }
 #flow.spread.act-r #wrap { order: 2; }
