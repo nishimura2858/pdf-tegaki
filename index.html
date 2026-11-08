@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="css/app.css?v=46">
+<link rel="stylesheet" href="css/app.css?v=47">
 </head>
 <body>
 <header>
@@ -73,7 +73,7 @@
     <div id="hint">
       <div class="recent-list big" id="hintRecent"></div>
       <strong>左上のフォルダのボタンからPDFを選ぶと、Apple Pencilで書き込めます</strong>
-      <span>ファイルアプリの「Googleドライブ」からも選べます。<br>手書きはこのiPadとGoogleドライブに自動保存され、同じPDFを開くと復元されます。<br>Googleドライブから開いたPDFには、書き込みがPDFそのものにも反映されます（30分おきと、アプリを離れたとき）。<br>左下の丸いボタンで、色・太さなどのパレットを開けます（ドラッグで移動）。<br>指で左右になぞるとページをめくれます（横向きにすると見開き）。ページの下で指を上に引っぱっても次のページへ（最後のページではページを追加）。指2本のピンチで拡大縮小、2回タップで拡大／元の大きさに戻せます。</span>
+      <span>ファイルアプリの「Googleドライブ」からも選べます。<br>手書きはこのiPadとGoogleドライブに自動保存され、同じPDFを開くと復元されます。<br>Googleドライブから開いたPDFには、書き込みがPDFそのものにも反映されます（30分おきと、アプリを離れたとき）。<br>左下の丸いボタンで、色・太さなどのパレットを開けます（ドラッグで移動）。<br>指2本で左右に払うとページをめくれます（拡大しているときも。横向きにすると見開き）。指1本はスクロール、2回タップで拡大／元の大きさ。ページの下で指を上に引っぱっても次のページへ（最後のページではページを追加）。指2本のピンチで拡大縮小もできます。</span>
     </div>
   </div>
   <div id="pull"><span class="ic"></span><span class="tx" id="pullText"></span></div>
@@ -198,21 +198,21 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async></script>
-<script src="js/config.js?v=46"></script>
-<script src="js/app.js?v=46"></script>
-<script src="js/shapes.js?v=46"></script>
-<script src="js/toolbar.js?v=46"></script>
-<script src="js/lasso.js?v=46"></script>
-<script src="js/pages.js?v=46"></script>
-<script src="js/google-auth.js?v=46"></script>
-<script src="js/drive.js?v=46"></script>
-<script src="js/drive-sync.js?v=46"></script>
+<script src="js/config.js?v=47"></script>
+<script src="js/app.js?v=47"></script>
+<script src="js/shapes.js?v=47"></script>
+<script src="js/toolbar.js?v=47"></script>
+<script src="js/lasso.js?v=47"></script>
+<script src="js/pages.js?v=47"></script>
+<script src="js/google-auth.js?v=47"></script>
+<script src="js/drive.js?v=47"></script>
+<script src="js/drive-sync.js?v=47"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"></script>
-<script src="js/pdf-open.js?v=46"></script>
-<script src="js/pdf-write.js?v=46"></script>
-<script src="js/share.js?v=46"></script>
-<script src="js/palette.js?v=46"></script>
-<script src="js/slide.js?v=46"></script>
+<script src="js/pdf-open.js?v=47"></script>
+<script src="js/pdf-write.js?v=47"></script>
+<script src="js/share.js?v=47"></script>
+<script src="js/palette.js?v=47"></script>
+<script src="js/slide.js?v=47"></script>
 <script>
 // 電波がなくても開けるように、アプリの部品をこの端末に取っておく（sw.js）
 // 新しい版が届いたら: PDFを開いていなければすぐ、開いていれば、ほかのアプリから戻ってきたときに読み直す

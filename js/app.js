@@ -921,6 +921,41 @@
       if (pct !== p.pct) { p.pct = pct; flashPager(pct + '%'); }
     });
   }
+  /* 指2本: 動き始めで決める
+     - 2本の間の長さがあまり変わらず、横へ動いた → ページをめくる（拡大していても使える）
+     - それ以外 → 拡大縮小（ピンチ） */
+  var two = null;
+  function startTwo() { var m = tMetrics(); two = { d0: m.d, cx0: m.cx, cy0: m.cy, mode: null }; }
+  function moveTwo() {
+    var m = tMetrics();
+    if (!two.mode) {
+      var dx = m.cx - two.cx0, dy = m.cy - two.cy0, dd = Math.abs(m.d - two.d0);
+      if (Math.max(Math.abs(dx), Math.abs(dy), dd) < 12) return;
+      if (Math.abs(dx) > Math.abs(dy) * 1.2 && Math.abs(dx) > dd * 1.5) {
+        two.mode = 'turn'; two.dir = dx < 0 ? 1 : -1;
+        if (T) rushTurn(); // 前のめくりが終わっていなければ、すぐ終わらせる
+        if (!canStep(two.dir)) { two.mode = 'none'; return; }
+      } else { two.mode = 'pinch'; startPinch(); }
+    }
+    if (two.mode === 'pinch') { movePinch(); return; }
+    if (two.mode !== 'turn') return;
+    if (!two.g) {
+      if (T || turning) return; // 前のページの入れかわりを待つ
+      if (!startTurn(two.dir)) { two.mode = 'none'; return; }
+      two.g = { x0: two.cx0, hist: [] };
+    }
+    if (T && !T.anim) turnFollow(m.cx - two.g.x0);
+    two.g.hist.push([performance.now(), m.cx, T ? T.t : 0]); while (two.g.hist.length > 8) two.g.hist.shift();
+  }
+  function endTwo(cancel) {
+    var t = two; two = null;
+    if (!t) return;
+    if (t.mode === 'pinch' && pinch) { if (cancel) cancelPinch(); else endPinch(); }
+    else if (t.mode === 'turn') {
+      if (t.g) turnUp(t.g, cancel);
+      else if (!cancel) { if (T || turning) queued += t.dir; else autoTurn(t.dir); } // 入れかわる前に払った
+    }
+  }
   function clearPinchStyle() { flow.style.transform = ''; flow.style.transformOrigin = ''; flow.classList.remove('pinching'); }
   function cancelPinch() { if (pinch && pinch.raf) cancelAnimationFrame(pinch.raf); pinch = null; clearPinchStyle(); }
   function endPinch() {
@@ -1310,20 +1345,11 @@
     if (pan.turn) { turnMove(e); return; }
     if (pan.want) { pan.last = e; chainTurn(); return; } // 入れかわりを待っている
     if (!pan.axis) {
-      // 動き始めの向きで決める: 横 → (端なら) めくる / 縦 → スクロール
+      // 指1本はスクロールだけ（ページをめくるのは指2本で払う）
       var ax = e.clientX - pan.x0, ay = e.clientY - pan.y0;
       if (Math.hypot(ax, ay) < 10) return;
       pan.axis = Math.abs(ax) > Math.abs(ay) ? 'x' : 'y';
-      var busy = !!T;
-      if (busy) rushTurn(); // 前のめくりが終わっていなければ、すぐ終わらせる
-      if (pan.axis === 'x') {
-        var dir = ax < 0 ? 1 : -1;
-        if (busy && (dir > 0 ? pan.atR : pan.atL) && (T || turning)) { pan.want = dir; pan.last = e; return; }
-        if ((dir > 0 ? pan.atR : pan.atL) && startTurn(dir)) {
-          pan.turn = { x0: pan.x0, hist: [] };
-          turnMove(e); return;
-        }
-      }
+      if (T) rushTurn(); // 前のめくりが終わっていなければ、すぐ終わらせる
     }
     var dx = e.clientX - pan.x, dy = e.clientY - pan.y;
     pan.x = e.clientX; pan.y = e.clientY;
@@ -1441,10 +1467,9 @@
           atT: stage.scrollTop <= 1, atB: stage.scrollTop >= stage.scrollHeight - stage.clientHeight - 1, pull: 0 };
       }
       else if (n === 2) {
-        rushTurn();
         if (pan && pan.turn) turnUp(pan.turn, true);
         else if (pan && pan.pull) endPull(pan, true);
-        pan = null; startPinch();
+        pan = null; startTwo();
       }
       return;
     }
@@ -1452,7 +1477,7 @@
     if (drawing) { dbg('!! ペン#' + e.pointerId + ' 無視（前の線#' + drawing.id + 'が終わっていない）'); return; }
     dbg('ペン#' + e.pointerId + '(' + e.pointerType + ') 書き始め' + (Object.keys(touches).length ? '（指' + Object.keys(touches).length + '本を解除）' : ''));
     if (pan && pan.pull) endPull(pan, true);
-    pan = null; touches = {}; if (pinch) cancelPinch();
+    pan = null; touches = {}; if (two) endTwo(true);
     ink.setPointerCapture(e.pointerId);
     S.rc = ink.getBoundingClientRect(); // 書き始めに1回だけ取得
     var pt = pos(e);
@@ -1481,7 +1506,7 @@
   ink.addEventListener('pointermove', function (e) {
     if (touches[e.pointerId]) {
       touches[e.pointerId].x = e.clientX; touches[e.pointerId].y = e.clientY;
-      if (pinch && Object.keys(touches).length === 2) { movePinch(); return; }
+      if (two && Object.keys(touches).length === 2) { moveTwo(); return; }
     }
     if (pan && e.pointerId === pan.id) { panMove(e); return; }
     if (!drawing || e.pointerId !== drawing.id) return;
@@ -1527,7 +1552,7 @@
     if (touches[e.pointerId]) {
       dbg('指#' + e.pointerId + ' ' + (e.type === 'pointercancel' ? '取り消し' : '離す'));
       delete touches[e.pointerId];
-      if (pinch) endPinch();
+      if (two) endTwo(e.type !== 'pointerup');
       if (pan && pan.id === e.pointerId) {
         if (pan.turn) turnUp(pan.turn, e.type !== 'pointerup');
         else if (pan.want) { if (e.type === 'pointerup') { if (T || turning) queued += pan.want; else autoTurn(pan.want); } } // 入れかわる前に離した: そのままめくる
