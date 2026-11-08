@@ -982,13 +982,13 @@
     var from = t.t, to = go ? 1 : t.rest, d = Math.abs(to - from), t0 = performance.now(), dur, ease;
     var auto = vt === undefined;
     if (go && vt > 0.0005) {
-      dur = Math.max(90, Math.min(300, 1.3 * d / vt));          // 指の速さより少し速く始まり、減速して止まる
+      dur = Math.max(60, Math.min(180, 1.0 * d / vt));          // 指の速さの倍で始まり、減速して止まる
       ease = function (k) { return 1 - (1 - k) * (1 - k); };
     } else if (go && auto) {
-      dur = 120 + 230 * d;                                   // 全部めくって 0.35秒くらい
+      dur = 80 + 150 * d;                                    // 全部めくって 0.23秒くらい
       ease = function (k) { return k < 0.5 ? 2 * k * k : 1 - 2 * (1 - k) * (1 - k); }; // ゆっくり始まって、ゆっくり止まる
     } else {
-      dur = 100 + 220 * d;
+      dur = 70 + 140 * d;
       ease = function (k) { return 1 - (1 - k) * (1 - k); };
     }
     var y0 = stage.scrollTop, y1 = go && !S.spread ? 0 : y0; // 縦画面では、次のページの上の端から
