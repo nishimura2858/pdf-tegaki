@@ -921,21 +921,43 @@
       if (pct !== p.pct) { p.pct = pct; flashPager(pct + '%'); }
     });
   }
-  /* 指2本: 動き始めで決める
-     - 2本の間の長さがあまり変わらず、横へ動いた → ページをめくる（拡大していても使える）
-     - それ以外 → 拡大縮小（ピンチ） */
+  /* 指2本: 動き始めで、1本ずつの動く向きを見て決める
+     - 2本とも同じ向き（横）へ動いた → ページをめくる（拡大していても使える）
+     - 2本が反対の向きへ動いた、または片方だけ動いた → 拡大縮小（ピンチ）
+     2本の間の長さだけで決めると、指の着地がずれたり少し開いたりしただけでピンチになっていた */
   var two = null;
-  function startTwo() { var m = tMetrics(); two = { d0: m.d, cx0: m.cx, cy0: m.cy, mode: null }; }
+  function twoMoves() { // 2本それぞれの、始めからの動き
+    var ids = Object.keys(two.p0), out = [];
+    ids.forEach(function (id) { var a = two.p0[id], b = touches[id] || two.last[id]; if (a && b) out.push([b.x - a.x, b.y - a.y]); });
+    return out;
+  }
+  function classify(v, min) { // 'turn' / 'pinch' / null（まだ決められない）
+    if (v.length < 2) return null;
+    var l1 = Math.hypot(v[0][0], v[0][1]), l2 = Math.hypot(v[1][0], v[1][1]);
+    if (Math.max(l1, l2) < min) return null;
+    var cos = (v[0][0] * v[1][0] + v[0][1] * v[1][1]) / ((l1 * l2) || 1);
+    var sx = v[0][0] + v[1][0], sy = v[0][1] + v[1][1];
+    if (Math.min(l1, l2) >= min * 0.5 && cos > 0.6 && Math.abs(sx) > Math.abs(sy) * 1.1) return 'turn';
+    if (Math.min(l1, l2) < min * 0.5 && Math.max(l1, l2) < min * 3) return null; // 片方がまだ動いていない: もう少し待つ
+    return 'pinch';
+  }
+  function startTwo() {
+    var m = tMetrics(), p0 = {};
+    Object.keys(touches).forEach(function (id) { p0[id] = { x: touches[id].x, y: touches[id].y }; });
+    two = { d0: m.d, cx0: m.cx, cy0: m.cy, mode: null, p0: p0, last: {} };
+  }
   function moveTwo() {
     var m = tMetrics();
+    Object.keys(touches).forEach(function (id) { two.last[id] = { x: touches[id].x, y: touches[id].y }; });
     if (!two.mode) {
-      var dx = m.cx - two.cx0, dy = m.cy - two.cy0, dd = Math.abs(m.d - two.d0);
-      if (Math.max(Math.abs(dx), Math.abs(dy), dd) < 12) return;
-      if (Math.abs(dx) > Math.abs(dy) * 1.2 && Math.abs(dx) > dd * 1.5) {
+      var c = classify(twoMoves(), 14);
+      if (!c) return;
+      if (c === 'turn') {
+        var dx = m.cx - two.cx0;
         two.mode = 'turn'; two.dir = dx < 0 ? 1 : -1;
         if (T) rushTurn(); // 前のめくりが終わっていなければ、すぐ終わらせる
         if (!canStep(two.dir)) { two.mode = 'none'; return; }
-      } else { two.mode = 'pinch'; startPinch(); }
+      } else { two.mode = 'pinch'; startPinch(); pinch.d0 = two.d0; } // 待っていた間の開き具合も、拡大に入れる
     }
     if (two.mode === 'pinch') { movePinch(); return; }
     if (two.mode !== 'turn') return;
@@ -950,6 +972,11 @@
   function endTwo(cancel) {
     var t = two; two = null;
     if (!t) return;
+    if (!t.mode && !cancel) { // 決まる前に離した、すばやい払い: 2本とも同じ向きに横へ動いていれば、めくる
+      var tw = two; two = t; var v = twoMoves(); two = tw;
+      if (classify(v, 8) === 'turn') { var d = v[0][0] + v[1][0] < 0 ? 1 : -1; if (T || turning) queued += d; else autoTurn(d); }
+      return;
+    }
     if (t.mode === 'pinch' && pinch) { if (cancel) cancelPinch(); else endPinch(); }
     else if (t.mode === 'turn') {
       if (t.g) turnUp(t.g, cancel);
