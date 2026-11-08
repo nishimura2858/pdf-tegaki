@@ -992,20 +992,38 @@
       ease = function (k) { return 1 - (1 - k) * (1 - k); };
     }
     var y0 = stage.scrollTop, y1 = go && !S.spread ? 0 : y0; // 縦画面では、次のページの上の端から
-    requestAnimationFrame(function step(now) {
-      var k = Math.min(1, (now - t0) / dur), e = ease(k);
+    t.step = function step(now) {
+      if (t.done) return;
+      var k = t.rush ? 1 : Math.min(1, (now - t0) / dur), e = ease(k);
       t.t = from + (to - from) * e; drawTurn();
       if (y1 !== y0) stage.scrollTop = y0 + (y1 - y0) * e;
       if (k < 1) { requestAnimationFrame(step); return; }
+      t.done = true;
       if (!go) { closeTurn(); return; }
       // めくった先へ。めくってきた絵を出したまま入れかえるので、見た目はつながる
       S.placeholder = baseNow(t.dest);
       S.swap = closeTurn;
       turning = false; // goPage を通すため（置きかえが済むまでは T が残っている）
       Promise.resolve(goPage(t.dest, true)).catch(function () {}).then(function () { if (T === t) closeTurn(); });
-    });
+    };
+    requestAnimationFrame(t.step);
   }
-  function closeTurn() { T = null; turning = false; turnEl.classList.remove('on'); turnEl.textContent = ''; }
+  // めくっている最中に次の操作が来たら、今のめくりをその場で終わらせる
+  function rushTurn() { if (T && T.anim && !T.done) { T.rush = true; T.step(performance.now()); } }
+  function closeTurn() {
+    T = null; turning = false; turnEl.classList.remove('on'); turnEl.textContent = '';
+    if (pan && pan.want) requestAnimationFrame(chainTurn); // 次のめくりを待っている指がある
+    else if (queued) { var d = queued > 0 ? 1 : -1; queued -= d; requestAnimationFrame(function () { if (startTurn(d)) settleTurn(true); else queued = 0; }); }
+  }
+  /* 続けてめくる: めくっている最中に、また指で払ったとき。
+     今のめくりを終わらせて、ページが入れかわりしだい、次のめくりを指につける */
+  var queued = 0; // 入れかわる前に払った回数（進む: +、戻る: -）
+  function chainTurn() {
+    if (!pan || !pan.want || pan.turn || T || turning) return;
+    var dir = pan.want;
+    if (startTurn(dir)) { pan.want = 0; pan.turn = { x0: pan.x0, hist: [] }; if (pan.last) turnMove(pan.last); }
+    else pan.want = 0;
+  }
   // ボタンや引っぱりから: 自動でめくる
   function autoTurn(dir) { if (startTurn(dir)) settleTurn(true); }
 
@@ -1034,13 +1052,17 @@
   }
   function panMove(e) {
     if (pan.turn) { turnMove(e); return; }
+    if (pan.want) { pan.last = e; chainTurn(); return; } // 入れかわりを待っている
     if (!pan.axis) {
       // 動き始めの向きで決める: 横 → (端なら) めくる / 縦 → スクロール
       var ax = e.clientX - pan.x0, ay = e.clientY - pan.y0;
       if (Math.hypot(ax, ay) < 10) return;
       pan.axis = Math.abs(ax) > Math.abs(ay) ? 'x' : 'y';
+      var busy = !!T;
+      if (busy) rushTurn(); // 前のめくりが終わっていなければ、すぐ終わらせる
       if (pan.axis === 'x') {
         var dir = ax < 0 ? 1 : -1;
+        if (busy && (dir > 0 ? pan.atR : pan.atL) && (T || turning)) { pan.want = dir; pan.last = e; return; }
         if ((dir > 0 ? pan.atR : pan.atL) && startTurn(dir)) {
           pan.turn = { x0: pan.x0, hist: [] };
           turnMove(e); return;
@@ -1140,7 +1162,7 @@
         dbg('指#' + e.pointerId + ' 無視（' + (drawing ? 'ペンで書いている最中' : 'ペンを離した直後') + '）');
         return;
       }
-      if (turning) return;
+      if (turning && !(T && T.anim)) return; // めくっている最中の指は、続けてめくれるように受け付ける
       // 投げ縄で選んだもの・貼った画像は、指でもつかんで動かせる
       var gh = tools[S.tool];
       if (gh && gh.grab && !Object.keys(touches).length) {
@@ -1163,6 +1185,7 @@
           atT: stage.scrollTop <= 1, atB: stage.scrollTop >= stage.scrollHeight - stage.clientHeight - 1, pull: 0 };
       }
       else if (n === 2) {
+        rushTurn();
         if (pan && pan.turn) turnUp(pan.turn, true);
         else if (pan && pan.pull) endPull(pan, true);
         pan = null; startPinch();
@@ -1230,6 +1253,7 @@
       if (pinch) endPinch();
       if (pan && pan.id === e.pointerId) {
         if (pan.turn) turnUp(pan.turn, e.type !== 'pointerup');
+        else if (pan.want) { if (e.type === 'pointerup') { if (T || turning) queued += pan.want; else autoTurn(pan.want); } } // 入れかわる前に離した: そのままめくる
         else if (pan.pull || pan.ready) endPull(pan, e.type !== 'pointerup');
         else if (e.type === 'pointerup') fingerUp(pan, e);
         pan = null;
