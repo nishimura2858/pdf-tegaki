@@ -13,16 +13,16 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="css/app.css?v=49">
+<link rel="stylesheet" href="css/app.css?v=50">
 </head>
-<body>
+<body class="home-on">
 <header>
   <!-- 藍色のバー（道具）。色・太さなどの設定は、動かせるパレットで選ぶ -->
   <div class="topbar">
     <div class="side left">
       <button class="btn icon" id="sideBtn" title="ページ一覧" aria-label="ページ一覧"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9 4v16M5.6 8.5h1.2M5.6 12h1.2M5.6 15.5h1.2"/></svg></button>
       <button class="btn icon" id="bookBtn" title="本のようにめくって探す" aria-label="本のようにめくって探す"><svg viewBox="0 0 24 24"><path d="M12 6.5C10 5 7 4.5 3.5 5v13c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5c-3.5-.5-6.5 0-8.5 1.5z"/><path d="M12 6.5v13"/></svg></button>
-      <button class="btn icon" id="openBtn" title="開く" aria-label="開く"><svg viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2h7.5A2.5 2.5 0 0 1 21 9.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg></button>
+      <button class="btn icon" id="openBtn" title="ホーム（PDFを選ぶ）" aria-label="ホーム（PDFを選ぶ）"><svg viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2h7.5A2.5 2.5 0 0 1 21 9.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg></button>
       <input id="file" type="file" accept="application/pdf" hidden>
     </div>
     <div class="center tools">
@@ -71,7 +71,6 @@
     <div id="scrub"><i></i><b class="mark"></b></div><!-- なぞってパラパラめくるバー -->
     </div>
     <div id="hint">
-      <div class="recent-list big" id="hintRecent"></div>
       <strong>左上のフォルダのボタンからPDFを選ぶと、Apple Pencilで書き込めます</strong>
       <span>ファイルアプリの「Googleドライブ」からも選べます。<br>手書きはこのiPadとGoogleドライブに自動保存され、同じPDFを開くと復元されます。<br>Googleドライブから開いたPDFには、書き込みがPDFそのものにも反映されます（30分おきと、アプリを離れたとき）。<br>左下の丸いボタンで、色・太さなどのパレットを開けます（ドラッグで移動）。<br>指1本で左右に払うとページをめくれます（拡大しているときは、紙の端までスクロールしてからもう一度払う。横向きにすると見開き）。2回タップで拡大／元の大きさ。ページの下で指を上に引っぱっても次のページへ（最後のページではページを追加）。指2本のピンチで拡大縮小もできます。</span>
     </div>
@@ -87,9 +86,36 @@
   </div>
 </div>
 
+<!-- ホーム画面: アプリを開くと最初に出る。PDFを選ぶ -->
+<div id="home">
+  <div class="h-top">
+    <h1>手書きノート</h1>
+    <button class="h-close" id="homeClose" hidden>書く画面に戻る</button>
+  </div>
+  <section class="h-sec">
+    <div class="h-open">
+      <button class="h-card" id="homePick"><svg viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2h7.5A2.5 2.5 0 0 1 21 9.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg><span><b>ファイルアプリから開く</b><small>このiPad・iCloud Drive・Googleドライブなど</small></span></button>
+      <button class="h-card" id="homeBlank"><svg viewBox="0 0 24 24"><path d="M6.5 3.5h7l4 4v13h-11z"/><path d="M13.5 3.5v4h4"/><path d="M12 11.5v6M9 14.5h6"/></svg><span><b>白紙のノート</b><small>PDFなしで書き始める</small></span></button>
+    </div>
+  </section>
+  <section class="h-sec">
+    <div class="h-head"><h2 id="favTitle">お気に入り</h2><div class="h-crumb" id="favCrumb"></div><button class="h-link" id="newFolder">＋ フォルダを作る</button></div>
+    <div class="h-grid" id="favGrid"></div>
+    <p class="h-empty" id="favEmpty"></p>
+  </section>
+  <section class="h-sec">
+    <div class="h-head"><h2>最近開いたPDF</h2></div>
+    <div class="h-grid" id="recentGrid"></div>
+    <p class="h-empty" id="recentEmpty" hidden>まだありません。「ファイルアプリから開く」でPDFを選んでください</p>
+  </section>
+  <details class="h-help"><summary>使い方</summary><p>ファイルアプリの「Googleドライブ」からも選べます。<br>手書きはこのiPadとGoogleドライブに自動保存され、同じPDFを開くと復元されます。<br>Googleドライブから開いたPDFには、書き込みがPDFそのものにも反映されます（30分おきと、アプリを離れたとき）。<br>左下の丸いボタンで、色・太さなどのパレットを開けます（ドラッグで移動）。<br>指1本で左右に払うとページをめくれます（拡大しているときは、紙の端までスクロールしてからもう一度払う。横向きにすると見開き）。2回タップで拡大／元の大きさ。ページの下で指を上に引っぱっても次のページへ（最後のページではページを追加）。指2本のピンチで拡大縮小もできます。</p></details>
+</div>
+
 <!-- ポップアップ（ボタンの下にふわっと出る） -->
 <div class="pop menu" id="moreMenu">
   <button class="item" id="shareBtn"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M7 10.5H6A1.5 1.5 0 0 0 4.5 12v7.5A1.5 1.5 0 0 0 6 21h12a1.5 1.5 0 0 0 1.5-1.5V12a1.5 1.5 0 0 0-1.5-1.5h-1"/></svg>PDFとして共有</button>
+  <button class="item check" id="favBtn" aria-pressed="false" hidden>お気に入り<small>ホーム画面の「お気に入り」に入れておきます</small></button>
+  <div class="mline"></div>
   <div class="mhead">ページを追加（ページの下で上に引っぱっても追加できます）</div>
   <button class="item" data-add="same">同じページを次に追加</button>
   <button class="item" data-add="blank">白紙のページを次に追加</button>
@@ -124,11 +150,7 @@
     <button class="swatch" data-pick="#ffffff" style="--c:#ffffff" aria-label="白"></button>
   </div>
 </div>
-<div class="pop" id="recentPop">
-  <button class="item open-file" id="pickFile">ファイルアプリから選ぶ…</button>
-  <div class="pop-title" id="recentTitle">最近開いたPDF</div>
-  <div class="recent-list" id="recentList"></div>
-</div>
+<div class="pop menu" id="homeMenu"></div>
 <div class="pop" id="searchPop">
   <!-- 文字入力欄は開いたときだけ作る（スクリブル対策） -->
   <div id="searchSlot"></div>
@@ -198,21 +220,22 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async></script>
-<script src="js/config.js?v=49"></script>
-<script src="js/app.js?v=49"></script>
-<script src="js/shapes.js?v=49"></script>
-<script src="js/toolbar.js?v=49"></script>
-<script src="js/lasso.js?v=49"></script>
-<script src="js/pages.js?v=49"></script>
-<script src="js/google-auth.js?v=49"></script>
-<script src="js/drive.js?v=49"></script>
-<script src="js/drive-sync.js?v=49"></script>
+<script src="js/config.js?v=50"></script>
+<script src="js/app.js?v=50"></script>
+<script src="js/shapes.js?v=50"></script>
+<script src="js/toolbar.js?v=50"></script>
+<script src="js/lasso.js?v=50"></script>
+<script src="js/pages.js?v=50"></script>
+<script src="js/google-auth.js?v=50"></script>
+<script src="js/drive.js?v=50"></script>
+<script src="js/drive-sync.js?v=50"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"></script>
-<script src="js/pdf-open.js?v=49"></script>
-<script src="js/pdf-write.js?v=49"></script>
-<script src="js/share.js?v=49"></script>
-<script src="js/palette.js?v=49"></script>
-<script src="js/slide.js?v=49"></script>
+<script src="js/home.js?v=50"></script>
+<script src="js/pdf-open.js?v=50"></script>
+<script src="js/pdf-write.js?v=50"></script>
+<script src="js/share.js?v=50"></script>
+<script src="js/palette.js?v=50"></script>
+<script src="js/slide.js?v=50"></script>
 <script>
 // 電波がなくても開けるように、アプリの部品をこの端末に取っておく（sw.js）
 // 新しい版が届いたら: PDFを開いていなければすぐ、開いていれば、ほかのアプリから戻ってきたときに読み直す
@@ -222,7 +245,7 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').then(function (reg) {
     document.addEventListener('visibilitychange', function () {
       if (document.hidden) return;
-      if (newVer) { location.reload(); return; }
+      if (newVer) { try { if (document.body.classList.contains('has-file')) sessionStorage.setItem('tegaki:reopen', '1'); } catch (e) {} location.reload(); return; } // 書いていたPDFは開き直す
       reg.update().catch(function () {}); // 戻ってくるたびに、新しい版がないか見る
     });
   }).catch(function (e) { console.error(e); });

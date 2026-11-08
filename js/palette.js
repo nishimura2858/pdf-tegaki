@@ -11,11 +11,15 @@
   var KEY = 'ui:palette', SIZE = 52, MARGIN = 10;
   var pos = null, drag = null;
 
-  function headerBottom() { return document.querySelector('header').getBoundingClientRect().bottom; }
+  // 道具のバーの外側（上のバーなら下、横画面で左に縦に並んでいるなら右）に置く
+  function barEdge() {
+    var r = document.querySelector('header').getBoundingClientRect();
+    return r.height > r.width * 2 ? { x: r.right, y: 0 } : { x: 0, y: r.bottom };
+  }
   function place(x, y) {
-    var maxX = window.innerWidth - SIZE - MARGIN, maxY = window.innerHeight - SIZE - MARGIN - 40;
-    x = Math.max(MARGIN, Math.min(maxX, x));
-    y = Math.max(headerBottom() + MARGIN, Math.min(maxY, y));
+    var maxX = window.innerWidth - SIZE - MARGIN, maxY = window.innerHeight - SIZE - MARGIN - 40, e = barEdge();
+    x = Math.max(e.x + MARGIN, Math.min(maxX, x));
+    y = Math.max(e.y + MARGIN, Math.min(maxY, y));
     pos = { x: x, y: y };
     pal.style.left = x + 'px'; pal.style.top = y + 'px';
   }

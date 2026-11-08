@@ -82,6 +82,18 @@
     closePops();
     var r = anchor.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
     var cx = r.left + r.width / 2;
+    // 横画面で道具のバーが左に縦に並んでいるときは、ボタンの右に出す
+    var bar = anchor.closest('.topbar');
+    pop.classList.toggle('side', !!bar && bar.offsetHeight > bar.offsetWidth * 2);
+    if (pop.classList.contains('side')) {
+      var cy = r.top + r.height / 2, top = Math.max(8, Math.min(window.innerHeight - h - 8, cy - h / 2));
+      pop.classList.remove('up');
+      pop.style.left = (r.right + 12) + 'px'; pop.style.top = top + 'px';
+      pop.style.setProperty('--ay', (cy - top) + 'px');
+      pop.classList.add('open');
+      openPop = { pop: pop, anchor: anchor };
+      return;
+    }
     var left = Math.max(8, Math.min(window.innerWidth - w - 8, cx - w / 2));
     // 下に入りきらないときは、ボタンの上に出す（パレットが画面の下にあるときなど）
     var up = r.bottom + 10 + h > window.innerHeight - 8 && r.top - 10 - h > 8;

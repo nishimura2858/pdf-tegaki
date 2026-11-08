@@ -3,7 +3,7 @@
    - 書き込み入りPDF（元のPDFに書き込みを反映したもの）を開いたときは、元のPDF＋手書きデータとして開く
    - 開いたPDFはこの端末（IndexedDB）に控えを取る。ログインで画面を離れて戻ったときや、
      次にアプリを開いたときに、前回のPDFを自動で開き直すため
-   - 最近開いたPDF（12個まで）も控えておき、「開く」ボタンからタップ1回で開ける
+   - 最近開いたPDF（12個まで）も控えておき、ホーム画面（home.js）からタップ1回で開ける
      IndexedDB: 'recentIndex' = [{ id, name, at }]（id はファイルの中身の SHA-256）,
                 'recent:<id>' = { name, data }, 'thumb:<id>' = 1ページ目の小さな絵（data URL） */
 (function () {
@@ -143,14 +143,22 @@
       g.onsuccess = function () {
         var list = (Array.isArray(g.result) ? g.result : []).filter(function (x) { return x.id !== id; });
         list.unshift({ id: id, name: name, at: Date.now() });
-        list.slice(RECENT_MAX).forEach(function (x) { st.delete('recent:' + x.id); st.delete('thumb:' + x.id); });
+        list.slice(RECENT_MAX).forEach(function (x) { st.delete('recent:' + x.id); dropThumb(st, x.id); });
         st.put(list.slice(0, RECENT_MAX), 'recentIndex');
       };
     }).catch(function (err) { console.error(err); });
   }
+  // 小さな絵は、お気に入りに入っていれば残す
+  function dropThumb(st, id) {
+    var g = st.get('favIndex');
+    g.onsuccess = function () {
+      var items = g.result && Array.isArray(g.result.items) ? g.result.items : [];
+      if (!items.some(function (x) { return x.id === id; })) st.delete('thumb:' + id);
+    };
+  }
   function removeRecent(id) {
     return idb('readwrite', function (st) {
-      st.delete('recent:' + id); st.delete('thumb:' + id);
+      st.delete('recent:' + id); dropThumb(st, id);
       var g = st.get('recentIndex');
       g.onsuccess = function () {
         st.put((Array.isArray(g.result) ? g.result : []).filter(function (x) { return x.id !== id; }), 'recentIndex');
@@ -186,62 +194,29 @@
     addRecent(id, name, buf).then(function () { saveThumb(1200); });
   }
 
-  function esc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
-  function when(at) {
-    var d = new Date(at), now = new Date();
-    if (d.toDateString() === now.toDateString()) return d.getHours() + ':' + ('0' + d.getMinutes()).slice(-2);
-    return (d.getMonth() + 1) + '/' + d.getDate();
-  }
-  async function renderRecent(el) {
-    var list = await recentIndex(), th = await thumbs(list.map(function (x) { return x.id; }));
-    el.innerHTML = list.map(function (x) {
-      var name = String(x.name || 'PDF').replace(/\.pdf$/i, '');
-      return '<div class="recent' + (x.id === curRecent ? ' on' : '') + '" data-rid="' + x.id + '">' +
-        '<button class="r-open" data-rid="' + x.id + '"><span class="r-thumb">' +
-        (th[x.id] ? '<img alt="" src="' + th[x.id] + '">' : '') + '</span>' +
-        '<span class="r-name">' + esc(name) + '</span><span class="r-when">' + when(x.at) + '</span></button>' +
-        '<button class="r-del" data-del="' + x.id + '" aria-label="一覧から外す">×</button></div>';
-    }).join('');
-    return list.length;
-  }
-  async function openRecent(id) {
+  /* 端末に取っておいたPDFを開く（key: 'recent:<id>' または 'fav:<id>'）。開けたら true */
+  async function openStored(key, id) {
     try {
-      var rec = await idb('readonly', function (st) { return st.get('recent:' + id); });
-      if (!rec || !rec.data) { App.setStatus('このPDFの控えが見つかりませんでした'); removeRecent(id); return; }
+      var rec = await idb('readonly', function (st) { return st.get(key); });
+      if (!rec || !rec.data) {
+        App.setStatus('このPDFの控えが見つかりませんでした');
+        if (key.indexOf('recent:') === 0) await removeRecent(id);
+        return false;
+      }
       App.setStatus('読み込み中…');
       var sha = await openBytes(rec.data, rec.name);
       remember(sha, rec.name, rec.data);
       saveLast({ name: rec.name, data: rec.data, at: Date.now() }).catch(function (err) { console.error(err); });
+      return true;
     } catch (err) {
       console.error(err);
       App.setStatus('PDFを開けませんでした');
+      return false;
     }
-  }
-  function onListClick(e) {
-    var del = e.target.closest('[data-del]');
-    if (del) {
-      var row = del.closest('.recent'); if (row) row.remove();
-      removeRecent(del.dataset.del);
-      return;
-    }
-    var b = e.target.closest('.r-open'); if (!b) return;
-    App.toolbar.closePops();
-    openRecent(b.dataset.rid);
   }
   var $ = function (id) { return document.getElementById(id); };
-  $('recentList').addEventListener('click', onListClick);
-  $('hintRecent').addEventListener('click', onListClick);
-  // 「開く」ボタン: すぐにメニューを出し、最近のPDFはあとから並べる。
-  // （iPadでは、タップから少しでも待つとファイルアプリを開かせてもらえないので、
-  //   ファイルアプリはメニューの「ファイルアプリから選ぶ」を押したときに開く）
-  $('openBtn').addEventListener('click', function (e) {
-    var pop = $('recentPop');
-    if (pop.classList.contains('open')) { App.toolbar.closePops(); return; }
-    $('recentTitle').hidden = true;
-    App.toolbar.showPop(pop, e.currentTarget);
-    renderRecent($('recentList')).then(function (n) { $('recentTitle').hidden = !n; }).catch(function (err) { console.error(err); });
-  });
-  $('pickFile').addEventListener('click', function () { App.toolbar.closePops(); $('file').click(); });
+  // 左上のフォルダのボタン: ホーム画面（PDFを選ぶ画面）に戻る
+  $('openBtn').addEventListener('click', function () { Home.show(); });
 
   document.getElementById('file').addEventListener('change', async function (e) {
     var f = e.target.files[0]; e.target.value = '';
@@ -277,14 +252,19 @@
   (async function () {
     var r = await GAuth.consumeRedirect();
     if (r) GAuth.takeAfter();
-    var opened = await reopenLast(!r);
-    if (!opened) renderRecent($('hintRecent')).catch(function () {}); // 何も開いていなければ、最初の画面に最近のPDFを並べる
+    // ふだんはホーム画面（PDFを選ぶ画面）から始める。
+    // ログインから戻ったときと、新しい版に切り替えて読み直したときだけ、前のPDFを開き直す
+    var again = false;
+    try { again = sessionStorage.getItem('tegaki:reopen') === '1'; sessionStorage.removeItem('tegaki:reopen'); } catch (e) {}
+    var opened = (r || again) ? await reopenLast(!r) : false;
+    if (!opened) Home.render().catch(function () {});
     if (r && r.error) App.setStatus(message(r.error));
     else if (r && opened && !needLogin) App.setStatus('ログインしました');
   })();
 
   window.PdfOpen = {
-    reopenLast: reopenLast, message: message, md5: md5, getOrigLocal: getOrigLocal,
+    reopenLast: reopenLast, message: message, idb: idb, recentIndex: recentIndex, thumbs: thumbs,
+    openStored: openStored, removeRecent: removeRecent, current: function () { return curRecent; }, md5: md5, getOrigLocal: getOrigLocal,
     needLogin: function () { return needLogin; },
     takePending: function () { var p = pending; pending = null; return p; }
   };
