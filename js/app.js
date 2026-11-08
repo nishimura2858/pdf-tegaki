@@ -1160,9 +1160,12 @@
       if (!go) { closeTurn(); return; }
       // めくった先へ。めくってきた絵を出したまま入れかえるので、見た目はつながる
       S.placeholder = baseNow(t.dest) || quickNow(t.dest);
-      S.swap = closeTurn;
+      var close = function () { if (T === t) closeTurn(); }; // あとから届いても、次のめくりは閉じない
+      S.swap = close;
       turning = false; // goPage を通すため（置きかえが済むまでは T が残っている）
-      Promise.resolve(goPage(t.dest, true)).catch(function () {}).then(function () { if (T === t) closeTurn(); });
+      Promise.resolve(goPage(t.dest, true)).catch(function () {}).then(close);
+      // 次の紙の描画がなかなか終わらなくても、めくりが止まったままにならないように
+      setTimeout(function () { if (T === t) { dbg('!! めくりの置きかえが遅いので打ち切り'); if (S.swap === close) S.swap = null; closeTurn(); } }, 1500);
     };
     requestAnimationFrame(t.step);
   }
@@ -1411,28 +1414,49 @@
     } else lastTap = null;
   }
 
+  /* ペンを離した知らせが届かず「書いている最中」のまま残ると、指もペンも効かなくなる。
+     4秒以上まったく動いていなければ、離したことにして線を確定させる */
+  var drawAt = 0, drawLast = null;
+  function dropStaleDrawing(e) {
+    if (!drawing || e.pointerId === drawing.id || performance.now() - drawAt < 4000) return;
+    dbg('!! 離した知らせが届かなかった線#' + drawing.id + 'を確定');
+    var l = drawLast || e;
+    endPointer({ pointerId: drawing.id, type: 'pointerup', pointerType: l.pointerType, clientX: l.clientX, clientY: l.clientY, pressure: l.pressure });
+    lastPenUp = 0; // ペンはずっと前に離れているので、いまの指を手のひらとして無視しない
+  }
   function onInkDown(e) {
     if (!S.hasFile) return;
     e.preventDefault();
+    dropStaleDrawing(e);
     // 指はスクロール・ページめくり（1本で横に払う）・拡大縮小（2本）に使う（書くのはペンだけ）
     if (e.pointerType === 'touch') {
       if (drawing || performance.now() - lastPenUp < 500) { // 手のひらの接触は無視
         dbg('指#' + e.pointerId + ' 無視（' + (drawing ? 'ペンで書いている最中' : 'ペンを離した直後') + '）');
         return;
       }
+      // 1本目の指なのに、前の指が残っている（離した知らせが届かなかった）: 片づけてから始める
+      if (e.isPrimary && Object.keys(touches).length) {
+        dbg('!! 離れたはずの指が残っていたので片づけ');
+        touches = {};
+        if (pinch) cancelPinch();
+        if (pan && pan.turn) turnUp(pan.turn, true);
+        else if (pan && pan.pull) endPull(pan, true);
+        pan = null;
+      }
+      if (T && !T.anim && !pan) settleTurn(false); // 指が離れたのに途中で止まっているめくり: 戻す
       if (turning && !(T && T.anim)) return; // めくっている最中の指は、続けてめくれるように受け付ける
       // 投げ縄で選んだもの・貼った画像は、指でもつかんで動かせる
       var gh = tools[S.tool];
       if (gh && gh.grab && !Object.keys(touches).length) {
         S.rc = ink.getBoundingClientRect();
         if (gh.grab(pos(e), e)) {
-          drawing = { id: e.pointerId, h: gh, touch: true };
-          ink.setPointerCapture(e.pointerId);
+          drawing = { id: e.pointerId, h: gh, touch: true }; drawAt = performance.now(); drawLast = e;
+          try { ink.setPointerCapture(e.pointerId); } catch (er) {}
           return;
         }
       }
       touches[e.pointerId] = { x: e.clientX, y: e.clientY };
-      ink.setPointerCapture(e.pointerId);
+      try { ink.setPointerCapture(e.pointerId); } catch (er) {}
       var n = Object.keys(touches).length;
       dbg('指#' + e.pointerId + ' 接触 → ' + (n === 1 ? 'スクロール扱い' : n === 2 ? 'ピンチ扱い' : n + '本目'));
       if (n === 1) {
@@ -1454,7 +1478,8 @@
     dbg('ペン#' + e.pointerId + '(' + e.pointerType + ') 書き始め' + (Object.keys(touches).length ? '（指' + Object.keys(touches).length + '本を解除）' : ''));
     if (pan && pan.pull) endPull(pan, true);
     pan = null; touches = {}; if (pinch) cancelPinch();
-    ink.setPointerCapture(e.pointerId);
+    drawAt = performance.now(); drawLast = e;
+    try { ink.setPointerCapture(e.pointerId); } catch (er) {}
     S.rc = ink.getBoundingClientRect(); // 書き始めに1回だけ取得
     var pt = pos(e);
     var h = tools[S.tool];
@@ -1487,6 +1512,7 @@
     if (pan && e.pointerId === pan.id) { panMove(e); return; }
     if (!drawing || e.pointerId !== drawing.id) return;
     e.preventDefault();
+    drawAt = performance.now(); drawLast = e;
     var evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
     if (!evs.length) evs = [e];
     if (drawing.h) { evs.forEach(function (ev) { drawing.h.move(pos(ev), ev); }); return; }
