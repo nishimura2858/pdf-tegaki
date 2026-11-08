@@ -370,9 +370,14 @@
     spine.style.left = lw + 'px'; spine.style.height = S.cssH + 'px';
     layoutEdges(w);
   }
-  /* 小口: 紙の左右の外側。厚さは、その向きに残っているページ数で変わる */
-  var edgeL = $('edgeL'), edgeR = $('edgeR');
+  /* 小口: 紙の左右の外側。厚さは、その向きに残っているページ数で変わる。
+     下のバー（scrub）も、ここで紙の幅に合わせる */
+  var edgeL = $('edgeL'), edgeR = $('edgeR'), scrub = $('scrub'), scrubMark = scrub.querySelector('.mark');
+  var FLOW_PAD = 48, EDGE_ROOM = 36; // 紙の上下の余白（上4 + 下44: バーの分）、小口の場所（片側）
   function layoutEdges(w) {
+    scrub.classList.toggle('on', S.hasFile && S.total > 1);
+    scrub.style.width = w + 'px'; scrub.style.top = (4 + S.cssH + 4) + 'px';
+    if (!scrubG) markAt(S.page);
     var room = Math.floor((stage.clientWidth - w) / 2) - 1, h = S.cssH;
     var lo = S.spread ? leftOf(S.page) : S.page, hi = S.spread ? lo + 1 : S.page;
     [[edgeL, lo - 1], [edgeR, S.total - hi]].forEach(function (a) {
@@ -380,7 +385,7 @@
       var on = S.hasFile && n > 0 && room >= 8;
       el.classList.toggle('on', on);
       if (!on) return;
-      var th = Math.min(room - 2, 34), k = Math.min(1, n / Math.max(20, S.total));
+      var th = Math.min(room - 2, EDGE_ROOM - 2), k = Math.min(1, n / Math.max(20, S.total));
       el.style.width = room + 'px'; el.style.height = h + 'px';
       el.style.left = (el === edgeL ? -room : w) + 'px';
       el.style.setProperty('--th', Math.round(Math.max(6, Math.min(th, 6 + (th - 6) * Math.sqrt(k)))) + 'px');
@@ -412,7 +417,7 @@
     var cssW, cssH;
     if (S.spread) {
       var a = bw / bh + (msz ? msz.w / msz.h : bw / bh);
-      cssH = Math.max(160, Math.min(stage.clientHeight - 18, (stage.clientWidth - 24) / a) * S.zoom);
+      cssH = Math.max(160, Math.min(stage.clientHeight - FLOW_PAD, (stage.clientWidth - 24) / a) * S.zoom);
       cssW = cssH * bw / bh;
     } else {
       cssW = Math.max(240, (stage.clientWidth - 24) * S.zoom);
@@ -426,7 +431,7 @@
     if (S.swap) { var sw = S.swap; S.swap = null; sw(); } // めくり終わったあとの置きかえ（同じ瞬間に）
     updateStill();
     // 画面より小さいとき（縮小・見開き）は、上下のまん中に
-    flow.style.marginTop = Math.max(0, Math.floor((stage.clientHeight - cssH - 18) / 2)) + 'px';
+    flow.style.marginTop = Math.max(0, Math.floor((stage.clientHeight - cssH - FLOW_PAD) / 2)) + 'px';
     // 同じページの描き直し（拡大・画面の回転）では、描き終わるまで今の絵を引き伸ばして出しておく（白く点滅しないように）
     var shown = S.key + ':' + S.page + ':' + entry().src, changed = shown !== lastShown, old = null;
     var pw = Math.floor(cssW * dprPdf), ph = Math.floor(cssH * dprPdf);
@@ -697,7 +702,7 @@
     S.page = n; S.live = null;
     if (!keepScroll) stage.scrollTo(0, 0);
     var done = renderPage();
-    flashPager();
+    flashPager(scrubG && scrubG.n ? labelOf(scrubG.n) : undefined); // バーをなぞっている間は、行き先の番号
     emit('page');
     return done;
   }
@@ -801,13 +806,11 @@
   var drawing = null, pan = null, erased = false;
   var touches = {}, pinch = null, lastPenUp = 0, rafId = 0, drawnIdx = 0;
 
-  /* 縮小できる限界: ページ（見開きなら2ページぶん）が画面に収まって、まわりに約2.5cm残るところまで。
-     iPadの画面では 1cm ≒ 52px（CSSの単位） */
-  var CM = 52;
+  /* 縮小できる限界: 紙（見開きなら2ページぶん）と左右の小口が、画面の横幅にちょうど収まるところまで */
   function minZoom() {
     if (!S.cssW || !S.zoom) return 0.5;
-    var w1 = flow.offsetWidth / S.zoom, h1 = S.cssH / S.zoom, m = 2.5 * CM * 2;
-    var z = Math.min((stage.clientWidth - m) / w1, (stage.clientHeight - m) / h1);
+    var w1 = flow.offsetWidth / S.zoom;
+    var z = (stage.clientWidth - 2 * EDGE_ROOM) / w1;
     return Math.max(0.3, Math.min(1, Math.round(z * 100) / 100));
   }
   function tMetrics() {
@@ -1041,13 +1044,51 @@
   var queued = 0; // 入れかわる前に払った回数（進む: +、戻る: -）
   /* 小口を長押し: 押さえている間、次々にページがめくれる（だんだん速く）。軽くたたくと1ページ */
   var rapid = null, EDGE_HOLD = 250;
+  function stepsTo(n) { return S.spread ? Math.round((leftOf(n) - leftOf(S.page)) / 2) : n - S.page; }
   function rapidNext() {
     if (!rapid || T || turning) return;
+    if (rapid.target) { // 下のバー: 指の位置のページへ向かってめくる
+      var k = stepsTo(rapid.target);
+      if (!k) { if (rapid.done) rapid = null; return; }
+      if (rapid.done && Math.abs(k) > 3) { var tg = rapid.target; rapid = null; goPage(tg); return; } // 離したあと遠ければ、ひと息に
+      var d = k > 0 ? 1 : -1;
+      if (d !== rapid.dir) { rapid.dir = d; rapid.n = 0; }
+    }
     var t = startTurn(rapid.dir);
     if (!t) { rapid = null; return; } // 端まで来た
-    t.fast = ++rapid.n;
+    t.fast = rapid.target && Math.abs(k) > 2 ? Math.max(6, ++rapid.n) : ++rapid.n;
     settleTurn(true);
   }
+  /* 下のバー: なぞった位置のページまで、パラパラめくる。離すとそこで止まる */
+  var scrubG = null;
+  function labelOf(n) { var m = S.spread ? partner(n) : 0; return (m ? Math.min(n, m) + '-' + Math.max(n, m) : n) + ' / ' + S.total; }
+  function markAt(n) { scrubMark.style.left = (S.total > 1 ? (n - 1) / (S.total - 1) * 100 : 50) + '%'; }
+  function scrubAt(x) {
+    var r = scrub.getBoundingClientRect(), f = Math.min(1, Math.max(0, (x - r.left) / (r.width || 1)));
+    var n = Math.round(1 + f * (S.total - 1));
+    markAt(n);
+    if (n === scrubG.n) return;
+    scrubG.n = n; flashPager(labelOf(n));
+    if (!rapid || !rapid.target) rapid = { dir: 0, n: 0, target: n }; else rapid.target = n;
+    if (!T && !turning) rapidNext();
+  }
+  scrub.addEventListener('pointerdown', function (e) {
+    e.preventDefault();
+    if (scrubG || !S.hasFile) return;
+    try { scrub.setPointerCapture(e.pointerId); } catch (er) {}
+    scrubG = { id: e.pointerId, n: 0 }; scrub.classList.add('press');
+    scrubAt(e.clientX);
+  });
+  scrub.addEventListener('pointermove', function (e) { if (scrubG && e.pointerId === scrubG.id) scrubAt(e.clientX); });
+  function scrubEnd(e) {
+    if (!scrubG || e.pointerId !== scrubG.id) return;
+    scrubG = null; scrub.classList.remove('press');
+    if (rapid && rapid.target) { rapid.done = true; if (!T && !turning) rapidNext(); }
+    if (!rapid) markAt(S.page);
+  }
+  scrub.addEventListener('pointerup', scrubEnd);
+  scrub.addEventListener('pointercancel', scrubEnd);
+  scrub.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   [edgeL, edgeR].forEach(function (el) {
     var hold = null;
     el.addEventListener('pointerdown', function (e) {
@@ -1058,6 +1099,7 @@
       el.classList.add('press');
       hold = { id: e.pointerId, dir: dir, timer: setTimeout(function () {
         hold.long = true;
+        if (scrubG) return;
         rapid = { dir: dir, n: 0 };
         if (T) rushTurn(); else rapidNext();
       }, EDGE_HOLD) };
