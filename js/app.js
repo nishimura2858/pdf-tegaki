@@ -297,7 +297,7 @@
   function capDpr(w, h) { return Math.max(0.5, Math.min(Math.min(window.devicePixelRatio || 1, 2), Math.sqrt(1.6e6 / (w * h)))); }
 
   // ページの紙とPDFだけの絵（手書きは重ねるときに描く）。めくるとき・見開きの片方に使う
-  var baseCache = {}, baseList = [], BASE_KEEP = 8;
+  var baseCache = {}, baseList = [], BASE_KEEP = 12;
   function baseKey(n, css) { var e = entry(n); return [S.key, sizeKey(n), e.bg || '', Math.round(css.w)].join('|'); }
   function getBase(n) {
     return sizeOf(n).then(function (sz) {
@@ -508,7 +508,7 @@
     clearTimeout(preTimer);
     preTimer = setTimeout(function () {
       var L = leftOf(S.page);
-      var list = S.spread ? [L + 2, L + 3, L - 1, L - 2] : [S.page + 1, S.page - 1];
+      var list = S.spread ? [L + 2, L + 3, L - 1, L - 2, L + 4, L + 5] : [S.page + 1, S.page - 1, S.page + 2];
       list.filter(function (n) { return n >= 1 && n <= S.total; })
         .reduce(function (p, n) { return p.then(function () { return getBase(n); }).catch(function () {}); }, Promise.resolve());
     }, 150);
@@ -1054,6 +1054,19 @@
   var queued = 0; // 入れかわる前に払った回数（進む: +、戻る: -）
   /* 小口を長押し: 押さえている間、次々にページがめくれる（だんだん速く）。軽くたたくと1ページ */
   var rapid = null, EDGE_HOLD = 250;
+  /* めくるときに見える紙のページ（k: 何回先のめくりか。0 = 次のめくり） */
+  function turnPages(dir, k) {
+    var L = S.spread ? leftOf(S.page) : S.page, o = k * 2, list;
+    if (S.spread) list = dir > 0 ? [L + 2 + o, L + 3 + o] : [L - 1 - o, L - 2 - o];
+    else list = [S.page + dir * (1 + k)];
+    return list.filter(function (n) { return n >= 1 && n <= S.total; });
+  }
+  // 連続めくりの間は、先の2回ぶんの絵を順に用意しておく
+  function ahead(dir) {
+    turnPages(dir, 1).concat(turnPages(dir, 2)).reduce(function (p, n) {
+      return p.then(function () { return getBase(n); }).catch(function () {});
+    }, Promise.resolve());
+  }
   function stepsTo(n) { return S.spread ? Math.round((leftOf(n) - leftOf(S.page)) / 2) : n - S.page; }
   function rapidNext() {
     if (!rapid || T || turning) return;
@@ -1064,8 +1077,20 @@
       var d = k > 0 ? 1 : -1;
       if (d !== rapid.dir) { rapid.dir = d; rapid.n = 0; }
     }
+    // 次にめくる紙の絵がまだなら、描けるまで待ってからめくる（白い紙が見えないように）
+    var need = turnPages(rapid.dir, 0).filter(function (n) { return !baseNow(n); });
+    if (need.length) {
+      if (rapid.wait) return;
+      var r0 = rapid; r0.wait = true;
+      Promise.all(need.map(function (n) { return getBase(n).catch(function () {}); })).then(function () {
+        if (rapid !== r0) return;
+        r0.wait = false; rapidNext();
+      });
+      return;
+    }
     var t = startTurn(rapid.dir);
     if (!t) { rapid = null; return; } // 端まで来た
+    ahead(rapid.dir);
     t.fast = rapid.target && Math.abs(k) > 2 ? Math.max(6, ++rapid.n) : ++rapid.n;
     settleTurn(true);
   }
