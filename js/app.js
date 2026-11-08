@@ -981,7 +981,10 @@
     t.anim = true;
     var from = t.t, to = go ? 1 : t.rest, d = Math.abs(to - from), t0 = performance.now(), dur, ease;
     var auto = vt === undefined;
-    if (go && vt > 0.0005) {
+    if (go && t.fast) {
+      dur = Math.max(80, 200 - 20 * t.fast);                 // 押さえたままの連続めくり: だんだん速く
+      ease = function (k) { return k; };
+    } else if (go && vt > 0.0005) {
       dur = Math.max(60, Math.min(180, 1.0 * d / vt));          // 指の速さの倍で始まり、減速して止まる
       ease = function (k) { return 1 - (1 - k) * (1 - k); };
     } else if (go && auto) {
@@ -1012,12 +1015,29 @@
   function rushTurn() { if (T && T.anim && !T.done) { T.rush = true; T.step(performance.now()); } }
   function closeTurn() {
     T = null; turning = false; turnEl.classList.remove('on'); turnEl.textContent = '';
-    if (pan && pan.want) requestAnimationFrame(chainTurn); // 次のめくりを待っている指がある
+    if (pan && pan.turn && pan.turn.rapid) requestAnimationFrame(rapidNext); // 指で押さえたまま: 次々めくる
+    else if (pan && pan.want) requestAnimationFrame(chainTurn); // 次のめくりを待っている指がある
     else if (queued) { var d = queued > 0 ? 1 : -1; queued -= d; requestAnimationFrame(function () { if (startTurn(d)) settleTurn(true); else queued = 0; }); }
   }
   /* 続けてめくる: めくっている最中に、また指で払ったとき。
      今のめくりを終わらせて、ページが入れかわりしだい、次のめくりを指につける */
   var queued = 0; // 入れかわる前に払った回数（進む: +、戻る: -）
+  /* 連続めくり（試験的）: めくりかけたまま、指を離さずに止めておくと、次々にページがめくれる。
+     指を離すか、反対の向きへ戻すと止まる */
+  var HOLD_MS = 450;
+  function holdTurn(g) {
+    if (!pan || pan.turn !== g || g.rapid || !T || T.anim || T.t <= T.go) return;
+    g.rapid = T.dir; g.n = 1; T.fast = 1;
+    settleTurn(true);
+  }
+  function rapidNext() {
+    var g = pan && pan.turn;
+    if (!g || !g.rapid || T || turning) return;
+    var t = startTurn(g.rapid);
+    if (!t) { g.rapid = 0; return; } // 端まで来た
+    t.fast = ++g.n;
+    settleTurn(true);
+  }
   function chainTurn() {
     if (!pan || !pan.want || pan.turn || T || turning) return;
     var dir = pan.want;
@@ -1087,11 +1107,20 @@
   }
   function turnMove(e) {
     var g = pan.turn, now = performance.now();
+    if (g.rapid) { // 連続めくりの最中: 反対の向きへ戻したら止める
+      if ((e.clientX - g.hx) * g.rapid > 30) g.rapid = 0;
+      return;
+    }
+    if (g.hx === undefined || Math.abs(e.clientX - g.hx) > 10) { // 指が止まったら、しばらくして連続めくり
+      g.hx = e.clientX; clearTimeout(g.timer);
+      g.timer = setTimeout(function () { holdTurn(g); }, HOLD_MS);
+    }
     if (T && !T.anim) turnFollow(e.clientX - g.x0);
     g.hist.push([now, e.clientX, T ? T.t : 0]); while (g.hist.length > 8) g.hist.shift();
   }
   // 指を離したとき: 半分以上めくったか、めくる向きにさっと払っていれば移る
   function turnUp(g, cancel) {
+    clearTimeout(g.timer); g.rapid = 0;
     if (!T || T.anim) return;
     if (cancel) { settleTurn(false); return; }
     // 離す直前（0.1秒）の動きから、指の速さ（px/ms）と、めくれる速さ（t/ms）を出す
