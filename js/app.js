@@ -374,8 +374,18 @@
      下のバー（scrub）も、ここで紙の幅に合わせる */
   var edgeL = $('edgeL'), edgeR = $('edgeR'), scrub = $('scrub'), scrubMark = scrub.querySelector('.mark');
   var FLOW_PAD = 48, EDGE_ROOM = 36; // 紙の上下の余白（上4 + 下44: バーの分）、小口の場所（片側）
+  // 下のバーを出すか（「その他」で切りかえ。この端末に保存）
+  var scrubOn = true;
+  try { scrubOn = localStorage.getItem('ui:scrub') !== '0'; } catch (e) {}
+  function applyScrub() { FLOW_PAD = scrubOn ? 48 : 18; flow.classList.toggle('noscrub', !scrubOn); }
+  applyScrub();
+  function setScrub(v) {
+    scrubOn = !!v; applyScrub();
+    try { localStorage.setItem('ui:scrub', scrubOn ? '1' : '0'); } catch (e) {}
+    if (S.hasFile) renderPage();
+  }
   function layoutEdges(w) {
-    scrub.classList.toggle('on', S.hasFile && S.total > 1);
+    scrub.classList.toggle('on', scrubOn && S.hasFile && S.total > 1);
     scrub.style.width = w + 'px'; scrub.style.top = (4 + S.cssH + 4) + 'px';
     if (!scrubG) markAt(S.page);
     var room = Math.floor((stage.clientWidth - w) / 2) - 1, h = S.cssH;
@@ -1457,6 +1467,7 @@
     scheduleSave: scheduleSave, flushSave: flushSave, exportData: exportData,
     setTool: setTool, insertPage: insertPage, deletePage: deletePage, addImage: addImage,
     setShift: setShift,
+    setScrub: setScrub, scrubOn: function () { return scrubOn; },
     pageEntry: entry, paperLines: paperLines, openJson: openJson, liveCtx: lctx, liveCanvas: lc, wrap: wrap, stage: stage,
     blank: function () { openDoc(null, '白紙', 'strokes:__blank__'); },
     currentKey: function () { return S.hasFile ? S.key : ''; },

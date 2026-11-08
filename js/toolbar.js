@@ -131,6 +131,7 @@
       case 'moreBtn':
         $('delPageBtn').disabled = !S.hasFile || !App.pageEntry().added;
         $('shiftBtn').setAttribute('aria-pressed', S.shift ? 'true' : 'false');
+        $('scrubBtn').setAttribute('aria-pressed', App.scrubOn() ? 'true' : 'false');
         showPop($('moreMenu'), b); break;
       case 'shareBtn': closePops(); break; // 共有そのものは share.js が受け持つ
       case 'shiftBtn':
@@ -138,6 +139,11 @@
         App.setShift(!S.shift);
         b.setAttribute('aria-pressed', S.shift ? 'true' : 'false');
         App.setStatus(S.shift ? '見開きを1ページずらしました（1ページ目は右に1枚だけ）' : '見開きのずらしを元に戻しました');
+        break;
+      case 'scrubBtn':
+        App.setScrub(!App.scrubOn());
+        b.setAttribute('aria-pressed', App.scrubOn() ? 'true' : 'false');
+        App.setStatus(App.scrubOn() ? '紙の下にめくるバーを出しました' : '紙の下のめくるバーを消しました');
         break;
       case 'blankBtn': closePops(); App.blank(); break;
       case 'jsonBtn': closePops(); App.openJson(); break;
