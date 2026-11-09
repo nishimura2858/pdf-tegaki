@@ -99,7 +99,7 @@
       .forEach(function (x) { html += pdfTile(x, th, 'fav', true, x.id === now); });
     $('favGrid').innerHTML = html;
     $('favEmpty').hidden = !!html;
-    $('favEmpty').textContent = fd ? 'このフォルダは空です。お気に入りのPDFの「…」から入れられます' :
+    $('favEmpty').textContent = fd ? 'このフォルダは空です。お気に入りのPDFを長押ししてここへドラッグするか、「…」から入れられます' :
       '最近開いたPDFの☆を押すと、ここに入ります';
     // 最近
     var favs = {}; f.items.forEach(function (x) { favs[x.id] = 1; });
@@ -208,6 +208,78 @@
     if (d.more) { itemMenu(t, d.more); return; }
     if (d.fmore) { folderMenu(t, d.fmore); return; }
   });
+
+  /* ---------- お気に入りのPDFを、長押ししてフォルダへドラッグ ---------- */
+  // 長押し（0.35秒）で持ち上げる。ふつうに指を動かしたときは、これまでどおり画面のスクロール
+  // 落とせる場所: フォルダのタイル、フォルダの中では上の「お気に入り」（フォルダの外へ出す）
+  var drag = null, eatClick = false;
+  function dropTarget(x, y) {
+    var el = document.elementFromPoint(x, y);
+    el = el && el.closest('#favGrid [data-folder], #favUp');
+    return el || null;
+  }
+  function setHot(el) {
+    if (drag.hot === el) return;
+    if (drag.hot) drag.hot.closest('.tile, .h-crumb').classList.remove('drop-hot');
+    drag.hot = el;
+    if (el) el.closest('.tile, .h-crumb').classList.add('drop-hot');
+  }
+  function endDrag(e, ok) {
+    if (!drag) return;
+    var d = drag; drag = null;
+    clearTimeout(d.timer);
+    if (!d.active) return;
+    eatClick = true; setTimeout(function () { eatClick = false; }, 400);
+    if (d.ghost) d.ghost.remove();
+    d.tile.classList.remove('dragging');
+    home.classList.remove('drag-on');
+    var hot = d.hot; if (hot) hot.closest('.tile, .h-crumb').classList.remove('drop-hot');
+    if (!ok || !hot) return;
+    var to = hot.id === 'favUp' ? null : hot.dataset.folder;
+    favIndex().then(function (f) {
+      var it = f.items.filter(function (x) { return x.id === d.id; })[0];
+      if (!it || (it.folder || null) === to) return;
+      it.folder = to;
+      var fd = to && f.folders.filter(function (x) { return x.id === to; })[0];
+      return saveFav(f).then(function () { App.setStatus(fd ? '「' + fd.name + '」に入れました' : 'フォルダの外へ出しました'); });
+    }).then(render).catch(function (err) { console.error(err); });
+  }
+  $('favGrid').addEventListener('pointerdown', function (e) {
+    var tile = e.target.closest('.tile'); if (!tile || tile.classList.contains('folder')) return;
+    if (e.target.closest('.t-act')) return;
+    var open = tile.querySelector('[data-open^="fav:"]'); if (!open) return;
+    if (drag) endDrag(e, false);
+    drag = { id: open.dataset.open.slice(4), tile: tile, pid: e.pointerId, x0: e.clientX, y0: e.clientY, active: false, hot: null };
+    drag.timer = setTimeout(function () {
+      if (!drag || drag.tile !== tile) return;
+      drag.active = true;
+      var r = tile.getBoundingClientRect(), g = tile.cloneNode(true);
+      g.className = 'tile drag-ghost';
+      g.style.width = r.width + 'px'; g.style.left = r.left + 'px'; g.style.top = r.top + 'px';
+      drag.dx = drag.x0 - r.left; drag.dy = drag.y0 - r.top; drag.ghost = g;
+      document.body.appendChild(g);
+      tile.classList.add('dragging');
+      home.classList.add('drag-on');
+      if (navigator.vibrate) try { navigator.vibrate(10); } catch (err) {}
+    }, 350);
+  });
+  window.addEventListener('pointermove', function (e) {
+    if (!drag || e.pointerId !== drag.pid) return;
+    if (!drag.active) {
+      if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 8) { clearTimeout(drag.timer); drag = null; }
+      return;
+    }
+    drag.ghost.style.left = (e.clientX - drag.dx) + 'px';
+    drag.ghost.style.top = (e.clientY - drag.dy) + 'px';
+    setHot(dropTarget(e.clientX, e.clientY));
+  });
+  window.addEventListener('pointerup', function (e) { if (drag && e.pointerId === drag.pid) endDrag(e, true); });
+  window.addEventListener('pointercancel', function (e) { if (drag && e.pointerId === drag.pid) endDrag(e, false); });
+  // 持ち上げている間は、画面をスクロールさせない
+  home.addEventListener('touchmove', function (e) { if (drag && drag.active && e.cancelable) e.preventDefault(); }, { passive: false });
+  // 落としたあとの「離した」で、PDFが開いたりしないように
+  home.addEventListener('click', function (e) { if (eatClick) { e.stopPropagation(); e.preventDefault(); eatClick = false; } }, true);
+  home.addEventListener('contextmenu', function (e) { if (e.target.closest('#favGrid .tile')) e.preventDefault(); });
 
   // 書く画面の「その他」: いま開いているPDFをお気に入りに入れる／外す
   var favBtn = $('favBtn');

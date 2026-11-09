@@ -678,10 +678,10 @@ header { position: relative; z-index: 10; background: var(--bg); }
 .topbar .btn.icon.on { background: #fffdf7; box-shadow: 0 1px 5px rgba(58,54,51,.18), inset 0 0 0 1px var(--head-line); }
 .topbar #sideBtn, .topbar #openBtn,
 .topbar #bookBtn { color: var(--red); }
-.topbar .center .btn.icon, .topbar #undo, .topbar #redo, .topbar #focusBtn, .topbar #moreBtn,
+.topbar #undo, .topbar #redo, .topbar #focusBtn, .topbar #moreBtn,
 .topbar #syncBtn.s-ok, .topbar #syncBtn.s-pending { color: #7d95d8; }
-/* 道具の欄は、選んでいるものだけ赤 */
-.topbar .center .btn.icon.on { color: var(--red); }
+/* 道具の欄は元のまま: ふだんは黒っぽい線、選んでいるものは赤いボタンに白い線 */
+.topbar .center .btn.icon.on { background: var(--chip); color: var(--chip-text); box-shadow: 0 3px 10px var(--chip-glow); }
 
 /* ホーム画面: 白紙のノートと「フォルダを作る」は薄紫。見出しのアイコンは、お気に入り＝薄紫の星、最近開いた＝赤い時計 */
 #homeBlank svg, #newFolder { color: #7d95d8; }
@@ -689,3 +689,12 @@ header { position: relative; z-index: 10; background: var(--bg); }
 .h-ic { width: 22px; height: 22px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .h-ic.fav { color: #7d95d8; }
 .h-ic.recent { color: var(--red); }
+
+/* お気に入りのドラッグ */
+#favGrid .tile { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+#favGrid .tile img { -webkit-user-drag: none; pointer-events: none; }
+.tile.dragging { opacity: .3; }
+.drag-ghost { position: fixed; z-index: 40; pointer-events: none; transform: scale(1.06) rotate(-2deg); opacity: .92; filter: drop-shadow(0 10px 18px rgba(52,44,34,.3)); }
+.drag-ghost .t-act { display: none; }
+.tile.folder.drop-hot .t-thumb { box-shadow: 0 0 0 3px #7d95d8; transform: scale(1.06); transition: transform .12s; }
+.h-crumb.drop-hot #favUp { background: #7d95d8; color: #fff; border-radius: 8px; }
