@@ -682,3 +682,10 @@ header { position: relative; z-index: 10; background: var(--bg); }
 .topbar #syncBtn.s-ok, .topbar #syncBtn.s-pending { color: #7d95d8; }
 /* 道具の欄は、選んでいるものだけ赤 */
 .topbar .center .btn.icon.on { color: var(--red); }
+
+/* ホーム画面: 白紙のノートと「フォルダを作る」は薄紫。見出しのアイコンは、お気に入り＝薄紫の星、最近開いた＝赤い時計 */
+#homeBlank svg, #newFolder { color: #7d95d8; }
+.h-head h2 { display: flex; align-items: center; gap: 8px; }
+.h-ic { width: 22px; height: 22px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.h-ic.fav { color: #7d95d8; }
+.h-ic.recent { color: var(--red); }
