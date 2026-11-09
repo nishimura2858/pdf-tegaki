@@ -144,9 +144,7 @@
         $('delPageBtn').disabled = !S.hasFile || !App.pageEntry().added;
         $('shiftBtn').setAttribute('aria-pressed', S.shift ? 'true' : 'false');
         $('scrubBtn').setAttribute('aria-pressed', App.scrubOn() ? 'true' : 'false');
-        $('fullBtn').setAttribute('aria-pressed', fullEl() ? 'true' : 'false');
         showPop($('moreMenu'), b); break;
-      case 'fullBtn': closePops(); toggleFull(); break;
       case 'shareBtn': closePops(); break; // 共有そのものは share.js が受け持つ
       case 'shiftBtn':
         if (!S.hasFile) { closePops(); App.setStatus('先にPDFを開いてください'); break; }
@@ -166,30 +164,6 @@
         if (!S.hasFile) { App.setStatus('先にPDFを開いてください'); break; }
         $('imgFile').click(); break;
     }
-  });
-
-  /* ---------- 全画面（集中モード）: iPadの全画面の仕組みで、時計・電池の欄も隠す ---------- */
-  function fullEl() { return document.fullscreenElement || document.webkitFullscreenElement || null; }
-  function toggleFull() {
-    var d = document, el = d.documentElement;
-    if (fullEl()) {
-      (d.exitFullscreen || d.webkitExitFullscreen || function () {}).call(d);
-      return;
-    }
-    var req = el.requestFullscreen || el.webkitRequestFullscreen;
-    var fail = function () { App.setStatus('この開き方では全画面にできませんでした（iPadの設定やアプリの開き方によります）'); };
-    if (!req || d.fullscreenEnabled === false || (d.fullscreenEnabled === undefined && d.webkitFullscreenEnabled === false)) { fail(); return; }
-    try {
-      var r = req.call(el);
-      if (r && r.catch) r.catch(function () {});
-    } catch (e) { fail(); return; }
-    setTimeout(function () { if (!fullEl()) fail(); }, 1500); // 断られても知らせが来ないことがある
-  }
-  ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (n) {
-    document.addEventListener(n, function () {
-      document.documentElement.classList.toggle('full', !!fullEl());
-      App.setStatus(fullEl() ? '全画面にしました。「その他」の「全画面」をもう一度押すと戻ります' : '全画面を終えました');
-    });
   });
 
   /* ---------- 画像を貼る ---------- */
