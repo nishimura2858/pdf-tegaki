@@ -436,7 +436,7 @@
   // 下のバーを出すか（「その他」で切りかえ。この端末に保存）
   var scrubOn = true;
   try { scrubOn = localStorage.getItem('ui:scrub') !== '0'; } catch (e) {}
-  function applyScrub() { FLOW_PAD = scrubOn ? 48 : 18; flow.classList.toggle('noscrub', !scrubOn); }
+  function applyScrub() { FLOW_PAD = scrubOn ? 48 : 12; flow.classList.toggle('noscrub', !scrubOn); }
   applyScrub();
   function setScrub(v) {
     scrubOn = !!v; applyScrub();

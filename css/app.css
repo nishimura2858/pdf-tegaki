@@ -27,7 +27,6 @@
   --curd: 11px;
   --pop-shadow: 0 14px 36px rgba(52,44,34,.20), 0 2px 6px rgba(52,44,34,.08);
   box-sizing: border-box;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -267,7 +266,7 @@ header { position: relative; z-index: 10; background: var(--bg); }
 }
 /* flow: 書ける紙（wrap）と、見開きのもう片方（still）、めくる紙（turn）をまとめたもの */
 #flow { position: relative; margin: 0 auto; padding: 4px 0 44px; }
-#flow.noscrub { padding-bottom: 14px; }
+#flow.noscrub { padding-bottom: 8px; }
 #flow.pinching { will-change: transform; }
 #flow.spread { display: flex; align-items: flex-start; }
 #flow.spread #wrap { flex: none; }
@@ -632,6 +631,8 @@ header { position: relative; z-index: 10; background: var(--bg); }
     left: auto; right: -6px; bottom: auto; top: 50%; width: 3.5px; height: 16px; transform: translateY(-50%);
   }
   #main { flex: 1; min-width: 0; height: 100%; }
+  /* 紙の場所は時計・電池の欄の下まで使う。ページ一覧だけは時計と重ならないように下げる */
+  #thumbs { padding-top: calc(8px + env(safe-area-inset-top, 0px)); }
 }
 /* 左のバーから出すポップアップ（三角は左に） */
 .pop.side { transform: translateX(-6px) scale(.94); transform-origin: 0 var(--ay, 50%); }
