@@ -145,6 +145,8 @@
         $('shiftBtn').setAttribute('aria-pressed', S.shift ? 'true' : 'false');
         $('scrubBtn').setAttribute('aria-pressed', App.scrubOn() ? 'true' : 'false');
         showPop($('moreMenu'), b); break;
+      case 'focusBtn': setFocus(true); break;
+      case 'focusExit': setFocus(false); break;
       case 'shareBtn': closePops(); break; // 共有そのものは share.js が受け持つ
       case 'shiftBtn':
         if (!S.hasFile) { closePops(); App.setStatus('先にPDFを開いてください'); break; }
@@ -165,6 +167,27 @@
         $('imgFile').click(); break;
     }
   });
+
+  /* ---------- 集中モード: 道具のバーを隠して、紙を大きく ---------- */
+  // 右上の小さなバーに、上のバーと同じペン・消しゴムのボタンを写して並べる（押すと同じ動き）
+  (function () {
+    var box = document.querySelector('#focusBar .ftools');
+    ['pen', 'pencil', 'highlighter', 'eraser'].forEach(function (t) {
+      var src = document.querySelector('.topbar [data-tool="' + t + '"]');
+      if (!src) return;
+      var b = document.createElement('button');
+      b.dataset.tool = t; b.title = src.title; b.setAttribute('aria-label', src.getAttribute('aria-label') || t);
+      b.innerHTML = src.querySelector('svg').outerHTML;
+      box.appendChild(b);
+    });
+  })();
+  function setFocus(on) {
+    closePops();
+    document.body.classList.toggle('focus', on);
+    if (S.hasFile) App.renderPage(); // 紙の大きさを、広くなった（狭くなった）場所に合わせ直す
+    window.dispatchEvent(new Event('resize')); // パレットの位置も合わせ直す
+    if (on) App.setStatus('集中モード：右上のボタンで元に戻せます');
+  }
 
   /* ---------- 画像を貼る ---------- */
   // 大きな写真は、保存しやすい大きさ（長い辺1600px）に縮めてから貼る

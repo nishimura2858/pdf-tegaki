@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="css/app.css?v=55">
+<link rel="stylesheet" href="css/app.css?v=57">
 </head>
 <body class="home-on">
 <header>
@@ -39,11 +39,15 @@
       <button class="btn icon" id="undo" title="元に戻す" aria-label="元に戻す"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
       <button class="btn icon" id="redo" title="やり直す" aria-label="やり直す"><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
       <span class="tsep" aria-hidden="true"></span>
+      <button class="btn icon" id="focusBtn" title="集中モード（道具のバーを隠して紙を大きく）" aria-label="集中モード"><svg viewBox="0 0 24 24"><path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg></button>
       <button class="btn icon" id="moreBtn" title="その他" aria-label="その他"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="8" cy="12" r="1.2" class="fill"/><circle cx="12" cy="12" r="1.2" class="fill"/><circle cx="16" cy="12" r="1.2" class="fill"/></svg></button>
       <button class="btn icon" id="syncBtn" hidden><svg viewBox="0 0 24 24"><path d="M7 18.5a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9.5a4.5 4.5 0 0 1-.5 9z"/><path class="ok" d="M9.5 13.5l2 2 3.5-3.5"/><path class="up" d="M12 16v-5M9.8 13.2L12 11l2.2 2.2"/></svg><span id="syncText"></span></button>
     </div>
   </div>
 </header>
+
+<!-- 集中モードのときだけ出る、右上の小さなバー（ペンの持ちかえと、モードを抜けるボタン） -->
+<div id="focusBar" aria-label="集中モード"><span class="ftools"></span><button id="focusExit" title="集中モードを終える" aria-label="集中モードを終える"><svg viewBox="0 0 24 24"><path d="M9 4v5H4"/><path d="M15 4v5h5"/><path d="M9 20v-5H4"/><path d="M15 20v-5h5"/></svg></button></div>
 
 <div id="main">
   <!-- ページ一覧 -->
@@ -220,22 +224,22 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async></script>
-<script src="js/config.js?v=55"></script>
-<script src="js/app.js?v=55"></script>
-<script src="js/shapes.js?v=55"></script>
-<script src="js/toolbar.js?v=55"></script>
-<script src="js/lasso.js?v=55"></script>
-<script src="js/pages.js?v=55"></script>
-<script src="js/google-auth.js?v=55"></script>
-<script src="js/drive.js?v=55"></script>
-<script src="js/drive-sync.js?v=55"></script>
+<script src="js/config.js?v=57"></script>
+<script src="js/app.js?v=57"></script>
+<script src="js/shapes.js?v=57"></script>
+<script src="js/toolbar.js?v=57"></script>
+<script src="js/lasso.js?v=57"></script>
+<script src="js/pages.js?v=57"></script>
+<script src="js/google-auth.js?v=57"></script>
+<script src="js/drive.js?v=57"></script>
+<script src="js/drive-sync.js?v=57"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"></script>
-<script src="js/home.js?v=55"></script>
-<script src="js/pdf-open.js?v=55"></script>
-<script src="js/pdf-write.js?v=55"></script>
-<script src="js/share.js?v=55"></script>
-<script src="js/palette.js?v=55"></script>
-<script src="js/slide.js?v=55"></script>
+<script src="js/home.js?v=57"></script>
+<script src="js/pdf-open.js?v=57"></script>
+<script src="js/pdf-write.js?v=57"></script>
+<script src="js/share.js?v=57"></script>
+<script src="js/palette.js?v=57"></script>
+<script src="js/slide.js?v=57"></script>
 <script>
 // 電波がなくても開けるように、アプリの部品をこの端末に取っておく（sw.js）
 // 新しい版が届いたら: PDFを開いていなければすぐ、開いていれば、ほかのアプリから戻ってきたときに読み直す
