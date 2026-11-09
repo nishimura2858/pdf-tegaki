@@ -25,6 +25,8 @@
   --warn: #d9822b;
   --cur: #e53935;          /* いまの色（JSで更新） */
   --curd: 11px;
+  --sat: env(safe-area-inset-top, 0px); --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px); --sar: env(safe-area-inset-right, 0px);
   --pop-shadow: 0 14px 36px rgba(52,44,34,.20), 0 2px 6px rgba(52,44,34,.08);
   box-sizing: border-box;
 }
@@ -659,3 +661,9 @@ header { position: relative; z-index: 10; background: var(--bg); }
 #focusBar svg .fill { fill: currentColor; stroke: none; }
 #focusBar button.on { background: var(--accent); color: var(--accent-text, #fff); }
 #focusBar #focusExit { margin-left: 4px; border-left: 1px solid var(--line); border-radius: 0 10px 10px 0; }
+/* 指でドラッグして動かせる。画面の上下の辺では横向き、左右の辺では縦向き */
+#focusBar { touch-action: none; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+.focus.has-file:not(.home-on) #focusBar.vert { flex-direction: column; }
+#focusBar.vert .ftools { flex-direction: column; }
+#focusBar.vert #focusExit { margin: 4px 0 0; border-left: 0; border-top: 1px solid var(--line); border-radius: 0 0 10px 10px; }
+#focusBar.dragging { opacity: 1; box-shadow: 0 8px 24px rgba(52,44,34,.3); transition: none; }

@@ -186,8 +186,83 @@
     document.body.classList.toggle('focus', on);
     if (S.hasFile) App.renderPage(); // 紙の大きさを、広くなった（狭くなった）場所に合わせ直す
     window.dispatchEvent(new Event('resize')); // パレットの位置も合わせ直す
-    if (on) App.setStatus('集中モード：右上のボタンで元に戻せます');
+    if (on) { placeBar(); App.setStatus('集中モード：右上のバーは指で動かせます。いちばん端のボタンで元に戻ります'); }
   }
+
+  // 集中モードのバーの場所: どの辺（top/bottom/left/right）の、どのあたり（0〜1）か。この端末に覚える
+  var FKEY = 'ui:focusBar', fb = $('focusBar'), fpos = { edge: 'top', t: 1 };
+  try { var fp = JSON.parse(localStorage.getItem(FKEY)); if (fp && /^(top|bottom|left|right)$/.test(fp.edge) && isFinite(fp.t)) fpos = fp; } catch (e) {}
+  function insets() {
+    var cs = getComputedStyle(document.documentElement);
+    var v = function (n) { return parseFloat(cs.getPropertyValue(n)) || 0; };
+    return { t: v('--sat'), b: v('--sab'), l: v('--sal'), r: v('--sar') };
+  }
+  function placeBar() {
+    if (!document.body.classList.contains('focus')) return;
+    var vert = fpos.edge === 'left' || fpos.edge === 'right', m = 10, ins = insets();
+    fb.classList.toggle('vert', vert);
+    fb.style.right = 'auto';
+    var W = window.innerWidth, H = window.innerHeight, w = fb.offsetWidth, h = fb.offsetHeight, x, y;
+    var t = Math.max(0, Math.min(1, fpos.t));
+    if (vert) {
+      x = fpos.edge === 'left' ? m + ins.l : W - w - m - ins.r;
+      var y0 = m + ins.t, y1 = H - h - m - ins.b; y = y0 + (y1 - y0) * t;
+    } else {
+      y = fpos.edge === 'top' ? m + ins.t : H - h - m - ins.b;
+      var x0 = m + ins.l, x1 = W - w - m - ins.r; x = x0 + (x1 - x0) * t;
+    }
+    fb.style.left = Math.round(x) + 'px'; fb.style.top = Math.round(y) + 'px';
+  }
+  // いちばん近い辺を選ぶ（指の位置で決める）
+  function nearEdge(px, py) {
+    var W = window.innerWidth, H = window.innerHeight;
+    var d = { left: px, right: W - px, top: py, bottom: H - py }, best = 'top';
+    Object.keys(d).forEach(function (k) { if (d[k] < d[best]) best = k; });
+    return best;
+  }
+  var fdrag = null, eatClick = false;
+  fb.addEventListener('pointerdown', function (e) {
+    var r = fb.getBoundingClientRect();
+    fdrag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, fx: (e.clientX - r.left) / r.width, fy: (e.clientY - r.top) / r.height, moved: false };
+  });
+  fb.addEventListener('pointermove', function (e) {
+    if (!fdrag || e.pointerId !== fdrag.id) return;
+    if (!fdrag.moved) {
+      if (Math.hypot(e.clientX - fdrag.x0, e.clientY - fdrag.y0) < 8) return;
+      fdrag.moved = true; fb.classList.add('dragging');
+      try { fb.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+    // 指に近い辺の向きに、その場で並べ替えながら動かす
+    var vert = /left|right/.test(nearEdge(e.clientX, e.clientY));
+    fb.classList.toggle('vert', vert);
+    var w = fb.offsetWidth, h = fb.offsetHeight;
+    var fx = vert ? 0.5 : fdrag.fx, fy = vert ? fdrag.fy : 0.5;
+    if (fdrag.vert !== undefined && vert !== fdrag.vert) { fdrag.fx = fdrag.fy = 0.5; fx = fy = 0.5; } // 向きが変わったら、指をバーの真ん中に
+    fdrag.vert = vert;
+    fb.style.left = Math.round(Math.max(0, Math.min(window.innerWidth - w, e.clientX - w * fx))) + 'px';
+    fb.style.top = Math.round(Math.max(0, Math.min(window.innerHeight - h, e.clientY - h * fy))) + 'px';
+  });
+  function fend(e) {
+    if (!fdrag || e.pointerId !== fdrag.id) return;
+    var d = fdrag; fdrag = null;
+    if (!d.moved) return;
+    fb.classList.remove('dragging');
+    eatClick = true; setTimeout(function () { eatClick = false; }, 300);
+    var edge = nearEdge(e.clientX, e.clientY), vert = edge === 'left' || edge === 'right';
+    fb.classList.toggle('vert', vert);
+    var r = fb.getBoundingClientRect(), W = window.innerWidth, H = window.innerHeight;
+    var t = vert ? (r.top) / Math.max(1, H - r.height) : (r.left) / Math.max(1, W - r.width);
+    fpos = { edge: edge, t: Math.max(0, Math.min(1, t)) };
+    try { localStorage.setItem(FKEY, JSON.stringify(fpos)); } catch (err) {}
+    placeBar();
+  }
+  fb.addEventListener('pointerup', fend);
+  fb.addEventListener('pointercancel', fend);
+  // 動かしたあとの「指を離した」で、ボタンが押されないように
+  fb.addEventListener('click', function (e) { if (eatClick) { e.stopPropagation(); e.preventDefault(); eatClick = false; } }, true);
+  fb.addEventListener('touchmove', function (e) { if (e.cancelable) e.preventDefault(); }, { passive: false });
+  var frt = null;
+  window.addEventListener('resize', function () { clearTimeout(frt); frt = setTimeout(placeBar, 150); });
 
   /* ---------- 画像を貼る ---------- */
   // 大きな写真は、保存しやすい大きさ（長い辺1600px）に縮めてから貼る
