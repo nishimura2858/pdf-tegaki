@@ -47,6 +47,8 @@
   --pop-shadow: 0 14px 36px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.3);
 }
 html, body { height: 100%; margin: 0; }
+/* ホーム画面のアプリでは、時計の欄の下まで使う設定にすると、100% が時計の欄の分だけ短くなり、下が空く（iPadの癖）。画面の高さそのものを使う */
+@media (display-mode: standalone) { html, body { height: 100vh; } }
 body {
   display: flex; flex-direction: column;
   background: var(--bg); color: var(--text);
