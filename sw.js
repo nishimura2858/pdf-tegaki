@@ -5,7 +5,7 @@
    - ?v= 付きの部品とライブラリは「控えがあれば控えから」（v が変われば別の物として取り直す）
    - Googleのログイン・Drive・ログインサーバーへの通信は、取っておかない（いつもネットへ）
    index.html の ?v= を上げたら、下の V も同じ番号にすること（古い控えを片づけるため） */
-var V = '68';
+var V = '69';
 var CACHE = 'tegaki-v' + V;
 var CORE = [
   './',
@@ -13,7 +13,7 @@ var CORE = [
   'css/app.css?v=' + V,
   'js/config.js?v=' + V, 'js/app.js?v=' + V, 'js/shapes.js?v=' + V, 'js/toolbar.js?v=' + V,
   'js/lasso.js?v=' + V, 'js/pages.js?v=' + V, 'js/google-auth.js?v=' + V, 'js/drive.js?v=' + V,
-  'js/drive-sync.js?v=' + V, 'js/home.js?v=' + V, 'js/pdf-open.js?v=' + V, 'js/pdf-write.js?v=' + V, 'js/share.js?v=' + V,
+  'js/drive-sync.js?v=' + V, 'js/carry.js?v=' + V, 'js/home.js?v=' + V, 'js/pdf-open.js?v=' + V, 'js/pdf-write.js?v=' + V, 'js/share.js?v=' + V,
   'js/palette.js?v=' + V, 'js/slide.js?v=' + V,
   'manifest.webmanifest', 'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png',
   'icons/favicon-32.png', 'icons/icon.svg',

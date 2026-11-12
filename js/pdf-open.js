@@ -111,6 +111,7 @@
       pending = { base: sha, name: name, fileMd5: fileMd5, origBytes: buf, origMd5: fileMd5, doc: doc };
       App.openDoc(doc, name, 'strokes:pdf:' + sha);
       putOrigLocal(sha, buf);
+      if (window.Carry) Carry.check(sha, name, doc.numPages); // Wordを直して作り直したPDFなど: 前の版の手書きを探す
       return sha;
     }
     var orig = null;

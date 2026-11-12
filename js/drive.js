@@ -56,6 +56,12 @@
     return list(query, 'id,version,md5Checksum,modifiedTime', token).then(function (files) { return files[0] || null; });
   }
 
+  /* 名前で手書きデータを探す（前の版の手書きを引き継ぐとき用。新しいものから） */
+  function findStrokesByName(name, token) {
+    var query = "name='" + q(name) + "' and mimeType='application/json' and trashed=false";
+    return list(query, 'id,modifiedTime,appProperties', token);
+  }
+
   function getJson(id, token) {
     return call(API + '/' + encodeURIComponent(id) + '?alt=media&supportsAllDrives=true', token);
   }
@@ -123,7 +129,7 @@
   }
 
   window.Drive = {
-    downloadFile: downloadFile, ensureFolder: ensureFolder, findStrokes: findStrokes,
+    downloadFile: downloadFile, ensureFolder: ensureFolder, findStrokes: findStrokes, findStrokesByName: findStrokesByName,
     getJson: getJson, createStrokes: createStrokes, updateStrokes: updateStrokes,
     findPdf: findPdf, getMeta: getMeta, findOriginal: findOriginal, createOriginal: createOriginal,
     setAppProps: setAppProps, uploadPdf: uploadPdf
