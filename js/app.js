@@ -570,7 +570,10 @@
       cssH = Math.max(160, Math.min(stage.clientHeight - FLOW_PAD, (stage.clientWidth - 24) / a) * S.zoom);
       cssW = cssH * bw / bh;
     } else {
-      cssW = Math.max(240, (stage.clientWidth - 24) * S.zoom);
+      // 縦スクロールの横向きでは、横幅いっぱいにせず、画面の高さに合わせたほどよい大きさで（GoodNotesのように）
+      var fitW = stage.clientWidth - 24;
+      if (S.vert && stage.clientWidth > stage.clientHeight) fitW = Math.min(fitW, stage.clientHeight * 0.9);
+      cssW = Math.max(240, fitW * S.zoom);
       cssH = cssW * bh / bw;
     }
     var area = cssW * cssH, dw = Math.min(window.devicePixelRatio || 1, 2);
@@ -1412,6 +1415,8 @@
       var np = pan.pull + want;
       if ((pan.pull > 0) !== (np > 0) || np === 0) { want = np; pan.pull = 0; } else { pan.pull = np; want = 0; }
     }
+    var now = performance.now();
+    (pan.vh || (pan.vh = [])).push([now, e.clientX, e.clientY]); while (pan.vh.length > 8) pan.vh.shift();
     if (want) {
       var before = stage.scrollTop;
       stage.scrollTop += want;
@@ -1420,6 +1425,30 @@
     }
     if (pan.pull || pan.ready !== undefined) pan.ready = showPull(pan.pull);
     checkVert();
+  }
+  /* 指を離したあとも、勢いのままスクロールが続いて、だんだん止まる（惰性） */
+  var fl = null;
+  function stopFling() { if (fl) { cancelAnimationFrame(fl.raf); fl = null; } }
+  function fling(p) {
+    stopFling();
+    var h = (p.vh || []).filter(function (x) { return performance.now() - x[0] < 100; });
+    if (h.length < 2) return;
+    var a = h[0], b = h[h.length - 1], dt = Math.max(8, b[0] - a[0]);
+    var vx = -(b[1] - a[1]) / dt, vy = -(b[2] - a[2]) / dt; // 1ミリ秒あたり（正: 下・右へスクロール）
+    if (Math.abs(vy) < 0.25 && Math.abs(vx) < 0.25) return;
+    var last = performance.now(), f = fl = { vx: vx, vy: vy };
+    f.raf = requestAnimationFrame(function step(now) {
+      if (fl !== f) return;
+      var d = Math.min(40, now - last); last = now;
+      var y0 = stage.scrollTop, x0 = stage.scrollLeft;
+      stage.scrollTop += f.vy * d; stage.scrollLeft += f.vx * d;
+      if (stage.scrollTop === y0) f.vy = 0; // 端まで来た
+      if (stage.scrollLeft === x0) f.vx = 0;
+      var k = Math.exp(-d / 325); f.vy *= k; f.vx *= k;
+      checkVert();
+      if (Math.abs(f.vy) < 0.02 && Math.abs(f.vx) < 0.02) { fl = null; return; }
+      f.raf = requestAnimationFrame(step);
+    });
   }
   function turnMove(e) {
     var g = pan.turn, now = performance.now();
@@ -1502,6 +1531,7 @@
   function onInkDown(e) {
     if (!S.hasFile) return;
     e.preventDefault();
+    stopFling();
     dropStaleDrawing(e);
     // 指はスクロール・ページめくり（1本で横に払う）・拡大縮小（2本）に使う（書くのはペンだけ）
     if (e.pointerType === 'touch') {
@@ -1645,7 +1675,7 @@
         if (pan.turn) turnUp(pan.turn, e.type !== 'pointerup');
         else if (pan.want) { if (e.type === 'pointerup') { if (T || turning) queued += pan.want; else autoTurn(pan.want); } } // 入れかわる前に離した: そのままめくる
         else if (pan.pull || pan.ready) endPull(pan, e.type !== 'pointerup');
-        else if (e.type === 'pointerup') fingerUp(pan, e);
+        else if (e.type === 'pointerup') { fingerUp(pan, e); fling(pan); }
         pan = null;
       }
       return;
