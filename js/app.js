@@ -10,7 +10,7 @@
   var stage = $('stage'), wrap = $('wrap'), pdfC = $('pdfc'), ink = $('ink'), lc = $('livec');
   var pctx = pdfC.getContext('2d'), ictx = ink.getContext('2d'), lctx = lc.getContext('2d');
   var tmp = document.createElement('canvas'), tctx = tmp.getContext('2d');
-  var MAXZOOM = 4, PENS = { pen: 1, pencil: 1, highlighter: 1 };
+  var MAXZOOM = 8, PENS = { pen: 1, pencil: 1, highlighter: 1 };
   var A4 = { w: 595, h: 842 };
 
   if (window.pdfjsLib) {
@@ -90,7 +90,8 @@
       setText($('pageLabel'), pageText());
     }, 1400);
   }
-  function r4(n) { return Math.round(n * 10000) / 10000; }
+  // 位置（ページに対する割合）を丸める。大きく拡大しても線の縁が揺れないよう、10万分の1まで残す（2026-11-16）
+  function r4(n) { return Math.round(n * 100000) / 100000; }
   function pages() { return S.strokes[S.page] || []; }
 
   /* ---------- 描画 ---------- */
@@ -109,8 +110,9 @@
   }
   // 筆圧に応じた線の太さ（画面上の大きさ W に対して）
   function widthAt(s, W, p) {
+    // ペンは筆圧で太さをほとんど変えない（ペンの圧の小さな揺れで、太さがムラになったため。2026-11-16）
     var base = s.width * W / 1000;
-    return s.tool === 'pencil' ? base * (0.45 + 0.9 * p) : base * (0.6 + 0.8 * p);
+    return s.tool === 'pencil' ? base * (0.6 + 0.8 * p) : base * (0.85 + 0.3 * p);
   }
   /* ペン・えんぴつの線: 点ごとの丸と、となりの丸をつなぐ帯を1つの形にまとめて、一度で塗る
      （区切りごとに線を重ねて描くと、重なった所のふちが濃くなってギザギザに見えたため。2026-11-16）
@@ -134,11 +136,25 @@
     ctx.moveTo(q[0][0], q[0][1]); ctx.lineTo(q[1][0], q[1][1]); ctx.lineTo(q[2][0], q[2][1]); ctx.lineTo(q[3][0], q[3][1]); ctx.closePath();
   }
   function segs(ctx, s, W, H) {
-    var p = s.points, n = p.length, i, P = [], Q;
-    for (i = 0; i < n; i++) {
-      var pr = (p[Math.max(0, i - 1)][2] + 2 * p[i][2] + p[Math.min(n - 1, i + 1)][2]) / 4;
-      P.push([p[i][0] * W, p[i][1] * H, Math.max(0.35, widthAt(s, W, pr) / 2)]);
+    var p = s.points, n = p.length, i, P = [], Q, lim = W * 0.02;
+    // 筆圧は前から・後ろからの両方でならす（太さがゆっくりしか変わらないように）
+    var pr = [], f = p[0][2];
+    for (i = 0; i < n; i++) { f += (p[i][2] - f) * 0.18; pr.push(f); }
+    f = pr[n - 1];
+    for (i = n - 1; i >= 0; i--) { f += (pr[i] - f) * 0.18; pr[i] = f; }
+    // 手の細かいぶれをならす（となりの点が近いときだけ。図形の角はそのまま）。2回かける
+    var X = [], Y = [];
+    for (i = 0; i < n; i++) { X.push(p[i][0] * W); Y.push(p[i][1] * H); }
+    for (var pass = 0; pass < 2; pass++) {
+      var X2 = X.slice(), Y2 = Y.slice();
+      for (i = 1; i < n - 1; i++) {
+        if (Math.hypot(X[i] - X[i - 1], Y[i] - Y[i - 1]) < lim && Math.hypot(X[i] - X[i + 1], Y[i] - Y[i + 1]) < lim) {
+          X2[i] = (X[i - 1] + 2 * X[i] + X[i + 1]) / 4; Y2[i] = (Y[i - 1] + 2 * Y[i] + Y[i + 1]) / 4;
+        }
+      }
+      X = X2; Y = Y2;
     }
+    for (i = 0; i < n; i++) P.push([X[i], Y[i], Math.max(0.35, widthAt(s, W, pr[i]) / 2)]);
     Q = [P[0]];
     for (i = 1; i < n; i++) {
       var a = P[i - 1], b = P[i], d = Math.hypot(b[0] - a[0], b[1] - a[1]), k = Math.min(10, Math.floor(d / 2.5));
@@ -702,8 +718,8 @@
     var area = cssW * cssH, dw = Math.min(window.devicePixelRatio || 1, 2);
     // 紙全体の絵は、大きくなりすぎないように細かさを下げる（iPadのcanvasの上限をこえると真っ白になる）。
     // 下げたときは、見えている所だけきめ細かい層を重ねる
-    var dprPdf = Math.max(0.3, Math.min(dw, Math.sqrt(9e6 / area)));
-    var dprInk = Math.max(0.3, Math.min(dw, Math.sqrt(6e6 / area)));
+    var dprPdf = Math.max(0.12, Math.min(dw, Math.sqrt(9e6 / area)));
+    var dprInk = Math.max(0.12, Math.min(dw, Math.sqrt(6e6 / area)));
     S.cssW = cssW; S.cssH = cssH;
     hiNeed = Math.min(dprPdf, dprInk) < DPR * 0.95;
     if (!hiNeed || (hv && hv.key !== hiKey())) hiHide();

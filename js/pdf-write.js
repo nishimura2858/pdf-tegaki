@@ -127,7 +127,7 @@
         var p = s.points, col = rgb(s.color), base = (+s.width || 4) * v.width / 1000;
         var pts = p.map(function (pt) { return conv(pt[0], pt[1]); });
         var pr = function (j) { return isFinite(p[j][2]) ? p[j][2] : 0.5; };
-        var wAt = s.tool === 'pencil' ? function (x) { return base * (0.45 + 0.9 * x); } : function (x) { return base * (0.6 + 0.8 * x); };
+        var wAt = s.tool === 'pencil' ? function (x) { return base * (0.6 + 0.8 * x); } : function (x) { return base * (0.85 + 0.3 * x); }; // 画面（app.js の widthAt）と同じ
         ops.push(L.pushGraphicsState(), L.setStrokingRgbColor(col[0], col[1], col[2]),
           L.setLineCap(L.LineCapStyle.Round), L.setLineJoin(L.LineJoinStyle.Round));
         if (s.tool === 'highlighter') {
