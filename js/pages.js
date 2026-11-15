@@ -356,11 +356,37 @@
   book.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   window.addEventListener('resize', function () { if (bk.on) bookClose(false); });
 
-  /* 本のボタン: 押すと、ボタンの下にポップアップで開く（もう一度押すと閉じる） */
-  $('bookBtn').addEventListener('click', function (e) {
-    if (!S.hasFile) { App.setStatus('先にPDFを開いてください'); return; }
+  /* 本のボタン
+     - 短く押す: 「本（横向きで見開き・左右にめくる）」と「縦スクロール（ページが下へ続く）」を切りかえる
+     - 長押し: 本のようにパラパラめくって探す画面を、ボタンの下にポップアップで開く（開いているときに押すと閉じる） */
+  var bookBtn = $('bookBtn'), bpress = null, BOOK_HOLD = 450;
+  var ICON_BOOK = '<svg viewBox="0 0 24 24"><path d="M12 6.5C10 5 7 4.5 3.5 5v13c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5c-3.5-.5-6.5 0-8.5 1.5z"/><path d="M12 6.5v13"/></svg>';
+  var ICON_VERT = '<svg viewBox="0 0 24 24"><rect x="6" y="2.5" width="12" height="8.5" rx="1.5"/><rect x="6" y="13" width="12" height="8.5" rx="1.5"/></svg>';
+  function bookIcon() {
+    bookBtn.innerHTML = S.vert ? ICON_VERT : ICON_BOOK;
+    var t = (S.vert ? '縦スクロール' : '本（横向きで見開き）') + '。押すと切りかえ、長押しでめくって探す';
+    bookBtn.title = t; bookBtn.setAttribute('aria-label', t);
+  }
+  bookIcon();
+  App.on('vert', bookIcon);
+  bookBtn.addEventListener('pointerdown', function (e) {
+    if (bpress) return;
+    bpress = { long: false, timer: setTimeout(function () {
+      bpress.long = true;
+      if (!S.hasFile) { App.setStatus('先にPDFを開いてください'); return; }
+      if (!bk.on) bookOpen(S.page, bookBtn);
+    }, BOOK_HOLD) };
+  });
+  function bookUp() { if (bpress) clearTimeout(bpress.timer); }
+  bookBtn.addEventListener('pointerup', bookUp);
+  bookBtn.addEventListener('pointercancel', function () { bookUp(); bpress = null; });
+  bookBtn.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  bookBtn.addEventListener('click', function (e) {
+    var p = bpress; bpress = null;
+    if (p && p.long) return; // 長押しで開いたあと
     if (bk.on) { bookClose(false); return; }
-    bookOpen(S.page, e.currentTarget);
+    App.setVert(!S.vert);
+    App.setStatus(S.vert ? '縦スクロール: ページが下へ続きます（長押しで、めくって探す画面）' : '本: 横向きでは見開きで、左右にめくります（長押しで、めくって探す画面）');
   });
   App.on('data', function () { bkDrop(S.page); });
   App.on('layout', function () { if (bk.on) bookClose(false); bkClear(); });

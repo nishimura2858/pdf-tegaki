@@ -291,7 +291,12 @@
      もう片方は絵（still）で出しておき、ペンが触れたら見た目を変えずに一瞬で入れかえる */
   var flow = $('flow'), still = $('still'), spine = $('spine'), turnEl = $('turn');
   S.spread = false;
-  function isSpread() { return S.hasFile && stage.clientWidth > stage.clientHeight * 1.1; }
+  /* 縦スクロール（S.vert）: 見開きにせず、ページを上下につなげて並べる（GoodNotesのように）。
+     書ける紙（wrap）は1枚だけなので、上の前のページ（stillUp）と下の次のページ（still）は絵で出し、
+     スクロールで画面のまん中に来たページを、見た目を変えずに書ける紙と入れかえる。この端末に覚える */
+  S.vert = false;
+  try { S.vert = localStorage.getItem('ui:vert') === '1'; } catch (e) {}
+  function isSpread() { return S.hasFile && !S.vert && stage.clientWidth > stage.clientHeight * 1.1; }
   // 見開きの組み合わせ。ずらす設定（S.shift）がオンなら、1ページ目は右に1枚だけ、そのあと 2-3, 4-5, …
   S.shift = false;
   function isLeft(n) { return (n + (S.shift ? 1 : 0)) % 2 === 1; }
@@ -403,6 +408,69 @@
     var b = baseNow(n) || quickNow(n); return b ? compose(n, b) : null;
   }
 
+  // 縦スクロールの、上にある前のページ（絵）。高さが変わったら、そのぶんスクロールして書ける紙を動かさない
+  var upEl = document.createElement('div'); upEl.id = 'stillUp'; upEl.hidden = true; flow.insertBefore(upEl, $('wrap'));
+  var upSt = null, upTok = 0, upHold = false;
+  function setUp(o) {
+    var h0 = upEl.hidden ? 0 : upEl.offsetHeight;
+    upSt = o; upEl.textContent = '';
+    if (o) {
+      upEl.hidden = false; upEl.dataset.n = o.n;
+      upEl.style.width = o.w + 'px'; upEl.style.height = o.h + 'px';
+      if (o.base) upEl.appendChild(o.base);
+      if (o.ink) upEl.appendChild(o.ink);
+    } else upEl.hidden = true;
+    var h1 = upEl.hidden ? 0 : upEl.offsetHeight;
+    if (!upHold && h1 !== h0) stage.scrollTop += h1 - h0;
+  }
+  function updateUp() {
+    var m = S.vert && S.hasFile && S.page > 1 ? S.page - 1 : 0;
+    if (!m) { upTok++; if (upSt) setUp(null); return; }
+    var sz = sizes[sizeKey(m)], css = sz ? cssOf(sz) : null;
+    if (upSt && upSt.n === m && sz && upSt.key === baseKey(m, css)) return;
+    var b = sz && baseNow(m), tok = ++upTok;
+    if (b) { setUp(stillFrom(m, b)); return; }
+    var q = sz && quickNow(m);
+    if (q) { var qs = stillFrom(m, q); qs.key = ''; setUp(qs); }
+    else if (!upSt || upSt.n !== m) setUp({ n: m, w: S.cssW, h: sz ? css.h : S.cssH, key: '' }); // 描けるまでは白い紙
+    getBase(m).then(function (c) { if (tok === upTok && S.vert && S.page - 1 === m) setUp(stillFrom(m, c)); }, function () {});
+  }
+  // 縦スクロール: 上か下のページを書ける紙にする（見た目は変えない）
+  function goVert(n) {
+    if (!S.vert || turning || drawing || n < 1 || n > S.total || n === S.page) return false;
+    var sz = sizes[sizeKey(n)]; if (!sz) return false;
+    var down = n > S.page, el = down ? still : upEl, o = down ? st : upSt;
+    if (!o || o.n !== n || el.hidden) return false;
+    var top0 = el.getBoundingClientRect().top, old = snapshotCurrent();
+    stTok++; upTok++;
+    S.placeholder = o.base || null;
+    S.page = n; S.live = null;
+    upHold = true;
+    if (down) { setUp(old); setStill(null); } else { setStill(old); setUp(null); }
+    layoutPage(sz.w, sz.h, null);
+    upHold = false;
+    stage.scrollTop += wrap.getBoundingClientRect().top - top0;
+    renderPage();
+    flashPager(); emit('page'); updateUI();
+    return true;
+  }
+  // スクロールのあと: 書ける紙が画面のまん中から外れたら、まん中のページと入れかえる
+  function checkVert() {
+    if (!S.vert || !S.hasFile || turning || drawing) return;
+    var sr = stage.getBoundingClientRect(), mid = sr.top + sr.height / 2, wr = wrap.getBoundingClientRect();
+    if (wr.bottom < mid) goVert(S.page + 1);
+    else if (wr.top > mid) goVert(S.page - 1);
+  }
+  function setVert(v) {
+    S.vert = !!v;
+    try { localStorage.setItem('ui:vert', S.vert ? '1' : '0'); } catch (e) {}
+    applyScrub();
+    if (st) st.n = -1;
+    stTok++; upTok++; setStill(null); upHold = true; setUp(null); upHold = false;
+    if (S.hasFile) { S.vjump = S.vert; if (!S.vert) stage.scrollTo(0, 0); renderPage(); updateUI(); }
+    emit('vert');
+  }
+
   // 見開きのもう片方（絵）
   var st = null, stTok = 0;
   function setStill(o) {
@@ -419,6 +487,7 @@
   }
   function layoutSpread() {
     flow.classList.toggle('spread', S.spread);
+    flow.classList.toggle('vert', S.vert);
     flow.classList.toggle('act-r', S.spread && !isLeft(S.page));
     var w = S.cssW, lw = S.cssW;
     if (S.spread) {
@@ -436,7 +505,7 @@
   // 下のバーを出すか（「その他」で切りかえ。この端末に保存）
   var scrubOn = true;
   try { scrubOn = localStorage.getItem('ui:scrub') !== '0'; } catch (e) {}
-  function applyScrub() { FLOW_PAD = scrubOn ? 48 : 12; flow.classList.toggle('noscrub', !scrubOn); }
+  function applyScrub() { var on = scrubOn && !S.vert; FLOW_PAD = on ? 48 : 12; flow.classList.toggle('noscrub', !on); }
   applyScrub();
   function setScrub(v) {
     scrubOn = !!v; applyScrub();
@@ -444,14 +513,14 @@
     if (S.hasFile) renderPage();
   }
   function layoutEdges(w) {
-    scrub.classList.toggle('on', scrubOn && S.hasFile && S.total > 1);
+    scrub.classList.toggle('on', scrubOn && S.hasFile && S.total > 1 && !S.vert);
     scrub.style.width = w + 'px'; scrub.style.top = (4 + S.cssH + 4) + 'px';
     if (!scrubG) markAt(S.page);
     var room = Math.floor((stage.clientWidth - w) / 2) - 1, h = S.cssH;
     var lo = S.spread ? leftOf(S.page) : S.page, hi = S.spread ? lo + 1 : S.page;
     [[edgeL, lo - 1], [edgeR, S.total - hi]].forEach(function (a) {
       var el = a[0], n = Math.max(0, a[1]);
-      var on = S.hasFile && n > 0 && room >= 8;
+      var on = S.hasFile && n > 0 && room >= 8 && !S.vert;
       el.classList.toggle('on', on);
       if (!on) return;
       var th = Math.min(room - 2, EDGE_ROOM - 2), k = Math.min(1, n / Math.max(20, S.total));
@@ -461,7 +530,8 @@
     });
   }
   function updateStill() {
-    var m = S.spread ? partner(S.page) : 0;
+    updateUp();
+    var m = S.spread ? partner(S.page) : S.vert && S.page < S.total ? S.page + 1 : 0;
     if (!m) { stTok++; setStill(null); layoutSpread(); return; }
     var sz = sizes[sizeKey(m)], css = sz ? cssOf(sz) : { w: S.cssW, h: S.cssH };
     if (!(st && st.n === m && sz && st.key === baseKey(m, css))) {
@@ -511,7 +581,8 @@
     if (S.swap) { var sw = S.swap; S.swap = null; sw(); } // めくり終わったあとの置きかえ（同じ瞬間に）
     updateStill();
     // 画面より小さいとき（縮小・見開き）は、上下のまん中に
-    flow.style.marginTop = Math.max(0, Math.floor((stage.clientHeight - cssH - FLOW_PAD) / 2)) + 'px';
+    flow.style.marginTop = S.vert ? '0px' : Math.max(0, Math.floor((stage.clientHeight - cssH - FLOW_PAD) / 2)) + 'px';
+    if (S.vjump) { S.vjump = false; stage.scrollTop += wrap.getBoundingClientRect().top - stage.getBoundingClientRect().top - 6; } // 縦スクロールでページへ飛んだ: その上の端へ
     // 同じページの描き直し（拡大・画面の回転）では、描き終わるまで今の絵を引き伸ばして出しておく（白く点滅しないように）
     var shown = S.key + ':' + S.page + ':' + entry().src, changed = shown !== lastShown, old = null;
     var pw = Math.floor(cssW * dprPdf), ph = Math.floor(cssH * dprPdf);
@@ -760,7 +831,7 @@
     flushSave(); // 前のファイルの未保存分を、切り替える前に保存する
     S.pdf = doc; S.hasFile = true; S.name = name; S.key = key;
     S.page = 1; S.zoom = 1; S.live = null;
-    sizes = {}; baseCache = {}; baseList = []; quick = {}; quickList = []; stTok++; setStill(null); // 前のファイルの絵は使わない
+    sizes = {}; baseCache = {}; baseList = []; quick = {}; quickList = []; stTok++; setStill(null); upTok++; upHold = true; setUp(null); upHold = false; // 前のファイルの絵は使わない
     loadShift();
     loadSaved();
     $('hint').style.display = 'none'; wrap.style.display = 'block';
@@ -780,7 +851,7 @@
     if (turning) return Promise.resolve();
     if (S.spread && st && st.n === n && activate(n)) return Promise.resolve(); // 同じ見開きのもう片方
     S.page = n; S.live = null;
-    if (!keepScroll) stage.scrollTo(0, 0);
+    if (S.vert) S.vjump = true; else if (!keepScroll) stage.scrollTo(0, 0);
     var done = renderPage();
     flashPager(scrubG && scrubG.n ? labelOf(scrubG.n) : undefined); // バーをなぞっている間は、行き先の番号
     emit('page');
@@ -1075,7 +1146,7 @@
     getBase(n).then(function (b) { if (box.isConnected && !box.querySelector('canvas')) box.appendChild(compose(n, b)); }, function () {});
   }
   function startTurn(dir) {
-    if (T || turning || !canStep(dir)) return null;
+    if (S.vert || T || turning || !canStep(dir)) return null;
     var t = { dir: dir, dest: stepPage(dir), t: 0 };
     var wb = boxOf(wrap), sb = st && !still.hidden ? boxOf(still) : null, box, front, back = 0, under = null, origin;
     if (!S.spread) {
@@ -1284,7 +1355,10 @@
     else pan.want = 0;
   }
   // ボタンや引っぱりから: 自動でめくる
-  function autoTurn(dir) { if (startTurn(dir)) settleTurn(true); }
+  function autoTurn(dir) {
+    if (S.vert) { if (canStep(dir)) goPage(stepPage(dir)); return; }
+    if (startTurn(dir)) settleTurn(true);
+  }
 
   /* ---------- 上下に引っぱってページを移る ----------
      ページの下の端で、さらに指を上へ引っぱる → 次のページ（最後のページなら、同じページを追加）
@@ -1345,6 +1419,7 @@
       if ((rest > 0.5 && pan.atB) || (rest < -0.5 && pan.atT)) pan.pull += rest;
     }
     if (pan.pull || pan.ready !== undefined) pan.ready = showPull(pan.pull);
+    checkVert();
   }
   function turnMove(e) {
     var g = pan.turn, now = performance.now();
@@ -1499,10 +1574,21 @@
     e.preventDefault();
     if (e.pointerType !== 'touch') {
       if (drawing || turning) return;
-      if (!activate(st.n)) return;
+      if (!(S.vert ? goVert(st.n) : activate(st.n))) return;
     }
     onInkDown(e);
   });
+  // 縦スクロールの上のページ: 同じく、ペンが触れたら書ける紙にする
+  upEl.addEventListener('pointerdown', function (e) {
+    if (!S.hasFile || !upSt) return;
+    e.preventDefault();
+    if (e.pointerType !== 'touch') {
+      if (drawing || turning) return;
+      if (!goVert(upSt.n)) return;
+    }
+    onInkDown(e);
+  });
+  upEl.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   still.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   ink.addEventListener('pointermove', function (e) {
     if (touches[e.pointerId]) {
@@ -1685,7 +1771,7 @@
     goPage: goPage, updateUI: updateUI, pushUndo: pushUndo, commit: commit,
     scheduleSave: scheduleSave, flushSave: flushSave, exportData: exportData,
     setTool: setTool, insertPage: insertPage, deletePage: deletePage, addImage: addImage,
-    setShift: setShift,
+    setShift: setShift, setVert: setVert,
     setScrub: setScrub, scrubOn: function () { return scrubOn; },
     pageEntry: entry, paperLines: paperLines, openJson: openJson, liveCtx: lctx, liveCanvas: lc, wrap: wrap, stage: stage,
     blank: function () { openDoc(null, '白紙', 'strokes:__blank__'); },
