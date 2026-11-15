@@ -1461,7 +1461,11 @@
       stage.scrollTop = f.y; stage.scrollLeft = f.x;
       markScroll();
       var k = Math.exp(-d / 325); f.vy *= k; f.vx *= k;
+      // ページが入れかわると、見た目を変えないようにスクロール位置が動く。そのぶんを、持っている位置にも足す
+      // （足さないと、次の回に元の位置へ戻され、1ページずつ先へ飛び続けていた。2026-11-15）
+      var b = stage.scrollTop;
       checkVert();
+      f.y += stage.scrollTop - b;
       f.sy = stage.scrollTop; f.sx = stage.scrollLeft;
       if (Math.abs(f.vy) < 0.015 && Math.abs(f.vx) < 0.015) { fl = null; return; }
       f.raf = requestAnimationFrame(step);
