@@ -126,12 +126,23 @@ function Get-RecentDocs {
 $failed = @{}   # 失敗したファイル → そのときのWordの更新時刻（直して保存し直すまで、やり直さない）
 Log '起動しました'
 $lastFolders = ''
+$lastSig = $null
+$told = @{}
 while ($true) {
   try {
     $folders = @(Find-Folders)
     $key = $folders -join ' | '
     if ($key -ne $lastFolders) { Log ('見ている場所: ' + $(if ($key) { $key } else { '（見つかりません）' })); $lastFolders = $key }
-    foreach ($src in Get-RecentDocs) {
+    $all = @(Get-RecentDocs)
+    $mine = @($all | Where-Object { $p = $_; $_ -match '\.docx?$' -and ($folders | Where-Object { $p.StartsWith($_.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) }) })
+    $sig = $mine -join '|'
+    if ($sig -ne $lastSig) {
+      Log ('最近使ったWord: ' + $all.Count + '件（うちマイドライブ内 ' + $mine.Count + '件）')
+      $mine | Select-Object -First 5 | ForEach-Object { Log ('  ' + $_) }
+      if (-not $mine.Count) { $all | Select-Object -First 5 | ForEach-Object { Log ('  （対象外）' + $_) } }
+      $lastSig = $sig
+    }
+    foreach ($src in $mine) {
       if ($src -notmatch '\.docx?$' -or [IO.Path]::GetFileName($src).StartsWith('~$')) { continue }
       $inside = $false
       foreach ($f in $folders) { if ($src.StartsWith($f.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { $inside = $true; break } }
@@ -143,7 +154,10 @@ while ($true) {
       if (((Get-Date) - $t).TotalSeconds -lt 5) { continue }       # 保存の途中かもしれない
       $hasPdf = Test-Path -LiteralPath $pdf
       if ($hasPdf) { if ((Get-Item -LiteralPath $pdf).LastWriteTime -ge $t) { continue } }
-      elseif ($t -lt $Since) { continue }
+      elseif ($t -lt $Since) {
+        if (-not $told.ContainsKey($d.FullName)) { Log ('入れる前に保存されたWordなので、まだ作りません（保存し直すと作ります）: ' + $d.FullName); $told[$d.FullName] = $true }
+        continue
+      }
       if ($failed.ContainsKey($d.FullName) -and $failed[$d.FullName] -eq $t) { continue }
       try { Convert-One $d.FullName $pdf; $failed.Remove($d.FullName) }
       catch { $failed[$d.FullName] = $t; Log ('PDFにできませんでした: ' + $d.FullName + '  ' + $_.Exception.Message) }
