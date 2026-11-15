@@ -115,7 +115,7 @@
   /* ペン・えんぴつの線: 点ごとの丸と、となりの丸をつなぐ帯を1つの形にまとめて、一度で塗る
      （区切りごとに線を重ねて描くと、重なった所のふちが濃くなってギザギザに見えたため。2026-11-16）
      - 筆圧は前後の点と平均して、太さが急に変わらないように
-     - 点の間が開いている所は、なめらかな曲線（Catmull-Rom）で点を補う */
+     - 点の間が少し開いている所は、なめらかな曲線（Catmull-Rom）で点を補う（図形の辺のような長い区間はまっすぐ） */
   function cr(a, b, c, d, t) {
     var t2 = t * t, t3 = t2 * t;
     function f(i) { return 0.5 * (2 * b[i] + (c[i] - a[i]) * t + (2 * a[i] - 5 * b[i] + 4 * c[i] - d[i]) * t2 + (3 * b[i] - a[i] - 3 * c[i] + d[i]) * t3); }
@@ -141,8 +141,9 @@
     }
     Q = [P[0]];
     for (i = 1; i < n; i++) {
-      var a = P[i - 1], b = P[i], k = Math.min(10, Math.floor(Math.hypot(b[0] - a[0], b[1] - a[1]) / 2.5));
-      if (k >= 1 && n > 2) {
+      var a = P[i - 1], b = P[i], d = Math.hypot(b[0] - a[0], b[1] - a[1]), k = Math.min(10, Math.floor(d / 2.5));
+      // 長い区間（図形に直した線の辺など）は、まっすぐのまま（角が丸まらないように）
+      if (k >= 1 && n > 2 && d < W * 0.02) {
         var a0 = P[Math.max(0, i - 2)], b1 = P[Math.min(n - 1, i + 1)];
         for (var j = 1; j <= k; j++) Q.push(cr(a0, a, b, b1, j / (k + 1)));
       }
@@ -301,7 +302,7 @@
     var off = blankCanvas(v.cw, v.ch), x = off.getContext('2d');
     if (info.page) {
       try {
-        await info.page.render({ canvasContext: x, viewport: info.page.getViewport({ scale: v.W / info.w }), transform: [1, 0, 0, 1, -v.ox, -v.oy] }).promise;
+        await info.page.render({ canvasContext: x, viewport: info.vp(v.W / info.w), transform: [1, 0, 0, 1, -v.ox, -v.oy] }).promise;
       } catch (e) { off.width = off.height = 0; return; }
     } else { x.setTransform(1, 0, 0, 1, -v.ox, -v.oy); drawPaper(x, v.W, v.H, entry()); }
     if (tok !== hiTok || hiKey() !== key) { off.width = off.height = 0; return; }
@@ -392,9 +393,9 @@
   async function pageInfo(n) {
     var e = entry(n);
     if (e.src > 0 && S.pdf) {
-      var page = await S.pdf.getPage(e.src);
-      var b = page.getViewport({ scale: 1 });
-      return { page: page, w: b.width, h: b.height };
+      var page = await S.pdf.getPage(e.src), rot = ((page.rotate || 0) + (e.rot || 0)) % 360;
+      var b = page.getViewport({ scale: 1, rotation: rot });
+      return { page: page, w: b.width, h: b.height, vp: function (k) { return page.getViewport({ scale: k, rotation: rot }); } };
     }
     return { page: null, w: e.w || A4.w, h: e.h || A4.h };
   }
@@ -438,7 +439,7 @@
 
   // ページの大きさ（PDFの単位）。元のPDFのページ番号ごとに控える
   var sizes = {};
-  function sizeKey(n) { var e = entry(n); return e.src > 0 ? 's' + e.src : 'b' + (e.w || A4.w) + 'x' + (e.h || A4.h); }
+  function sizeKey(n) { var e = entry(n); return e.src > 0 ? 's' + e.src + (e.rot ? 'r' + e.rot : '') : 'b' + (e.w || A4.w) + 'x' + (e.h || A4.h); }
   async function sizeOf(n) {
     var k = sizeKey(n);
     if (!sizes[k]) { var i = await pageInfo(n); sizes[k] = { w: i.w, h: i.h }; }
@@ -464,7 +465,7 @@
         var c = document.createElement('canvas'); c.width = W; c.height = H;
         var x = c.getContext('2d');
         drawPaper(x, W, H, info.page ? null : entry(n));
-        if (info.page) await info.page.render({ canvasContext: x, viewport: info.page.getViewport({ scale: W / info.w }) }).promise;
+        if (info.page) await info.page.render({ canvasContext: x, viewport: info.vp(W / info.w) }).promise;
         slot.c = c;
         return c;
       })();
@@ -491,7 +492,7 @@
       var c = document.createElement('canvas'); c.width = W; c.height = H;
       var x = c.getContext('2d');
       drawPaper(x, W, H, info.page ? null : entry(n));
-      if (info.page) await info.page.render({ canvasContext: x, viewport: info.page.getViewport({ scale: W / info.w }) }).promise;
+      if (info.page) await info.page.render({ canvasContext: x, viewport: info.vp(W / info.w) }).promise;
       slot.c = c;
       return c;
     })();
@@ -755,7 +756,7 @@
     if (page) {
       // 別の紙に描いてから、できあがったら一度に写す
       var off = blankCanvas(pdfC.width, pdfC.height);
-      var task = page.render({ canvasContext: off.getContext('2d'), viewport: page.getViewport({ scale: L.cssW / bw * L.dprPdf }) });
+      var task = page.render({ canvasContext: off.getContext('2d'), viewport: info.vp(L.cssW / bw * L.dprPdf) });
       renderTask = task;
       try {
         await task.promise;
@@ -808,7 +809,7 @@
     canvas.style.width = cssWidth + 'px'; canvas.style.height = (cssWidth * info.h / info.w) + 'px';
     var ctx = canvas.getContext('2d');
     drawPaper(ctx, W, H, info.page ? null : entry(n));
-    if (info.page) await info.page.render({ canvasContext: ctx, viewport: info.page.getViewport({ scale: W / info.w }) }).promise;
+    if (info.page) await info.page.render({ canvasContext: ctx, viewport: info.vp(W / info.w) }).promise;
     drawList(ctx, S.strokes[n] || [], W, H);
   }
 
@@ -825,7 +826,7 @@
   // 元のPDFのままの並び（ページを足したり、並べ替えたり、削除したりしていない）でなければ、並びも保存する
   function layoutCustom() {
     var n = S.pdf ? S.pdf.numPages : 1;
-    return S.layout.length !== n || S.layout.some(function (e, i) { return e.added || (S.pdf && e.src !== i + 1); });
+    return S.layout.length !== n || S.layout.some(function (e, i) { return e.added || e.rot || (S.pdf && e.src !== i + 1); });
   }
   // 使っている画像だけを保存する（取り消し履歴にある画像も残す）
   function usedImages() {
@@ -884,6 +885,7 @@
         var src = Math.floor(+(e && e.src));
         if (!(src >= 0 && src <= max)) ok = false;
         var o = { src: src };
+        if (src > 0 && (e.rot === 90 || e.rot === 180 || e.rot === 270)) o.rot = e.rot;
         if (src === 0) {
           o.w = num(e.w, 50, 5000, A4.w); o.h = num(e.h, 50, 5000, A4.h);
           if (e.bg === 'grid' || e.bg === 'lined') o.bg = e.bg;
@@ -1104,6 +1106,51 @@
     if (n === S.page) { drawInk(); updateUI(); } else { refreshStillInk(); goPage(n); }
     setStatus(n + 'ページ目の書き込みを消しました（元に戻すボタンで戻せます）');
   }
+  /* n ページを右に90°回す。手書きと貼った画像も一緒に回す（太さは紙に対して同じ見た目のまま）
+     - PDFのページ: layout の rot（0・90・180・270）。白紙のページ: 縦と横の長さを入れかえる */
+  function rotXY(p) { return [r4(1 - p[1]), p[0], p[2]]; }
+  function rotImage(url) { // 画像そのものを右に90°回した data URL
+    return new Promise(function (resolve) {
+      var im = new Image();
+      im.onload = function () {
+        var c = blankCanvas(im.naturalHeight, im.naturalWidth), x = c.getContext('2d');
+        x.translate(c.width, 0); x.rotate(Math.PI / 2); x.drawImage(im, 0, 0);
+        resolve(/^data:image\/png/.test(url) ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', 0.9));
+      };
+      im.onerror = function () { resolve(null); };
+      im.src = url;
+    });
+  }
+  async function rotatePage(n) {
+    if (!S.hasFile || !S.layout[n - 1]) return;
+    flushSave();
+    var sz = await sizeOf(n), k = sz.w / sz.h; // 回したあとの横幅は、今の高さ
+    var e = JSON.parse(JSON.stringify(S.layout[n - 1]));
+    if (e.src > 0) { e.rot = ((e.rot || 0) + 90) % 360; if (!e.rot) delete e.rot; }
+    else { var w = e.w || A4.w; e.w = e.h || A4.h; e.h = w; }
+    var out = [];
+    for (var i = 0, list = S.strokes[n] || []; i < list.length; i++) {
+      var it = JSON.parse(JSON.stringify(list[i]));
+      delete it.link;
+      if (it.tool === 'image') {
+        var url = S.images[it.id] && await rotImage(S.images[it.id]);
+        if (url) { var id = 'i' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); S.images[id] = url; it.id = id; }
+        var nx = r4(1 - (it.y + it.h)), ny = it.x, nw = it.h; it.h = it.w; it.w = nw; it.x = nx; it.y = ny;
+      } else {
+        it.points = it.points.map(rotXY);
+        it.width = Math.round(it.width * k * 100) / 100;
+      }
+      out.push(it);
+    }
+    S.layout[n - 1] = e;
+    S.strokes[n] = out;
+    S.undo = []; S.redo = []; S.cache = {};
+    scheduleSave(n);
+    emit('layout'); emit('data');
+    var go = S.page; S.page = 0; goPage(go);
+    setStatus(n + 'ページ目を右に90°回しました');
+  }
+
   /* ページを削除する（n を省くと今のページ）。元のPDFのページも削除できる（Driveの元のPDFへの反映でも、そのページを外す） */
   function deletePage(n) {
     if (!S.hasFile) return;
@@ -1958,7 +2005,7 @@
     drawInk: drawInk, drawList: drawList, renderPage: renderPage, renderThumb: renderThumb,
     goPage: goPage, updateUI: updateUI, pushUndo: pushUndo, commit: commit,
     scheduleSave: scheduleSave, flushSave: flushSave, exportData: exportData,
-    setTool: setTool, insertPage: insertPage, deletePage: deletePage, movePage: movePage, addPageAt: addPageAt, duplicatePage: duplicatePage, clearPageAt: clearPageAt, addImage: addImage,
+    setTool: setTool, insertPage: insertPage, deletePage: deletePage, movePage: movePage, rotatePage: rotatePage, addPageAt: addPageAt, duplicatePage: duplicatePage, clearPageAt: clearPageAt, addImage: addImage,
     setShift: setShift, setVert: setVert, setFling: setFling, flingLevel: function () { return flingLv; },
     setScrub: setScrub, scrubOn: function () { return scrubOn; },
     pageEntry: entry, paperLines: paperLines, openJson: openJson, liveCtx: lctx, liveCanvas: lc, wrap: wrap, stage: stage,

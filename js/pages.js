@@ -1,6 +1,6 @@
 /* ページ一覧（左のサイドバー）と、PDFの中の文字の検索
    - ページ一覧: ページを長押しすると持ち上がり、指を動かして好きな場所に置ける（並べ替え）
-   - 番号の横の ⌄ で、そのページのメニュー（前・後ろに追加、複製、書き込みの消去、削除） */
+   - 番号の横の ⌄ で、そのページのメニュー（前・後ろに追加、複製、回転、書き込みの消去、削除） */
 (function () {
   'use strict';
   var App = window.App, S = App.S;
@@ -92,6 +92,7 @@
     '<button class="item" data-pm="before">前にページを追加（白紙）</button>' +
     '<button class="item" data-pm="after">後ろにページを追加（白紙）</button>' +
     '<button class="item" data-pm="dup">複製（書き込みごと、すぐ後ろに）</button>' +
+    '<button class="item" data-pm="rot">右に90°回転（書き込みも一緒に）</button>' +
     '<div class="mline"></div>' +
     '<button class="item" data-pm="clear">書き込みを消去</button>' +
     '<button class="item danger" data-pm="del">ページを削除</button>' +
@@ -117,6 +118,7 @@
     if (a === 'before') App.addPageAt(n, true);
     else if (a === 'after') App.addPageAt(n, false);
     else if (a === 'dup') App.duplicatePage(n);
+    else if (a === 'rot') App.rotatePage(n);
     else if (a === 'clear') App.clearPageAt(n);
     else if (a === 'del') App.deletePage(n);
   });
@@ -565,6 +567,11 @@
   }
   function esc(s) { return s.replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
+  // 回したページでは、印の四角も同じだけ右に回す
+  function turn(r, rot) {
+    for (var k = 0; k < rot; k += 90) r = { x: 1 - (r.y + r.h), y: r.x, w: r.h, h: r.w };
+    return r;
+  }
   // 今のページで見つかった場所に、黄色い印をつける
   function clearMarks() { $('marks').textContent = ''; }
   async function showMarks() {
@@ -575,7 +582,7 @@
     if (q !== query) return;
     var html = [], i = t.text.indexOf(q);
     while (i >= 0) {
-      rects(t, i, i + q.length).forEach(function (r) {
+      rects(t, i, i + q.length).map(function (r) { return turn(r, e.rot || 0); }).forEach(function (r) {
         html.push('<i style="left:' + (r.x * 100) + '%;top:' + (r.y * 100) + '%;width:' + (r.w * 100) + '%;height:' + (r.h * 100) + '%"></i>');
       });
       i = t.text.indexOf(q, i + q.length);

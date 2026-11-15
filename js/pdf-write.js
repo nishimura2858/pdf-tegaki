@@ -91,7 +91,11 @@
           });
         }
       }
-      vp = e.src > 0 && c.doc ? (await c.doc.getPage(e.src)).getViewport({ scale: 1 }) : flatView(e.w || 595, e.h || 842);
+      // 回したページ: PDFのページの向き（/Rotate）を変え、手書きは回した向きの座標で描く
+      var rot = e.src > 0 && (e.rot === 90 || e.rot === 180 || e.rot === 270) ? e.rot : 0;
+      if (rot) pg.setRotation(L.degrees(((pg.getRotation().angle || 0) + rot) % 360));
+      if (e.src > 0 && c.doc) { var jp = await c.doc.getPage(e.src); vp = jp.getViewport({ scale: 1, rotation: ((jp.rotate || 0) + rot) % 360 }); }
+      else vp = flatView(e.w || 595, e.h || 842);
       plan.push({ page: pg, vp: vp });
       idx++;
     }
