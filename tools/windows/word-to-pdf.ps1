@@ -1,6 +1,8 @@
 ﻿<# Wordを保存したら、同じ場所に同じ名前のPDFを自動で作る（Windows用・裏で動き続ける）
 
-   - Googleドライブの中を15秒ごとに見て、PDFより新しいWord（.docx / .doc）があればPDFを作り直す
+   - 10秒ごとに、Wordの「最近使ったファイル」を見て、Googleドライブの中にあるWord（.docx / .doc）が
+     PDFより新しければ、PDFを作り直す
+     （ドライブ全体をたどると、ファイルが多いときに終わらなかったため。2026-11-15）
    - PDFは、Wordそのもので作る（UDデジタル教科書体などのフォントも、見た目もそのまま）
    - Wordのファイルには何もしない（コピーを開いてPDFにする。開いて編集中のWordにも触らない）
    - 初めて動かしたときより前からあるWordは、PDFがまだなければ作らない
@@ -99,6 +101,28 @@ function Convert-One($src, $pdf) {
   }
 }
 
+# Wordの「最近使ったファイル」（Wordの記録と、Windowsの「最近使った項目」）
+function Get-RecentDocs {
+  $paths = @{}
+  $keys = @(Get-Item -Path 'HKCU:\Software\Microsoft\Office\*\Word\User MRU\*\File MRU', 'HKCU:\Software\Microsoft\Office\*\Word\File MRU' -ErrorAction SilentlyContinue)
+  foreach ($k in $keys) {
+      foreach ($v in $k.GetValueNames()) {
+        if ($v -notmatch '^Item \d+$') { continue }
+        $p = [string]$k.GetValue($v)
+        $i = $p.LastIndexOf('*'); if ($i -ge 0) { $p = $p.Substring($i + 1) }
+        if ($p) { $paths[$p] = $true }
+      }
+  }
+  $recent = Join-Path $env:APPDATA 'Microsoft\Windows\Recent'
+  if (Test-Path -LiteralPath $recent) {
+    $sh = New-Object -ComObject WScript.Shell
+    foreach ($l in Get-ChildItem -LiteralPath $recent -Filter '*.doc*.lnk' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 40) {
+      try { $t = $sh.CreateShortcut($l.FullName).TargetPath; if ($t) { $paths[$t] = $true } } catch {}
+    }
+  }
+  return @($paths.Keys)
+}
+
 $failed = @{}   # 失敗したファイル → そのときのWordの更新時刻（直して保存し直すまで、やり直さない）
 Log '起動しました'
 $lastFolders = ''
@@ -107,22 +131,24 @@ while ($true) {
     $folders = @(Find-Folders)
     $key = $folders -join ' | '
     if ($key -ne $lastFolders) { Log ('見ている場所: ' + $(if ($key) { $key } else { '（見つかりません）' })); $lastFolders = $key }
-    foreach ($f in $folders) {
-      $docs = Get-ChildItem -LiteralPath $f -Recurse -File -Include *.docx, *.doc -ErrorAction SilentlyContinue |
-        Where-Object { -not $_.Name.StartsWith('~$') }
-      foreach ($d in $docs) {
-        $pdf = [IO.Path]::ChangeExtension($d.FullName, '.pdf')
-        $t = $d.LastWriteTime
-        if (((Get-Date) - $t).TotalSeconds -lt 5) { continue }       # 保存の途中かもしれない
-        $hasPdf = Test-Path -LiteralPath $pdf
-        if ($hasPdf) { if ((Get-Item -LiteralPath $pdf).LastWriteTime -ge $t) { continue } }
-        elseif ($t -lt $Since) { continue }
-        if ($failed.ContainsKey($d.FullName) -and $failed[$d.FullName] -eq $t) { continue }
-        try { Convert-One $d.FullName $pdf; $failed.Remove($d.FullName) }
-        catch { $failed[$d.FullName] = $t; Log ('PDFにできませんでした: ' + $d.FullName + '  ' + $_.Exception.Message) }
-      }
+    foreach ($src in Get-RecentDocs) {
+      if ($src -notmatch '\.docx?$' -or [IO.Path]::GetFileName($src).StartsWith('~$')) { continue }
+      $inside = $false
+      foreach ($f in $folders) { if ($src.StartsWith($f.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { $inside = $true; break } }
+      if (-not $inside) { continue }
+      if (-not (Test-Path -LiteralPath $src)) { continue }
+      $d = Get-Item -LiteralPath $src
+      $pdf = [IO.Path]::ChangeExtension($d.FullName, '.pdf')
+      $t = $d.LastWriteTime
+      if (((Get-Date) - $t).TotalSeconds -lt 5) { continue }       # 保存の途中かもしれない
+      $hasPdf = Test-Path -LiteralPath $pdf
+      if ($hasPdf) { if ((Get-Item -LiteralPath $pdf).LastWriteTime -ge $t) { continue } }
+      elseif ($t -lt $Since) { continue }
+      if ($failed.ContainsKey($d.FullName) -and $failed[$d.FullName] -eq $t) { continue }
+      try { Convert-One $d.FullName $pdf; $failed.Remove($d.FullName) }
+      catch { $failed[$d.FullName] = $t; Log ('PDFにできませんでした: ' + $d.FullName + '  ' + $_.Exception.Message) }
     }
   } catch { Log ('エラー: ' + $_.Exception.Message) }
   Close-Word
-  Start-Sleep -Seconds 15
+  Start-Sleep -Seconds 10
 }
