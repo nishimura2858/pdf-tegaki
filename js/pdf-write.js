@@ -52,7 +52,7 @@
 
   /* 元のPDFに手書きを描き込んだPDFを作る（画面と同じ太さ・色・透明度で）
      c.origBytes がなければ（白紙のノート）、新しいPDFを作る。
-     data.layout があれば、追加したページ（同じページ・白紙）も入れる */
+     data.layout があれば、その並びどおりにする（追加したページ・並べ替え・削除したページ） */
   async function bake(c, data) {
     await loadLib();
     var L = PDFLib;
@@ -61,18 +61,22 @@
     var pdf = hasOrig ? await L.PDFDocument.load(c.origBytes.slice(0), { updateMetadata: false }) : await L.PDFDocument.create();
     var count = pdf.getPageCount();
     var layout = Array.isArray(data.layout) && data.layout.length ? data.layout : null;
-    if (layout && layout.filter(function (e) { return !e.added; }).length !== count) layout = null; // 並びが合わなければ使わない
+    if (layout && layout.some(function (e) { return !e.added && e.src > count; })) layout = null; // 並びが合わなければ使わない
     if (!layout) {
       layout = [];
       for (var q = 1; q <= count; q++) layout.push({ src: q });
       if (!count) layout.push({ src: 0, w: 595, h: 842 });
     }
-    // ページを並びどおりに用意する（元のページはそのまま、追加したページだけ差し込む）
-    var srcPdf = null, plan = [], idx = 0;
+    // 元のページの並びが変わっている（並べ替え・削除）ときは、元のページを一度はずして、並びどおりに入れ直す
+    var orig = pdf.getPages(), keep = layout.filter(function (e) { return !e.added && e.src > 0; });
+    var moved = keep.length !== count || keep.some(function (e, i) { return e.src !== i + 1; });
+    if (moved) for (var r = count - 1; r >= 0; r--) pdf.removePage(r);
+    var srcPdf = null, plan = [], idx = 0, used = {};
     for (var li = 0; li < layout.length; li++) {
       var e = layout[li], pg, vp;
-      if (!e.added && e.src > 0) {
-        pg = pdf.getPage(idx);
+      if (!e.added && e.src > 0 && !used[e.src]) {
+        used[e.src] = true;
+        if (moved) { pg = orig[e.src - 1]; pdf.insertPage(idx, pg); } else pg = pdf.getPage(idx);
       } else if (e.src > 0 && hasOrig) {
         if (!srcPdf) srcPdf = await L.PDFDocument.load(c.origBytes.slice(0), { updateMetadata: false });
         pg = (await pdf.copyPages(srcPdf, [e.src - 1]))[0];

@@ -151,7 +151,7 @@
         App.setStatus(cfg.shape ? '図形モード：丸・四角・三角・直線を書くと、きれいな形に直します' : '図形モードを切りました');
         break;
       case 'moreBtn':
-        $('delPageBtn').disabled = !S.hasFile || !App.pageEntry().added;
+        $('delPageBtn').disabled = !S.hasFile || S.total <= 1;
         $('shiftBtn').setAttribute('aria-pressed', S.shift ? 'true' : 'false');
         $('scrubBtn').setAttribute('aria-pressed', App.scrubOn() ? 'true' : 'false');
         markFling();

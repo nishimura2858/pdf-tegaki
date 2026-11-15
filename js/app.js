@@ -3,14 +3,14 @@
    - 手書きデータ（JSON）: { version, pdf, layout?, images?, pages: { "ページ番号": [線や画像, …] } }
      - 線: { tool: pen|pencil|highlighter, color, width, points: [[x, y, 筆圧], …] }（x, y はページに対する割合）
      - 画像: { tool: 'image', id, x, y, w, h }。画像の中身は images[id]（data URL）
-     - layout: ページの並び [{ src: 元のPDFのページ番号（0は白紙）, w, h, added }]。ページを追加したときだけ保存する */
+     - layout: ページの並び [{ src: 元のPDFのページ番号（0は白紙）, w, h, added }]。元のPDFの並びと違うとき（追加・並べ替え・削除）だけ保存する */
 (function () {
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
   var stage = $('stage'), wrap = $('wrap'), pdfC = $('pdfc'), ink = $('ink'), lc = $('livec');
   var pctx = pdfC.getContext('2d'), ictx = ink.getContext('2d'), lctx = lc.getContext('2d');
   var tmp = document.createElement('canvas'), tctx = tmp.getContext('2d');
-  var MAXZOOM = 2.5, PENS = { pen: 1, pencil: 1, highlighter: 1 };
+  var MAXZOOM = 4, PENS = { pen: 1, pencil: 1, highlighter: 1 };
   var A4 = { w: 595, h: 842 };
 
   if (window.pdfjsLib) {
@@ -112,23 +112,50 @@
     var base = s.width * W / 1000;
     return s.tool === 'pencil' ? base * (0.45 + 0.9 * p) : base * (0.6 + 0.8 * p);
   }
-  function segs(ctx, s, W, H, from) {
-    var p = s.points;
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.strokeStyle = s.color; ctx.fillStyle = s.color;
-    if (p.length === 1) {
-      ctx.beginPath();
-      ctx.arc(p[0][0] * W, p[0][1] * H, widthAt(s, W, p[0][2]) / 2, 0, Math.PI * 2);
-      ctx.fill();
-      return;
+  /* ペン・えんぴつの線: 点ごとの丸と、となりの丸をつなぐ帯を1つの形にまとめて、一度で塗る
+     （区切りごとに線を重ねて描くと、重なった所のふちが濃くなってギザギザに見えたため。2026-11-16）
+     - 筆圧は前後の点と平均して、太さが急に変わらないように
+     - 点の間が開いている所は、なめらかな曲線（Catmull-Rom）で点を補う */
+  function cr(a, b, c, d, t) {
+    var t2 = t * t, t3 = t2 * t;
+    function f(i) { return 0.5 * (2 * b[i] + (c[i] - a[i]) * t + (2 * a[i] - 5 * b[i] + 4 * c[i] - d[i]) * t2 + (3 * b[i] - a[i] - 3 * c[i] + d[i]) * t3); }
+    return [f(0), f(1), b[2] + (c[2] - b[2]) * t];
+  }
+  function band(ctx, a, b) { // 2つの丸の外側の接線でできる帯（丸と同じ向きに回る）
+    var dx = b[0] - a[0], dy = b[1] - a[1], d = Math.hypot(dx, dy);
+    if (d < 1e-6 || d <= Math.abs(a[2] - b[2])) return;
+    var ux = dx / d, uy = dy / d, nx = -uy, ny = ux, c = (a[2] - b[2]) / d, k = Math.sqrt(1 - c * c);
+    var m1x = c * ux + k * nx, m1y = c * uy + k * ny, m2x = c * ux - k * nx, m2y = c * uy - k * ny;
+    var q = [[a[0] + a[2] * m1x, a[1] + a[2] * m1y], [b[0] + b[2] * m1x, b[1] + b[2] * m1y],
+             [b[0] + b[2] * m2x, b[1] + b[2] * m2y], [a[0] + a[2] * m2x, a[1] + a[2] * m2y]];
+    var area = 0;
+    for (var i = 0; i < 4; i++) { var u = q[i], v = q[(i + 1) % 4]; area += u[0] * v[1] - v[0] * u[1]; }
+    if (area < 0) q.reverse();
+    ctx.moveTo(q[0][0], q[0][1]); ctx.lineTo(q[1][0], q[1][1]); ctx.lineTo(q[2][0], q[2][1]); ctx.lineTo(q[3][0], q[3][1]); ctx.closePath();
+  }
+  function segs(ctx, s, W, H) {
+    var p = s.points, n = p.length, i, P = [], Q;
+    for (i = 0; i < n; i++) {
+      var pr = (p[Math.max(0, i - 1)][2] + 2 * p[i][2] + p[Math.min(n - 1, i + 1)][2]) / 4;
+      P.push([p[i][0] * W, p[i][1] * H, Math.max(0.35, widthAt(s, W, pr) / 2)]);
     }
-    for (var j = Math.max(1, from || 1); j < p.length; j++) {
-      ctx.lineWidth = widthAt(s, W, (p[j][2] + p[j - 1][2]) / 2);
-      ctx.beginPath();
-      ctx.moveTo(p[j - 1][0] * W, p[j - 1][1] * H);
-      ctx.lineTo(p[j][0] * W, p[j][1] * H);
-      ctx.stroke();
+    Q = [P[0]];
+    for (i = 1; i < n; i++) {
+      var a = P[i - 1], b = P[i], k = Math.min(10, Math.floor(Math.hypot(b[0] - a[0], b[1] - a[1]) / 2.5));
+      if (k >= 1 && n > 2) {
+        var a0 = P[Math.max(0, i - 2)], b1 = P[Math.min(n - 1, i + 1)];
+        for (var j = 1; j <= k; j++) Q.push(cr(a0, a, b, b1, j / (k + 1)));
+      }
+      Q.push(b);
     }
+    ctx.fillStyle = s.color;
+    ctx.beginPath();
+    for (i = 0; i < Q.length; i++) {
+      var q = Q[i];
+      ctx.moveTo(q[0] + q[2], q[1]); ctx.arc(q[0], q[1], q[2], 0, Math.PI * 2);
+      if (i) band(ctx, Q[i - 1], q);
+    }
+    ctx.fill('nonzero');
   }
   function hlWidth(s, W) { return s.width * W / 1000 * 5; }
   function hlPath(ctx, s, W, H) {
@@ -149,11 +176,15 @@
       var x = p[i][0] * W, y = p[i][1] * H;
       if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
     }
-    if (tmp.width < W || tmp.height < H) { tmp.width = Math.max(tmp.width, Math.ceil(W)); tmp.height = Math.max(tmp.height, Math.ceil(H)); }
-    var bx = Math.max(0, Math.floor(x0 - pad)), by = Math.max(0, Math.floor(y0 - pad));
-    var bw = Math.min(W, Math.ceil(x1 + pad)) - bx, bh = Math.min(H, Math.ceil(y1 + pad)) - by;
+    // 見えている所だけの紙（拡大中のきれいな層・書いている最中の層）は、ずらして描いてある
+    var tf = ctx.getTransform ? ctx.getTransform() : null, ox = tf ? -tf.e : 0, oy = tf ? -tf.f : 0;
+    var cw = ctx.canvas.width, ch = ctx.canvas.height;
+    if (tmp.width < cw || tmp.height < ch) { tmp.width = Math.max(tmp.width, cw); tmp.height = Math.max(tmp.height, ch); }
+    var bx = Math.max(ox, Math.floor(x0 - pad)), by = Math.max(oy, Math.floor(y0 - pad));
+    var bw = Math.min(ox + cw, W, Math.ceil(x1 + pad)) - bx, bh = Math.min(oy + ch, H, Math.ceil(y1 + pad)) - by;
     if (bw <= 0 || bh <= 0) return;
     tctx.save();
+    tctx.setTransform(1, 0, 0, 1, -ox, -oy);
     tctx.clearRect(bx, by, bw, bh);
     tctx.beginPath(); tctx.rect(bx, by, bw, bh); tctx.clip();
     if (s.tool === 'highlighter') hlPath(tctx, s, W, H); else segs(tctx, s, W, H);
@@ -164,7 +195,7 @@
     }
     tctx.restore();
     ctx.save(); ctx.globalAlpha = alpha;
-    ctx.drawImage(tmp, bx, by, bw, bh, bx, by, bw, bh);
+    ctx.drawImage(tmp, bx - ox, by - oy, bw, bh, bx, by, bw, bh);
     ctx.restore();
   }
   // 画像
@@ -199,8 +230,90 @@
   function drawInk() {
     ictx.clearRect(0, 0, ink.width, ink.height);
     drawList(ictx, pages(), ink.width, ink.height, S.xform);
-    if (S.live && S.live.tool === 'pen') segs(ictx, S.live, ink.width, ink.height, 1);
+    if (hv) hiInk();
   }
+
+  /* ---------- 見えている所だけの、きめ細かい層 ----------
+     - pc: 書いている最中の線。書き始めに、見えている所に重ねて置き、毎回まるごと描き直す
+     - hp（PDF）と hi（手書き）: 拡大して紙全体の絵が粗くなったとき（大きすぎて細かく描けない）、
+       見えている所だけを画面の細かさで描いて重ねる。スクロールが止まったら描き直す（GoodNotesのように） */
+  var DPR = Math.min(window.devicePixelRatio || 1, 2);
+  function vpCanvas(id) { var c = document.createElement('canvas'); c.id = id; c.className = 'vp'; c.hidden = true; return c; }
+  var hp = vpCanvas('hipdf'), hi = vpCanvas('hiink'), pc = vpCanvas('penc');
+  wrap.insertBefore(hp, lc); wrap.insertBefore(hi, lc); wrap.insertBefore(pc, $('marks'));
+  var hv = null, hiNeed = false, hiTok = 0, hiTimer = 0, pcv = null;
+  // 紙のうち、画面に見えている所（m: まわりに足す余白の割合）を、画面の点の単位で
+  function visBox(m) {
+    var rw = wrap.getBoundingClientRect(), rs = stage.getBoundingClientRect();
+    if (!rw.width || !S.cssW) return null;
+    var k = rw.width / S.cssW;
+    var x0 = (Math.max(rw.left, rs.left) - rw.left) / k, x1 = (Math.min(rw.right, rs.right) - rw.left) / k;
+    var y0 = (Math.max(rw.top, rs.top) - rw.top) / k, y1 = (Math.min(rw.bottom, rs.bottom) - rw.top) / k;
+    if (x1 - x0 < 2 || y1 - y0 < 2) return null;
+    var mx = (x1 - x0) * (m || 0), my = (y1 - y0) * (m || 0);
+    x0 = Math.max(0, x0 - mx); y0 = Math.max(0, y0 - my); x1 = Math.min(S.cssW, x1 + mx); y1 = Math.min(S.cssH, y1 + my);
+    var ox = Math.floor(x0 * DPR), oy = Math.floor(y0 * DPR);
+    return { ox: ox, oy: oy, cw: Math.ceil(x1 * DPR) - ox, ch: Math.ceil(y1 * DPR) - oy, W: S.cssW * DPR, H: S.cssH * DPR,
+      x0: x0, y0: y0, x1: x1, y1: y1 };
+  }
+  function placeVp(c, v) {
+    if (c.width !== v.cw || c.height !== v.ch) { c.width = v.cw; c.height = v.ch; }
+    c.style.left = (v.ox / DPR) + 'px'; c.style.top = (v.oy / DPR) + 'px';
+    c.style.width = (v.cw / DPR) + 'px'; c.style.height = (v.ch / DPR) + 'px';
+  }
+  function vpCtx(c, v) {
+    var x = c.getContext('2d');
+    x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, c.width, c.height);
+    x.setTransform(1, 0, 0, 1, -v.ox, -v.oy);
+    return x;
+  }
+  // 書いている最中の線
+  function pcStart() {
+    pcv = visBox(0);
+    if (!pcv) return;
+    placeVp(pc, pcv); vpCtx(pc, pcv); pc.hidden = false;
+  }
+  function pcDraw() {
+    if (!pcv) return;
+    var x = vpCtx(pc, pcv);
+    if (S.live) drawItem(x, S.live, pcv.W, pcv.H);
+  }
+  function pcClear() { if (pcv) { vpCtx(pc, pcv); pcv = null; } }
+  // 拡大中のきめ細かい層
+  function hiKey() { return S.key + ':' + S.page + ':' + Math.round(S.cssW) + 'x' + Math.round(S.cssH); }
+  function hiHide() { hiTok++; hv = null; hp.hidden = hi.hidden = true; }
+  function hiSoon(ms) { clearTimeout(hiTimer); if (hiNeed) hiTimer = setTimeout(hiRender, ms == null ? 180 : ms); }
+  function hiInk() {
+    if (!hv) return;
+    drawList(vpCtx(hi, hv), pages(), hv.W, hv.H, S.xform);
+  }
+  function hiAdd(s) { if (hv) { var x = hi.getContext('2d'); drawItem(x, s, hv.W, hv.H); } }
+  async function hiRender() {
+    if (!hiNeed || !S.hasFile || pinch || turning || drawing) { if (hiNeed && drawing) hiSoon(400); return; }
+    var now = visBox(0); if (!now) return;
+    var key = hiKey();
+    if (hv && hv.key === key && now.x0 >= hv.x0 - 1 && now.y0 >= hv.y0 - 1 && now.x1 <= hv.x1 + 1 && now.y1 <= hv.y1 + 1) return; // もう描いてある
+    var v = visBox(0.15);
+    if (v.cw * v.ch > 10e6) v = now;
+    v.key = key;
+    var tok = ++hiTok, n = S.page, info = await pageInfo(n);
+    if (tok !== hiTok || n !== S.page) return;
+    var off = blankCanvas(v.cw, v.ch), x = off.getContext('2d');
+    if (info.page) {
+      try {
+        await info.page.render({ canvasContext: x, viewport: info.page.getViewport({ scale: v.W / info.w }), transform: [1, 0, 0, 1, -v.ox, -v.oy] }).promise;
+      } catch (e) { off.width = off.height = 0; return; }
+    } else { x.setTransform(1, 0, 0, 1, -v.ox, -v.oy); drawPaper(x, v.W, v.H, entry()); }
+    if (tok !== hiTok || hiKey() !== key) { off.width = off.height = 0; return; }
+    placeVp(hp, v); placeVp(hi, v);
+    var px = hp.getContext('2d'); px.setTransform(1, 0, 0, 1, 0, 0); px.drawImage(off, 0, 0);
+    off.width = off.height = 0;
+    hv = v; hiInk();
+    hp.hidden = hi.hidden = false;
+    dbg('きめ細かい層 ' + v.cw + 'x' + v.ch);
+  }
+  stage.addEventListener('scroll', function () { if (hiNeed) hiSoon(); }, { passive: true });
+
   /* ---------- 見開きで、2ページにまたがる書き込み ----------
      書き始めたページに線をそのまま（はみ出した所も）入れ、もう片方のページにも、そのページの位置に直した写しを入れる。
      どちらも自分の紙の中だけが見えるので、見開きではつながって見え、縦画面ではそれぞれ半分ずつ見える。
@@ -559,7 +672,7 @@
     }
     layoutSpread();
   }
-  on('layout', function () { if (st) st.n = -1; });
+  on('layout', function () { if (st) st.n = -1; if (upSt) upSt.n = -1; });
   var stillTimer = 0;
   function laterStill() {
     clearTimeout(stillTimer);
@@ -586,9 +699,13 @@
       cssH = cssW * bh / bw;
     }
     var area = cssW * cssH, dw = Math.min(window.devicePixelRatio || 1, 2);
-    var dprPdf = Math.max(0.7, Math.min(dw, Math.sqrt(9e6 / area)));
-    var dprInk = Math.max(0.7, Math.min(dw, Math.sqrt(6e6 / area)));
+    // 紙全体の絵は、大きくなりすぎないように細かさを下げる（iPadのcanvasの上限をこえると真っ白になる）。
+    // 下げたときは、見えている所だけきめ細かい層を重ねる
+    var dprPdf = Math.max(0.3, Math.min(dw, Math.sqrt(9e6 / area)));
+    var dprInk = Math.max(0.3, Math.min(dw, Math.sqrt(6e6 / area)));
     S.cssW = cssW; S.cssH = cssH;
+    hiNeed = Math.min(dprPdf, dprInk) < DPR * 0.95;
+    if (!hiNeed || (hv && hv.key !== hiKey())) hiHide();
     wrap.style.width = cssW + 'px'; wrap.style.height = cssH + 'px';
     if (S.swap) { var sw = S.swap; S.swap = null; sw(); } // めくり終わったあとの置きかえ（同じ瞬間に）
     updateStill();
@@ -652,6 +769,7 @@
       drawPaper(pctx, pdfC.width, pdfC.height, entry());
     }
     dbg('ページ描き直し ' + Math.round(performance.now() - t0) + 'ms（倍率' + Math.round(S.zoom * 100) + '%）');
+    hiSoon(0);
     updateUI();
     if (!rapid) prefetch();
   }
@@ -704,7 +822,11 @@
   }
 
   /* ---------- 保存・復元 ---------- */
-  function layoutCustom() { return S.layout.some(function (e) { return e.added; }); }
+  // 元のPDFのままの並び（ページを足したり、並べ替えたり、削除したりしていない）でなければ、並びも保存する
+  function layoutCustom() {
+    var n = S.pdf ? S.pdf.numPages : 1;
+    return S.layout.length !== n || S.layout.some(function (e, i) { return e.added || (S.pdf && e.src !== i + 1); });
+  }
   // 使っている画像だけを保存する（取り消し履歴にある画像も残す）
   function usedImages() {
     var ids = {};
@@ -929,22 +1051,71 @@
     setStatus(PAPER[kind] ? PAPER[kind] + 'を追加しました' : '同じページを追加しました');
     return done;
   }
-  /* 今のページを削除する（追加したページだけ） */
-  function deletePage() {
-    if (!S.hasFile) return;
-    if (!entry().added) { setStatus('元のPDFのページは削除できません（追加したページだけ削除できます）'); return; }
-    if (!window.confirm('このページ（' + S.page + 'ページ目）を削除しますか？\n書き込みも一緒に消えます。')) return;
+  /* ページの並びを作り直す（ページ一覧の並べ替え・複製・削除など）
+     plan: 新しい並びの1つずつ { e: layoutの項目, from: 元のページ番号（新しい紙は0）, copy: 書き込みを写すとき true }
+     go: 移ったあとに開くページ */
+  function rearrange(plan, go, msg) {
+    if (!S.hasFile || !plan.length) return;
     flushSave();
-    var at = S.page;
-    S.layout.splice(at - 1, 1);
     var ns = {};
-    Object.keys(S.strokes).forEach(function (k) { var n = +k; if (n !== at) ns[n > at ? n - 1 : n] = S.strokes[k]; });
+    plan.forEach(function (p, i) {
+      var arr = p.from ? S.strokes[p.from] : null;
+      if (!arr || !arr.length) return;
+      ns[i + 1] = p.copy ? arr.map(function (x) { var y = JSON.parse(JSON.stringify(x)); delete y.link; return y; }) : arr;
+    });
+    S.layout = plan.map(function (p) { return p.e; });
     S.strokes = ns; S.total = S.layout.length;
-    S.undo = []; S.redo = []; S.cache = {};
+    S.undo = []; S.redo = []; S.cache = {}; // ページ番号がずれるので、取り消し履歴は消す
     scheduleSave(1);
-    emit('layout');
-    S.page = 0; goPage(Math.min(at, S.total));
-    setStatus('ページを削除しました');
+    emit('layout'); emit('data');
+    S.page = 0; goPage(Math.min(S.total, Math.max(1, go)));
+    if (msg) setStatus(msg);
+  }
+  function samePlan() { return S.layout.map(function (e, i) { return { e: e, from: i + 1 }; }); }
+  // from ページを to の位置へ動かす
+  function movePage(from, to) {
+    if (from === to || from < 1 || from > S.total) return;
+    var plan = samePlan(), cur = S.page, it = plan.splice(from - 1, 1)[0];
+    to = Math.min(S.total, Math.max(1, to));
+    plan.splice(to - 1, 0, it);
+    var go = 1; plan.forEach(function (p, i) { if (p.from === cur) go = i + 1; });
+    rearrange(plan, go, from + 'ページ目を' + to + 'ページ目に動かしました');
+  }
+  // n ページの前（before）か後ろに、白紙（同じ大きさ）を入れる
+  function addPageAt(n, before) {
+    var sz = sizes[sizeKey(n)] || S.pageSize;
+    var e = { src: 0, w: Math.round(sz.w), h: Math.round(sz.h), added: true }, at = before ? n - 1 : n;
+    var plan = samePlan();
+    plan.splice(at, 0, { e: e, from: 0 });
+    rearrange(plan, at + 1, '白紙のページを追加しました');
+  }
+  // n ページを書き込みごと写して、すぐ後ろに入れる
+  function duplicatePage(n) {
+    var src = S.layout[n - 1]; if (!src) return;
+    var e = JSON.parse(JSON.stringify(src)); e.added = true;
+    var plan = samePlan();
+    plan.splice(n, 0, { e: e, from: n, copy: true });
+    rearrange(plan, n + 1, n + 'ページ目を複製しました');
+  }
+  // n ページの書き込みを消す（元に戻せる）
+  function clearPageAt(n) {
+    if (!(S.strokes[n] || []).length) { setStatus('このページには書き込みがありません'); return; }
+    pushUndo(n); S.strokes[n] = []; scheduleSave(n); emit('data');
+    if (n === S.page) { drawInk(); updateUI(); } else { refreshStillInk(); goPage(n); }
+    setStatus(n + 'ページ目の書き込みを消しました（元に戻すボタンで戻せます）');
+  }
+  /* ページを削除する（n を省くと今のページ）。元のPDFのページも削除できる（Driveの元のPDFへの反映でも、そのページを外す） */
+  function deletePage(n) {
+    if (!S.hasFile) return;
+    n = n || S.page;
+    if (S.total <= 1) { setStatus('最後の1ページは削除できません'); return; }
+    var e = S.layout[n - 1];
+    var note = e && !e.added && e.src > 0 ? '\n（元のPDFのページです。Driveの元のPDFに反映するときも、このページは外されます）' : '';
+    if (!window.confirm(n + 'ページ目を削除しますか？\n書き込みも一緒に消えます。' + note)) return;
+    var plan = samePlan(), cur = S.page;
+    plan.splice(n - 1, 1);
+    var go = Math.min(n, plan.length); plan.forEach(function (p, i) { if (p.from === cur) go = i + 1; });
+    rearrange(plan, go, 'ページを削除しました');
   }
 
   /* 画像を今のページの、見えている場所の真ん中に貼る。貼った画像を返す */
@@ -1091,56 +1262,13 @@
     if (Math.abs(dy) < Math.abs(dx) * 0.12) b = [b[0], a[1], b[2]];
     return [[a[0], a[1], 0.5], [b[0], b[1], 0.5]];
   }
-  /* えんぴつの書いている最中: 新しく書いた所のまわりだけを描き直して、質感の模様で切り抜く。
-     （以前は書き込み面全体にCSSの模様マスクをかけていて、iPadで線が遅れて出ていた） */
-  var livePat = null;
-  function pencilLive(from) {
-    var s = S.live, p = s.points, W = lc.width, H = lc.height, i;
-    var pad = widthAt(s, W, 1) / 2 + 2;
-    var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
-    for (i = Math.max(0, (from || 1) - 1); i < p.length; i++) {
-      var x = p[i][0] * W, y = p[i][1] * H;
-      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
-    }
-    var bx = Math.max(0, Math.floor(x0 - pad)), by = Math.max(0, Math.floor(y0 - pad));
-    var bw = Math.min(W, Math.ceil(x1 + pad)) - bx, bh = Math.min(H, Math.ceil(y1 + pad)) - by;
-    if (bw <= 0 || bh <= 0) return;
-    lctx.save();
-    lctx.beginPath(); lctx.rect(bx, by, bw, bh); lctx.clip();
-    lctx.clearRect(bx, by, bw, bh);
-    lctx.lineCap = 'round'; lctx.lineJoin = 'round'; lctx.strokeStyle = s.color; lctx.fillStyle = s.color;
-    if (p.length === 1) {
-      lctx.beginPath(); lctx.arc(p[0][0] * W, p[0][1] * H, widthAt(s, W, p[0][2]) / 2, 0, Math.PI * 2); lctx.fill();
-    }
-    for (var j = 1; j < p.length; j++) {
-      var ax = p[j - 1][0] * W, ay = p[j - 1][1] * H, cx = p[j][0] * W, cy = p[j][1] * H;
-      if (Math.max(ax, cx) + pad < bx || Math.min(ax, cx) - pad > bx + bw ||
-          Math.max(ay, cy) + pad < by || Math.min(ay, cy) - pad > by + bh) continue; // この範囲にかからない線
-      lctx.lineWidth = widthAt(s, W, (p[j][2] + p[j - 1][2]) / 2);
-      lctx.beginPath(); lctx.moveTo(ax, ay); lctx.lineTo(cx, cy); lctx.stroke();
-    }
-    lctx.globalCompositeOperation = 'destination-in';
-    lctx.fillStyle = livePat || (livePat = lctx.createPattern(noise(), 'repeat'));
-    lctx.fillRect(bx, by, bw, bh);
-    lctx.restore();
-  }
-  function drawLive(from) {
-    var s = S.live;
-    if (s.tool === 'pen') segs(ictx, s, ink.width, ink.height, from);
-    else if (s.tool === 'pencil') pencilLive(from);
-    else { lctx.clearRect(0, 0, lc.width, lc.height); hlPath(lctx, s, lc.width, lc.height); }
-  }
+  function drawLive() { pcDraw(); }
   function flushDraw() {
     rafId = 0;
     var s = S.live; if (!s || (s.points.length <= drawnIdx && s.tool !== 'highlighter')) return;
     drawLive(drawnIdx);
     drawnIdx = s.points.length;
     if (drawing && drawing.x) crossLive(drawing.x);
-  }
-  function liveLayer(tool) {
-    lctx.clearRect(0, 0, lc.width, lc.height);
-    lc.style.opacity = tool === 'highlighter' ? '0.35' : tool === 'pencil' ? '0.92' : '1';
-    lc.style.webkitMaskImage = ''; lc.style.maskImage = '';
   }
 
   /* ---------- ページをめくる ----------
@@ -1626,7 +1754,7 @@
     S.live = { tool: S.tool, color: S.color, width: S.width, points: [pt] };
     drawing = { id: e.pointerId, start: pt, x: crossStart() };
     drawnIdx = 1;
-    if (S.tool !== 'pen') liveLayer(S.tool);
+    pcStart();
     drawLive(0);
   }
   ink.addEventListener('pointerdown', onInkDown);
@@ -1694,7 +1822,6 @@
     if (!fixed) return;
     if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
     s.points = fixed; d.shaped = true;
-    if (s.tool === 'pen') drawInk(); else lctx.clearRect(0, 0, lc.width, lc.height);
     drawLive(0); drawnIdx = s.points.length;
     if (d.x) crossLive(d.x);
   }
@@ -1733,7 +1860,7 @@
           dropLinked(gone); if (drawing.x) refreshStillInk(); // はみ出して描いた所も消す
           S.strokes[S.page] = pages().filter(function (x) { return gone.indexOf(x) < 0; });
           S.live = null;
-          lctx.clearRect(0, 0, lc.width, lc.height); liveLayer('pen');
+          pcClear();
           drawInk(); updateUI(); scheduleSave(); emit('data');
           drawing = null; lastPenUp = performance.now();
           return;
@@ -1754,9 +1881,8 @@
         scheduleSave(xo.n); refreshStillInk();
       }
       S.live = null;
-      if (s.tool !== 'pen') { lctx.clearRect(0, 0, lc.width, lc.height); liveLayer('pen'); }
-      if (s.tool === 'pen' && !fixed) drawItem(ictx, s, ink.width, ink.height);
-      else drawInk();
+      drawItem(ictx, s, ink.width, ink.height); hiAdd(s);
+      pcClear();
       updateUI(); scheduleSave(); emit('data');
     }
     drawing = null;
@@ -1832,7 +1958,7 @@
     drawInk: drawInk, drawList: drawList, renderPage: renderPage, renderThumb: renderThumb,
     goPage: goPage, updateUI: updateUI, pushUndo: pushUndo, commit: commit,
     scheduleSave: scheduleSave, flushSave: flushSave, exportData: exportData,
-    setTool: setTool, insertPage: insertPage, deletePage: deletePage, addImage: addImage,
+    setTool: setTool, insertPage: insertPage, deletePage: deletePage, movePage: movePage, addPageAt: addPageAt, duplicatePage: duplicatePage, clearPageAt: clearPageAt, addImage: addImage,
     setShift: setShift, setVert: setVert, setFling: setFling, flingLevel: function () { return flingLv; },
     setScrub: setScrub, scrubOn: function () { return scrubOn; },
     pageEntry: entry, paperLines: paperLines, openJson: openJson, liveCtx: lctx, liveCanvas: lc, wrap: wrap, stage: stage,

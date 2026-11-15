@@ -1,7 +1,7 @@
 /* 動かせる設定パレット（色・太さ・図形・消しゴムの大きさ・元に戻す）
    - 丸いボタンをタップすると、ふわっと開く。もう一度タップすると閉じる
    - 丸いボタンをドラッグすると、好きな場所に動かせる（位置はこの端末に保存）
-   - ペンで書き始めると自動で閉じる
+   - パレットの外をさわると（ペンで書き始めたときも）閉じる
    色・太さの切り替えそのものは toolbar.js が担当 */
 (function () {
   'use strict';
@@ -66,9 +66,9 @@
   // ドラッグ中に画面がスクロールしないように
   pal.addEventListener('touchmove', function (e) { if (e.cancelable) e.preventDefault(); }, { passive: false });
 
-  // ペンで書き始めたら閉じる
-  document.getElementById('ink').addEventListener('pointerdown', function (e) {
-    if (e.pointerType !== 'touch') setOpen(false);
+  // パレットの外をさわったら（ペンでも指でも）閉じる。さわった所の動き（書く・スクロールなど）はそのまま
+  document.addEventListener('pointerdown', function (e) {
+    if (pal.classList.contains('open') && !pal.contains(e.target)) setOpen(false);
   }, true);
 
   // 元に戻す・やり直す: 上のバーのボタンと同じ動き・同じ押せる／押せない状態

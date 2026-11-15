@@ -1,4 +1,6 @@
-/* ページ一覧（左のサイドバー）と、PDFの中の文字の検索 */
+/* ページ一覧（左のサイドバー）と、PDFの中の文字の検索
+   - ページ一覧: ページを長押しすると持ち上がり、指を動かして好きな場所に置ける（並べ替え）
+   - 番号の横の ⌄ で、そのページのメニュー（前・後ろに追加、複製、書き込みの消去、削除） */
 (function () {
   'use strict';
   var App = window.App, S = App.S;
@@ -38,7 +40,8 @@
     for (var n = 1; n <= S.total; n++) {
       var el = document.createElement('button');
       el.className = 'thumb'; el.dataset.n = n;
-      el.innerHTML = '<span class="paper"><canvas></canvas></span><span class="num">' + n + '</span>';
+      el.innerHTML = '<span class="paper"><canvas></canvas></span><span class="tfoot"><span class="num">' + n + '</span>' +
+        '<span class="tmore" aria-label="' + n + 'ページ目のメニュー"><svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg></span></span>';
       var e = App.pageEntry(n);
       el.querySelector('.paper').style.aspectRatio = e.src > 0 ? '' : (e.w + ' / ' + e.h);
       thumbs.appendChild(el);
@@ -76,8 +79,112 @@
     setSide(!sideOpen);
   });
   thumbs.addEventListener('click', function (e) {
+    if (Date.now() < noClickUntil) return; // 並べ替えで指を離したとき
+    var m = e.target.closest('.tmore');
+    if (m) { pageMenu(+m.closest('.thumb').dataset.n, m); return; }
     var t = e.target.closest('.thumb'); if (t) App.goPage(+t.dataset.n);
   });
+
+  /* ---------- ページのメニュー ---------- */
+  var pm = document.createElement('div'), pmN = 0;
+  pm.className = 'pop menu'; pm.id = 'pageMenu';
+  pm.innerHTML = '<div class="mhead"></div>' +
+    '<button class="item" data-pm="before">前にページを追加（白紙）</button>' +
+    '<button class="item" data-pm="after">後ろにページを追加（白紙）</button>' +
+    '<button class="item" data-pm="dup">複製（書き込みごと、すぐ後ろに）</button>' +
+    '<div class="mline"></div>' +
+    '<button class="item" data-pm="clear">書き込みを消去</button>' +
+    '<button class="item danger" data-pm="del">ページを削除</button>' +
+    '<div class="mhead">並べ替え: ページを長押しして、動かしたい場所へ</div>';
+  document.body.appendChild(pm);
+  function pageMenu(n, anchor) {
+    pmN = n;
+    pm.querySelector('.mhead').textContent = n + 'ページ目' + (App.pageEntry(n).added ? '（追加したページ）' : '');
+    pm.querySelector('[data-pm="del"]').disabled = S.total <= 1;
+    App.toolbar.showPop(pm, anchor);
+    if (!pm.classList.contains('open')) return;
+    // 一覧の右どなりに出す
+    var r = anchor.getBoundingClientRect(), sr = side.getBoundingClientRect(), h = pm.offsetHeight;
+    var cy = r.top + r.height / 2, top = Math.max(8, Math.min(window.innerHeight - h - 8, cy - h / 2));
+    pm.classList.remove('up'); pm.classList.add('side');
+    pm.style.left = (sr.right + 12) + 'px'; pm.style.top = top + 'px';
+    pm.style.setProperty('--ay', (cy - top) + 'px');
+  }
+  pm.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-pm]'); if (!b || !pmN) return;
+    var n = pmN, a = b.dataset.pm;
+    App.toolbar.closePops();
+    if (a === 'before') App.addPageAt(n, true);
+    else if (a === 'after') App.addPageAt(n, false);
+    else if (a === 'dup') App.duplicatePage(n);
+    else if (a === 'clear') App.clearPageAt(n);
+    else if (a === 'del') App.deletePage(n);
+  });
+
+  /* ---------- 長押しで並べ替え ---------- */
+  var HOLD = 380, dg = null, noClickUntil = 0;
+  function dgCancel() { if (dg) clearTimeout(dg.timer); dg = null; }
+  thumbs.addEventListener('pointerdown', function (e) {
+    var t = e.target.closest('.thumb');
+    if (!t || dg || e.target.closest('.tmore') || S.total < 2) return;
+    dg = { el: t, n: +t.dataset.n, id: e.pointerId, x: e.clientX, y: e.clientY, on: false };
+    dg.timer = setTimeout(lift, HOLD);
+  });
+  thumbs.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  function lift() {
+    if (!dg) return;
+    dg.on = true;
+    var t = dg.el, r = t.querySelector('.paper').getBoundingClientRect();
+    try { t.setPointerCapture(dg.id); } catch (er) {}
+    // 指についてくる、ページの絵
+    var g = document.createElement('div'); g.className = 'thumb-ghost';
+    g.style.width = r.width + 'px'; g.style.height = r.height + 'px';
+    var src = t.querySelector('canvas');
+    if (src && src.width) { var c = document.createElement('canvas'); c.width = src.width; c.height = src.height; c.getContext('2d').drawImage(src, 0, 0); g.appendChild(c); }
+    document.body.appendChild(g);
+    dg.ghost = g; dg.dx = dg.x - r.left; dg.dy = dg.y - r.top;
+    t.classList.add('dragging');
+    moveGhost(dg.x, dg.y);
+    if (navigator.vibrate) try { navigator.vibrate(10); } catch (er) {}
+    dg.scroll = setInterval(autoScroll, 16);
+  }
+  function moveGhost(x, y) {
+    dg.cx = x; dg.cy = y;
+    dg.ghost.style.transform = 'translate3d(' + (x - dg.dx) + 'px,' + (y - dg.dy) + 'px,0) scale(1.06)';
+    // 指の高さに合わせて、持ち上げたページの場所を入れかえる（ほかのページがよける）
+    var list = Array.prototype.filter.call(thumbs.children, function (el) { return el !== dg.el; }), before = null;
+    for (var i = 0; i < list.length; i++) {
+      var rr = list[i].getBoundingClientRect();
+      if (y < rr.top + rr.height / 2) { before = list[i]; break; }
+    }
+    if (dg.el.nextSibling !== before || (before === null && thumbs.lastChild !== dg.el)) thumbs.insertBefore(dg.el, before);
+  }
+  function autoScroll() {
+    if (!dg || !dg.on) return;
+    var sr = side.getBoundingClientRect(), v = 0, edge = 70;
+    if (dg.cy < sr.top + edge) v = -Math.ceil((sr.top + edge - dg.cy) / 6);
+    else if (dg.cy > sr.bottom - edge) v = Math.ceil((dg.cy - sr.bottom + edge) / 6);
+    if (v) { side.scrollTop += v; moveGhost(dg.cx, dg.cy); }
+  }
+  window.addEventListener('pointermove', function (e) {
+    if (!dg || e.pointerId !== dg.id) return;
+    if (!dg.on) { if (Math.hypot(e.clientX - dg.x, e.clientY - dg.y) > 8) dgCancel(); return; } // スクロールしようとした
+    e.preventDefault();
+    moveGhost(e.clientX, e.clientY);
+  }, { passive: false });
+  function drop(e, cancel) {
+    if (!dg || e.pointerId !== dg.id) return;
+    var d = dg; dgCancel();
+    if (!d.on) return;
+    clearInterval(d.scroll);
+    d.ghost.remove(); d.el.classList.remove('dragging');
+    noClickUntil = Date.now() + 400;
+    var to = Array.prototype.indexOf.call(thumbs.children, d.el) + 1;
+    if (cancel || to === d.n) { build(); return; }
+    App.movePage(d.n, to); // 一覧は作り直される
+  }
+  window.addEventListener('pointerup', function (e) { drop(e, false); });
+  window.addEventListener('pointercancel', function (e) { drop(e, true); });
   var dt = null;
   App.on('data', function () {
     dirty[S.page] = 1;
@@ -350,7 +457,7 @@
   window.addEventListener('pointerup', function (e) { gEnd(e, false); });
   window.addEventListener('pointercancel', function (e) { gEnd(e, true); });
   // なぞっている間は、画面がスクロールしないように
-  document.addEventListener('touchmove', function (e) { if (bk.g || bk.on) e.preventDefault(); }, { passive: false });
+  document.addEventListener('touchmove', function (e) { if (bk.g || bk.on || (dg && dg.on)) e.preventDefault(); }, { passive: false });
   $('bookClose').addEventListener('click', function () { bookClose(false); });
   $('bookShade').addEventListener('pointerdown', function (e) { if (bk.on && !bk.g) { e.preventDefault(); bookClose(false); } });
   book.addEventListener('contextmenu', function (e) { e.preventDefault(); });
