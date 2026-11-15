@@ -263,7 +263,17 @@
     else if (r && opened && !needLogin) App.setStatus('ログインしました');
   })();
 
+  // 受け取ったPDF（Driveの受け取りフォルダなど）を開く
+  async function openBuffer(buf, name) {
+    App.setStatus('読み込み中…');
+    var sha = await openBytes(buf, name);
+    remember(sha, name, buf);
+    saveLast({ name: name, data: buf, at: Date.now() }).catch(function (err) { console.error(err); });
+    return sha;
+  }
+
   window.PdfOpen = {
+    openBuffer: openBuffer,
     reopenLast: reopenLast, message: message, idb: idb, recentIndex: recentIndex, thumbs: thumbs,
     openStored: openStored, removeRecent: removeRecent, current: function () { return curRecent; }, md5: md5, getOrigLocal: getOrigLocal,
     needLogin: function () { return needLogin; },

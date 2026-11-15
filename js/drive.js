@@ -128,7 +128,28 @@
     });
   }
 
+  /* ---------- 受け取りフォルダ（共有メニューのショートカットから届くPDF） ---------- */
+  var INBOX_NAME = '手書きアプリで開く';
+  // マイドライブ直下の「手書きアプリで開く」を探し、なければ作る
+  function ensureInbox(token) {
+    var query = "name='" + q(INBOX_NAME) + "' and mimeType='" + FOLDER_MIME + "' and 'root' in parents and trashed=false";
+    return list(query, 'id', token).then(function (files) {
+      if (files.length) return files[0].id;
+      return call(API + '?fields=id', token, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+        body: JSON.stringify({ name: INBOX_NAME, mimeType: FOLDER_MIME, parents: ['root'] })
+      }).then(function (f) { return f.id; });
+    });
+  }
+  // そのフォルダに、since（ISO形式の時刻）より後に置かれたPDF（新しいものから）
+  function listInbox(folderId, since, token) {
+    var query = "'" + q(folderId) + "' in parents and mimeType='application/pdf' and modifiedTime > '" + q(since) + "' and trashed=false";
+    return list(query, 'id,name,modifiedTime', token);
+  }
+
   window.Drive = {
+    ensureInbox: ensureInbox, listInbox: listInbox,
     downloadFile: downloadFile, ensureFolder: ensureFolder, findStrokes: findStrokes, findStrokesByName: findStrokesByName,
     getJson: getJson, createStrokes: createStrokes, updateStrokes: updateStrokes,
     findPdf: findPdf, getMeta: getMeta, findOriginal: findOriginal, createOriginal: createOriginal,
