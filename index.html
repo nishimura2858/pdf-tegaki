@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="css/app.css?v=75">
+<link rel="stylesheet" href="css/app.css?v=76">
 </head>
 <body class="home-on">
 <header>
@@ -128,6 +128,10 @@
   <div class="mline"></div>
   <button class="item check" id="shiftBtn" aria-pressed="false">見開きを1ページずらす<small>横画面のとき。1ページ目を右に1枚だけ出して、2-3、4-5…で並べます（このPDFだけ）</small></button>
   <button class="item check" id="scrubBtn" aria-pressed="true">紙の下のめくるバー<small>なぞると、その位置のページまでパラパラめくれます</small></button>
+  <div class="mhead">スクロールの勢い（指を離したあとに流れる量）</div>
+  <div class="mseg" id="flingSeg">
+    <button data-fling="0">なし</button><button data-fling="1">弱め</button><button data-fling="2">ふつう</button><button data-fling="3">強め</button>
+  </div>
   <div class="mline"></div>
   <button class="item" id="blankBtn">白紙のノートを開く</button>
   <button class="item" id="delPageBtn">このページを削除（追加したページだけ）</button>
@@ -224,24 +228,24 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async></script>
-<script src="js/config.js?v=75"></script>
-<script src="js/app.js?v=75"></script>
-<script src="js/shapes.js?v=75"></script>
-<script src="js/toolbar.js?v=75"></script>
-<script src="js/lasso.js?v=75"></script>
-<script src="js/pages.js?v=75"></script>
-<script src="js/google-auth.js?v=75"></script>
-<script src="js/drive.js?v=75"></script>
-<script src="js/drive-sync.js?v=75"></script>
+<script src="js/config.js?v=76"></script>
+<script src="js/app.js?v=76"></script>
+<script src="js/shapes.js?v=76"></script>
+<script src="js/toolbar.js?v=76"></script>
+<script src="js/lasso.js?v=76"></script>
+<script src="js/pages.js?v=76"></script>
+<script src="js/google-auth.js?v=76"></script>
+<script src="js/drive.js?v=76"></script>
+<script src="js/drive-sync.js?v=76"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"></script>
-<script src="js/home.js?v=75"></script>
-<script src="js/carry.js?v=75"></script>
-<script src="js/pdf-open.js?v=75"></script>
-<script src="js/inbox.js?v=75"></script>
-<script src="js/pdf-write.js?v=75"></script>
-<script src="js/share.js?v=75"></script>
-<script src="js/palette.js?v=75"></script>
-<script src="js/slide.js?v=75"></script>
+<script src="js/home.js?v=76"></script>
+<script src="js/carry.js?v=76"></script>
+<script src="js/pdf-open.js?v=76"></script>
+<script src="js/inbox.js?v=76"></script>
+<script src="js/pdf-write.js?v=76"></script>
+<script src="js/share.js?v=76"></script>
+<script src="js/palette.js?v=76"></script>
+<script src="js/slide.js?v=76"></script>
 <script>
 // 電波がなくても開けるように、アプリの部品をこの端末に取っておく（sw.js）
 // 新しい版が届いたら: PDFを開いていなければすぐ、開いていれば、ほかのアプリから戻ってきたときに読み直す

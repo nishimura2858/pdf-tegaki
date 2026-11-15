@@ -1438,6 +1438,15 @@
   }
   /* 指を離したあとも、勢いのままスクロールが続いて、だんだん止まる（惰性） */
   var fl = null;
+  // 勢いの強さ（「その他」で選ぶ。この端末に覚える）: 0 なし / 1 弱め / 2 ふつう / 3 強め
+  // tau: 減速の速さ（大きいほど長く流れる）、gain: 離したときの速さにかける数
+  var FLING = [null, { tau: 200, gain: 0.8 }, { tau: 325, gain: 1 }, { tau: 480, gain: 1.15 }], flingLv = 2;
+  try { var fv = localStorage.getItem('ui:fling'); if (fv !== null && FLING.hasOwnProperty(+fv)) flingLv = +fv; } catch (e) {}
+  function setFling(v) {
+    flingLv = Math.max(0, Math.min(3, v | 0));
+    try { localStorage.setItem('ui:fling', String(flingLv)); } catch (e) {}
+    if (!FLING[flingLv]) stopFling();
+  }
   function stopFling() { if (fl) { cancelAnimationFrame(fl.raf); fl = null; } }
   function fling(p) {
     stopFling();
@@ -1445,8 +1454,10 @@
     if (h.length < 2) return;
     var a = h[0], b = h[h.length - 1], dt = Math.max(8, b[0] - a[0]);
     var vx = -(b[1] - a[1]) / dt, vy = -(b[2] - a[2]) / dt; // 1ミリ秒あたり（正: 下・右へスクロール）
-    if (Math.abs(vy) < 0.25 && Math.abs(vx) < 0.25) return;
-    var last = performance.now(), f = fl = { vx: vx, vy: vy, y: stage.scrollTop, x: stage.scrollLeft };
+    var cfgF = FLING[flingLv];
+    if (!cfgF || (Math.abs(vy) < 0.25 && Math.abs(vx) < 0.25)) return;
+    vx *= cfgF.gain; vy *= cfgF.gain;
+    var last = performance.now(), f = fl = { vx: vx, vy: vy, y: stage.scrollTop, x: stage.scrollLeft, tau: cfgF.tau };
     f.sy = stage.scrollTop; f.sx = stage.scrollLeft;
     f.raf = requestAnimationFrame(function step(now) {
       if (fl !== f) return;
@@ -1460,7 +1471,7 @@
       if (f.x <= 0 || f.x >= maxX) { f.x = Math.max(0, Math.min(maxX, f.x)); f.vx = 0; }
       stage.scrollTop = f.y; stage.scrollLeft = f.x;
       markScroll();
-      var k = Math.exp(-d / 325); f.vy *= k; f.vx *= k;
+      var k = Math.exp(-d / f.tau); f.vy *= k; f.vx *= k;
       // ページが入れかわると、見た目を変えないようにスクロール位置が動く。そのぶんを、持っている位置にも足す
       // （足さないと、次の回に元の位置へ戻され、1ページずつ先へ飛び続けていた。2026-11-15）
       var b = stage.scrollTop;
@@ -1822,7 +1833,7 @@
     goPage: goPage, updateUI: updateUI, pushUndo: pushUndo, commit: commit,
     scheduleSave: scheduleSave, flushSave: flushSave, exportData: exportData,
     setTool: setTool, insertPage: insertPage, deletePage: deletePage, addImage: addImage,
-    setShift: setShift, setVert: setVert,
+    setShift: setShift, setVert: setVert, setFling: setFling, flingLevel: function () { return flingLv; },
     setScrub: setScrub, scrubOn: function () { return scrubOn; },
     pageEntry: entry, paperLines: paperLines, openJson: openJson, liveCtx: lctx, liveCanvas: lc, wrap: wrap, stage: stage,
     blank: function () { openDoc(null, '白紙', 'strokes:__blank__'); },

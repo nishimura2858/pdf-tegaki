@@ -110,6 +110,11 @@
     closePops();
   }, true);
 
+  function markFling() {
+    Array.prototype.forEach.call(document.querySelectorAll('#flingSeg [data-fling]'), function (x) {
+      x.classList.toggle('on', +x.dataset.fling === App.flingLevel());
+    });
+  }
   /* ---------- ボタンの操作 ---------- */
   document.addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) return;
@@ -130,6 +135,11 @@
       return;
     }
     if (d.esize) { cfg.eraser = +d.esize; apply(); sync(); return; }
+    if (d.fling !== undefined) {
+      App.setFling(+d.fling); markFling();
+      App.setStatus('スクロールの勢い: ' + b.textContent);
+      return;
+    }
     if (d.add) {
       closePops();
       if (!S.hasFile) { App.setStatus('先にPDFを開いてください'); return; }
@@ -144,6 +154,7 @@
         $('delPageBtn').disabled = !S.hasFile || !App.pageEntry().added;
         $('shiftBtn').setAttribute('aria-pressed', S.shift ? 'true' : 'false');
         $('scrubBtn').setAttribute('aria-pressed', App.scrubOn() ? 'true' : 'false');
+        markFling();
         showPop($('moreMenu'), b); break;
       case 'focusBtn': setFocus(true); break;
       case 'focusExit': setFocus(false); break;
