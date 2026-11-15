@@ -114,6 +114,28 @@ function Convert-One($src, $pdf) {
   }
 }
 
+# Wordの「最近使ったファイル」（Wordの記録と、Windowsの「最近使った項目」）
+function Get-RecentDocs {
+  $paths = @{}
+  $keys = @(Get-Item -Path 'HKCU:\Software\Microsoft\Office\*\Word\User MRU\*\File MRU', 'HKCU:\Software\Microsoft\Office\*\Word\File MRU' -ErrorAction SilentlyContinue)
+  foreach ($k in $keys) {
+      foreach ($v in $k.GetValueNames()) {
+        if ($v -notmatch '^Item \d+$') { continue }
+        $p = [string]$k.GetValue($v)
+        $i = $p.LastIndexOf('*'); if ($i -ge 0) { $p = $p.Substring($i + 1) }
+        if ($p) { $paths[$p] = $true }
+      }
+  }
+  $recent = Join-Path $env:APPDATA 'Microsoft\Windows\Recent'
+  if (Test-Path -LiteralPath $recent) {
+    $sh = New-Object -ComObject WScript.Shell
+    foreach ($l in Get-ChildItem -LiteralPath $recent -Filter '*.doc*.lnk' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 40) {
+      try { $t = $sh.CreateShortcut($l.FullName).TargetPath; if ($t) { $paths[$t] = $true } } catch {}
+    }
+  }
+  return @($paths.Keys)
+}
+
 $failed = @{}   # 失敗したファイル → そのときのWordの更新時刻（直して保存し直すまで、やり直さない）
 Log '起動しました'
 $lastFolders = ''
