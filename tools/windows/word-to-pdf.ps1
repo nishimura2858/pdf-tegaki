@@ -62,23 +62,26 @@ function Find-Folders {
   return $found
 }
 
-$Word = $null
-function Get-Word {
-  if ($script:Word) { return $script:Word }
-  # 自動で作ったWordは見えない。使っているWordにつながったときは、表示や設定を変えない
-  $script:Word = New-Object -ComObject Word.Application
-  if (-not $script:Word.Visible) { $script:Word.DisplayAlerts = 0 }
-  return $script:Word
-}
-function Close-Word {
-  if (-not $script:Word) { return }
+# Wordで開いてPDFにする。別の作業として動かし、2分で終わらなければ止める
+# （見えないWordが確認の画面を出して止まると、ずっと待ち続けてしまうため）
+$ConvertJob = {
+  param($copy, $out)
+  'Wordを起動'
+  $w = New-Object -ComObject Word.Application
+  $mineWord = -not $w.Visible
+  if ($mineWord) { $w.DisplayAlerts = 0 }
   try {
+    'Wordで開く'
+    # Open(FileName, ConfirmConversions, ReadOnly, AddToRecentFiles)
+    $doc = $w.Documents.Open($copy, $false, $true, $false)
+    'PDFに書き出す'
+    $doc.ExportAsFixedFormat($out, 17)   # 17 = PDF
+    $doc.Close(0)
+    '書き出し完了'
+  } finally {
     # 自分で開いた見えないWordだけ閉じる（使っているWordは閉じない）
-    if (-not $script:Word.Visible -and $script:Word.Documents.Count -eq 0) { $script:Word.Quit() }
-  } catch {}
-  try { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($script:Word) } catch {}
-  $script:Word = $null
-  [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+    try { if ($mineWord -and $w.Documents.Count -eq 0) { $w.Quit() } } catch {}
+  }
 }
 
 function Convert-One($src, $pdf) {
@@ -87,40 +90,28 @@ function Convert-One($src, $pdf) {
   try {
     $copy = Join-Path $tmpDir ('src' + [IO.Path]::GetExtension($src))
     $out = Join-Path $tmpDir 'out.pdf'
+    Log ('PDFにします: ' + $src)
     Copy-Item -LiteralPath $src -Destination $copy
-    $w = Get-Word
-    # Open(FileName, ConfirmConversions, ReadOnly, AddToRecentFiles)
-    $doc = $w.Documents.Open($copy, $false, $true, $false)
-    try { $doc.ExportAsFixedFormat($out, 17) }   # 17 = PDF
-    finally { $doc.Close(0); [void][Runtime.InteropServices.Marshal]::ReleaseComObject($doc) }
+    $before = @(Get-Process WINWORD -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
+    $job = Start-Job -ScriptBlock $ConvertJob -ArgumentList $copy, $out
+    $done = Wait-Job $job -Timeout 120
+    $steps = @(Receive-Job $job -ErrorAction SilentlyContinue -ErrorVariable errs)
+    if (-not $done) {
+      Stop-Job $job
+      Get-Process WINWORD -ErrorAction SilentlyContinue | Where-Object { $before -notcontains $_.Id } | Stop-Process -Force -ErrorAction SilentlyContinue
+      Remove-Job $job -Force
+      throw ('2分たっても終わりませんでした。止まった所: ' + $(if ($steps) { $steps[-1] } else { '開始前' }) + '（Wordが確認の画面を出している可能性があります）')
+    }
+    Remove-Job $job -Force
+    if (-not (Test-Path -LiteralPath $out)) {
+      throw ('PDFができませんでした。止まった所: ' + $(if ($steps) { $steps[-1] } else { '開始前' }) + $(if ($errs) { '  ' + $errs[0] } else { '' }))
+    }
     Move-Item -Force -LiteralPath $out -Destination $pdf
     (Get-Item -LiteralPath $pdf).LastWriteTime = Get-Date
     Log ('PDFを作りました: ' + $pdf)
   } finally {
     Remove-Item -Recurse -Force -LiteralPath $tmpDir -ErrorAction SilentlyContinue
   }
-}
-
-# Wordの「最近使ったファイル」（Wordの記録と、Windowsの「最近使った項目」）
-function Get-RecentDocs {
-  $paths = @{}
-  $keys = @(Get-Item -Path 'HKCU:\Software\Microsoft\Office\*\Word\User MRU\*\File MRU', 'HKCU:\Software\Microsoft\Office\*\Word\File MRU' -ErrorAction SilentlyContinue)
-  foreach ($k in $keys) {
-      foreach ($v in $k.GetValueNames()) {
-        if ($v -notmatch '^Item \d+$') { continue }
-        $p = [string]$k.GetValue($v)
-        $i = $p.LastIndexOf('*'); if ($i -ge 0) { $p = $p.Substring($i + 1) }
-        if ($p) { $paths[$p] = $true }
-      }
-  }
-  $recent = Join-Path $env:APPDATA 'Microsoft\Windows\Recent'
-  if (Test-Path -LiteralPath $recent) {
-    $sh = New-Object -ComObject WScript.Shell
-    foreach ($l in Get-ChildItem -LiteralPath $recent -Filter '*.doc*.lnk' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 40) {
-      try { $t = $sh.CreateShortcut($l.FullName).TargetPath; if ($t) { $paths[$t] = $true } } catch {}
-    }
-  }
-  return @($paths.Keys)
 }
 
 $failed = @{}   # 失敗したファイル → そのときのWordの更新時刻（直して保存し直すまで、やり直さない）
@@ -163,6 +154,5 @@ while ($true) {
       catch { $failed[$d.FullName] = $t; Log ('PDFにできませんでした: ' + $d.FullName + '  ' + $_.Exception.Message) }
     }
   } catch { Log ('エラー: ' + $_.Exception.Message) }
-  Close-Word
   Start-Sleep -Seconds 10
 }
