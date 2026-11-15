@@ -450,9 +450,18 @@
     layoutPage(sz.w, sz.h, null);
     upHold = false;
     stage.scrollTop += wrap.getBoundingClientRect().top - top0;
-    renderPage();
+    renderSoon(); // きれいな絵に描き直すのは、スクロールが止まってから（描いている間にスクロールが引っかからないように）
     flashPager(); emit('page'); updateUI();
     return true;
+  }
+  var scrolledAt = 0, vrTimer = 0;
+  function markScroll() { scrolledAt = performance.now(); }
+  function renderSoon() {
+    clearTimeout(vrTimer);
+    vrTimer = setTimeout(function () {
+      if (performance.now() - scrolledAt < 140 || fl) { renderSoon(); return; }
+      renderPage();
+    }, 160);
   }
   // スクロールのあと: 書ける紙が画面のまん中から外れたら、まん中のページと入れかえる
   function checkVert() {
@@ -1417,6 +1426,7 @@
     }
     var now = performance.now();
     (pan.vh || (pan.vh = [])).push([now, e.clientX, e.clientY]); while (pan.vh.length > 8) pan.vh.shift();
+    markScroll();
     if (want) {
       var before = stage.scrollTop;
       stage.scrollTop += want;
@@ -1436,17 +1446,24 @@
     var a = h[0], b = h[h.length - 1], dt = Math.max(8, b[0] - a[0]);
     var vx = -(b[1] - a[1]) / dt, vy = -(b[2] - a[2]) / dt; // 1ミリ秒あたり（正: 下・右へスクロール）
     if (Math.abs(vy) < 0.25 && Math.abs(vx) < 0.25) return;
-    var last = performance.now(), f = fl = { vx: vx, vy: vy };
+    var last = performance.now(), f = fl = { vx: vx, vy: vy, y: stage.scrollTop, x: stage.scrollLeft };
+    f.sy = stage.scrollTop; f.sx = stage.scrollLeft;
     f.raf = requestAnimationFrame(function step(now) {
       if (fl !== f) return;
       var d = Math.min(40, now - last); last = now;
-      var y0 = stage.scrollTop, x0 = stage.scrollLeft;
-      stage.scrollTop += f.vy * d; stage.scrollLeft += f.vx * d;
-      if (stage.scrollTop === y0) f.vy = 0; // 端まで来た
-      if (stage.scrollLeft === x0) f.vx = 0;
+      // 位置は小数で持つ（1回に1ピクセル未満しか動かないときも、止まらずに進むように）。
+      // ページの入れかえでスクロール位置がずれたら、そのぶんを足す
+      f.y += stage.scrollTop - f.sy || 0; f.x += stage.scrollLeft - f.sx || 0;
+      f.y += f.vy * d; f.x += f.vx * d;
+      var maxY = stage.scrollHeight - stage.clientHeight, maxX = stage.scrollWidth - stage.clientWidth;
+      if (f.y <= 0 || f.y >= maxY) { f.y = Math.max(0, Math.min(maxY, f.y)); f.vy = 0; } // 端まで来た
+      if (f.x <= 0 || f.x >= maxX) { f.x = Math.max(0, Math.min(maxX, f.x)); f.vx = 0; }
+      stage.scrollTop = f.y; stage.scrollLeft = f.x;
+      markScroll();
       var k = Math.exp(-d / 325); f.vy *= k; f.vx *= k;
       checkVert();
-      if (Math.abs(f.vy) < 0.02 && Math.abs(f.vx) < 0.02) { fl = null; return; }
+      f.sy = stage.scrollTop; f.sx = stage.scrollLeft;
+      if (Math.abs(f.vy) < 0.015 && Math.abs(f.vx) < 0.015) { fl = null; return; }
       f.raf = requestAnimationFrame(step);
     });
   }
