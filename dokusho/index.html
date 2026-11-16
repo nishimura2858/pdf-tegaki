@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="css/app.css?v=1">
+<link rel="stylesheet" href="css/app.css?v=2">
 </head>
 <body class="home-on">
 <header>
@@ -37,15 +37,26 @@
       <button class="btn icon" id="undo" title="元に戻す" aria-label="元に戻す"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
       <button class="btn icon" id="redo" title="やり直す" aria-label="やり直す"><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
       <span class="tsep" aria-hidden="true"></span>
-      <button class="btn icon" id="focusBtn" title="集中モード（道具のバーを隠して紙を大きく）" aria-label="集中モード"><svg viewBox="0 0 24 24"><path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg></button>
+      <button class="btn icon" id="focusBtn" title="全画面（道具を隠して、本だけにする）" aria-label="全画面"><svg viewBox="0 0 24 24"><path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg></button>
       <button class="btn icon" id="moreBtn" title="その他" aria-label="その他"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="8" cy="12" r="1.2" class="fill"/><circle cx="12" cy="12" r="1.2" class="fill"/><circle cx="16" cy="12" r="1.2" class="fill"/></svg></button>
       <button class="btn icon" id="syncBtn" hidden><svg viewBox="0 0 24 24"><path d="M7 18.5a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9.5a4.5 4.5 0 0 1-.5 9z"/><path class="ok" d="M9.5 13.5l2 2 3.5-3.5"/><path class="up" d="M12 16v-5M9.8 13.2L12 11l2.2 2.2"/></svg><span id="syncText"></span></button>
     </div>
   </div>
 </header>
 
-<!-- 集中モードのときだけ出る、小さなバー（道具の持ちかえと、モードを抜けるボタン） -->
-<div id="focusBar" aria-label="集中モード"><span class="ftools"></span><button id="focusExit" title="集中モードを終える" aria-label="集中モードを終える"><svg viewBox="0 0 24 24"><path d="M9 4v5H4"/><path d="M15 4v5h5"/><path d="M9 20v-5H4"/><path d="M15 20v-5h5"/></svg></button></div>
+<!-- 全画面のときに、指で1回たたくと出る「道具の帯」（js/quick.js）。色・太さの欄は、パレットの中身をここへ移して使う -->
+<div id="tray" hidden>
+  <div class="trow"><div id="trayTools"></div></div>
+  <div class="trow" id="trayPanel"></div>
+  <div class="trow sub">
+    <span id="trayPage"></span><button id="traySrc" hidden></button>
+    <span class="tgap"></span>
+    <button id="trayScrap" class="k-book"><svg viewBox="0 0 24 24"><circle cx="6.5" cy="6.8" r="2.6"/><circle cx="6.5" cy="17.2" r="2.6"/><path d="M8.7 8.4L20.5 18M8.7 15.6L20.5 6"/></svg>スクラップに入れる</button>
+    <button id="trayExit"><svg viewBox="0 0 24 24"><path d="M9 4v5H4"/><path d="M15 4v5h5"/><path d="M9 20v-5H4"/><path d="M15 20v-5h5"/></svg>全画面を終える</button>
+  </div>
+</div>
+<!-- 全画面のときに、指で長押しすると出る「輪のメニュー」 -->
+<div id="ring" hidden></div>
 
 <div id="main">
   <!-- ページ一覧と、付箋の一覧 -->
@@ -116,6 +127,7 @@
     <b>読む</b>：本を押すと、最初の1回だけこのiPadにダウンロードしてから開きます。次からはすぐ開き、電波がなくても読めます。横向きにすると見開きになり、指で左右に払うとめくれます。2本指で拡大、2回たたくと拡大・元に戻す。<br>
     <b>書く</b>：マーカーとペンは、Apple Pencilで書きます（指はめくる・動かすのに使います）。<br>
     <b>付箋</b>：付箋のボタンを押してから、貼りたい場所を軽くたたきます（指でも貼れます）。付箋をたたくとメモを書け、引っぱると動かせます。左上のページ一覧の「付箋」に、貼った付箋が並びます。<br>
+    <b>全画面</b>：右上の四角いボタンで、道具をすべて隠して本だけにできます。指で1回たたくと、画面の下に道具・色・太さがまとめて出ます。指で長押しすると、その場に道具が輪の形に並び、指を滑らせて離すと選べます。2本指でたたくと、元に戻します（全画面でなくても使えます）。<br>
     <b>スクラップブック</b>：上のはさみのボタンで、いま開いているページを、選んだスクラップブックに写します（書き込み・付箋も一緒に写ります）。写したあとは独立したノートなので、元の本を端末から消しても読めます。<br>
     書き込み・付箋・スクラップブックは、このiPadと、Googleドライブの「読書ノート」フォルダの中に自動で保存されます。</p></details>
 </div>
@@ -224,19 +236,20 @@
 window.APP_CONFIG.REDIRECT_URI = new URL('../', location.href).href;
 window.APP_CONFIG.RETURN_TO = 'dokusho/';
 </script>
-<script src="js/store.js?v=1"></script>
-<script src="js/source.js?v=1"></script>
-<script src="js/app.js?v=1"></script>
-<script src="js/toolbar.js?v=1"></script>
-<script src="js/pages.js?v=1"></script>
+<script src="js/store.js?v=2"></script>
+<script src="js/source.js?v=2"></script>
+<script src="js/app.js?v=2"></script>
+<script src="js/toolbar.js?v=2"></script>
+<script src="js/pages.js?v=2"></script>
 <script src="../js/google-auth.js?v=80"></script>
-<script src="js/drive.js?v=1"></script>
-<script src="js/notes.js?v=1"></script>
-<script src="js/scrap.js?v=1"></script>
-<script src="js/sync.js?v=1"></script>
-<script src="js/library.js?v=1"></script>
-<script src="js/palette.js?v=1"></script>
-<script src="js/slide.js?v=1"></script>
+<script src="js/drive.js?v=2"></script>
+<script src="js/notes.js?v=2"></script>
+<script src="js/scrap.js?v=2"></script>
+<script src="js/sync.js?v=2"></script>
+<script src="js/library.js?v=2"></script>
+<script src="js/quick.js?v=2"></script>
+<script src="js/palette.js?v=2"></script>
+<script src="js/slide.js?v=2"></script>
 <script>
 // 電波がなくても開けるように、アプリの部品をこの端末に取っておく（sw.js）
 // 新しい版が届いたら: 本を開いていなければすぐ、開いていれば、ほかのアプリから戻ってきたときに読み直す

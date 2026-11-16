@@ -7,6 +7,7 @@
   'use strict';
   var GROUPS = [
     { root: '.topbar .tools', items: '[data-tool]' },
+    { root: '#trayTools', items: '[data-tool]' },
     { root: '#palSlots', items: '[data-slot]', round: true },
     { root: '#palNotes', items: '[data-ncolor]', round: true },
     { root: '#palPanel .widths', items: '[data-width]', round: true },

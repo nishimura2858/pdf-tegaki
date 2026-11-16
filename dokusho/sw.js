@@ -6,14 +6,14 @@
    - 本のPDFそのものは、ここではなく IndexedDB に入れている（js/store.js）
    index.html の ?v= を上げたら、下の V も同じ番号にすること（古い控えを片づけるため）
    AUTH_V は、手書きノートと共通で使っている ../js/config.js・../js/google-auth.js の番号（index.html と合わせる） */
-var V = '1', AUTH_V = '80';
+var V = '2', AUTH_V = '80';
 var CACHE = 'dokusho-v' + V;
 var CORE = [
   './',
   'index.html?v=' + V,
   'css/app.css?v=' + V,
   'js/store.js?v=' + V, 'js/source.js?v=' + V, 'js/app.js?v=' + V, 'js/toolbar.js?v=' + V, 'js/pages.js?v=' + V,
-  'js/drive.js?v=' + V, 'js/notes.js?v=' + V, 'js/scrap.js?v=' + V, 'js/sync.js?v=' + V, 'js/library.js?v=' + V,
+  'js/drive.js?v=' + V, 'js/notes.js?v=' + V, 'js/scrap.js?v=' + V, 'js/sync.js?v=' + V, 'js/library.js?v=' + V, 'js/quick.js?v=' + V,
   'js/palette.js?v=' + V, 'js/slide.js?v=' + V,
   '../js/config.js?v=' + AUTH_V, '../js/google-auth.js?v=' + AUTH_V,
   'manifest.webmanifest', 'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png',

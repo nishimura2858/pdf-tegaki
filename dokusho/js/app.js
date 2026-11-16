@@ -30,7 +30,8 @@
   // ほかのファイルとのつなぎ目
   // save: この端末に保存する / saved・opened: Drive同期への知らせ
   // drawNotes: 付箋を描く / noteAt: その場所にある付箋 / tap: 指で軽くたたいたとき（付箋を貼る・開く）
-  var hooks = { save: null, saved: null, opened: null, drawNotes: null, noteAt: null, tap: null };
+  // singleTap: 指で1回たたいた（2回たたく拡大ではないと分かってから）/ hold: 指で長押しした / twoTap: 2本指でたたいた
+  var hooks = { save: null, saved: null, opened: null, drawNotes: null, noteAt: null, tap: null, singleTap: null, hold: null, twoTap: null };
   var tools = {};                            // 投げ縄・レーザーなど、別ファイルの道具
   var listeners = {};
   function on(ev, fn) { (listeners[ev] = listeners[ev] || []).push(fn); }
@@ -1266,7 +1267,7 @@
   }
   function startPinch() {
     var m = tMetrics(), rc = flow.getBoundingClientRect();
-    pinch = { d0: m.d, cx0: m.cx, cy0: m.cy, cx: m.cx, cy: m.cy, z0: S.zoom, s: 1, min: minZoom(), pct: 0, raf: 0,
+    pinch = { d0: m.d, cx0: m.cx, cy0: m.cy, cx: m.cx, cy: m.cy, z0: S.zoom, s: 1, min: minZoom(), pct: 0, raf: 0, t0: performance.now(),
       fx: (m.cx - rc.left) / rc.width, fy: (m.cy - rc.top) / rc.height };
     flow.style.transformOrigin = (pinch.fx * 100) + '% ' + (pinch.fy * 100) + '%';
     flow.classList.add('pinching'); // 紙を1枚の層にして、拡大縮小を軽く
@@ -1289,6 +1290,10 @@
   function cancelPinch() { if (pinch && pinch.raf) cancelAnimationFrame(pinch.raf); pinch = null; clearPinchStyle(); }
   function endPinch() {
     var p = pinch; cancelPinch();
+    // 2本指で軽くたたいた（すぐ離して、ほとんど動いていない）: 拡大ではなく、元に戻す
+    if (hooks.twoTap && performance.now() - p.t0 < 280 && Math.abs(p.s - 1) < 0.03 && Math.hypot(p.cx - p.cx0, p.cy - p.cy0) < 12) {
+      hooks.twoTap(); return;
+    }
     var nz = Math.round(p.z0 * p.s * 100) / 100;
     dbg('ピンチ終了 ' + Math.round(S.zoom * 100) + '% → ' + Math.round(nz * 100) + '%');
     if (Math.abs(nz - S.zoom) < 0.01) return;
@@ -1633,7 +1638,19 @@
     setText($('pullText'), PULL_TEXT[kind][ready ? 1 : 0]);
     return ready ? kind : null;
   }
+  /* 指で長押し（動かさずに0.45秒）: hooks.hold が返したもの（輪のメニュー）に、そのあとの指の動きを渡す */
+  var HOLD_MS = 450;
+  function startHold(p) {
+    if (!hooks.hold) return;
+    p.holdT = setTimeout(function () {
+      if (pan !== p || p.axis || p.turn || p.want || p.pull || pinch || turning || drawing) return;
+      var h = hooks.hold(p.x0, p.y0);
+      if (h) { p.ring = h; lastTap = null; }
+    }, HOLD_MS);
+  }
+  function clearHold() { if (pan && pan.holdT) { clearTimeout(pan.holdT); pan.holdT = 0; } }
   function panMove(e) {
+    if (pan.ring) { pan.ring.move(e); return; }
     if (pan.turn) { turnMove(e); return; }
     if (pan.want) { pan.last = e; chainTurn(); return; } // 入れかわりを待っている
     if (!pan.axis) {
@@ -1785,7 +1802,11 @@
         setZoom(Math.abs(S.zoom - 1) < 0.01 ? 2 : 1);
         return;
       }
-      lastTap = { t: now, x: e.clientX, y: e.clientY };
+      var lt = lastTap = { t: now, x: e.clientX, y: e.clientY };
+      // 2回目が来なければ「1回たたいた」（流れているスクロールを止めたたたき・めくりの最中は数えない）
+      if (hooks.singleTap && !p.fling && !T && !turning) {
+        setTimeout(function () { if (lastTap === lt) { lastTap = null; hooks.singleTap(lt.x, lt.y); } }, 360);
+      }
     } else lastTap = null;
   }
 
@@ -1802,6 +1823,7 @@
   function onInkDown(e) {
     if (!S.hasFile) return;
     e.preventDefault();
+    var wasFling = !!fl;
     stopFling();
     dropStaleDrawing(e);
     // 指はスクロール・ページめくり（1本で横に払う）・拡大縮小（2本）に使う（書くのはペンだけ）
@@ -1840,9 +1862,12 @@
           // 払う前に、横スクロールが端まで来ていたか（端なら、払うとページをめくる）
           atL: stage.scrollLeft <= 1, atR: stage.scrollLeft >= stage.scrollWidth - stage.clientWidth - 1,
           // 縦も同じ: 端まで来てから引っぱると、ページを移る
-          atT: stage.scrollTop <= 1, atB: stage.scrollTop >= stage.scrollHeight - stage.clientHeight - 1, pull: 0 };
+          atT: stage.scrollTop <= 1, atB: stage.scrollTop >= stage.scrollHeight - stage.clientHeight - 1, pull: 0, fling: wasFling };
+        startHold(pan);
       }
       else if (n === 2) {
+        clearHold();
+        if (pan && pan.ring) { pan.ring.up(e, true); pan = null; }
         if (pan && pan.turn) turnUp(pan.turn, true);
         else if (pan && pan.pull) endPull(pan, true);
         pan = null; startPinch();
@@ -1944,7 +1969,9 @@
       delete touches[e.pointerId];
       if (pinch) { if (e.type === 'pointerup') endPinch(); else cancelPinch(); }
       if (pan && pan.id === e.pointerId) {
-        if (pan.turn) turnUp(pan.turn, e.type !== 'pointerup');
+        clearHold();
+        if (pan.ring) pan.ring.up(e, e.type !== 'pointerup');
+        else if (pan.turn) turnUp(pan.turn, e.type !== 'pointerup');
         else if (pan.want) { if (e.type === 'pointerup') { if (T || turning) queued += pan.want; else autoTurn(pan.want); } } // 入れかわる前に離した: そのままめくる
         else if (pan.pull || pan.ready) endPull(pan, e.type !== 'pointerup');
         else if (e.type === 'pointerup') { fingerUp(pan, e); fling(pan); }
@@ -2030,7 +2057,7 @@
   /* Drive連携・道具・ページ一覧など、ほかのファイルから使う入口 */
   window.App = {
     S: S, on: on, emit: emit, tools: tools,
-    openDoc: openDoc, closeDoc: closeDoc, setStatus: setStatus, dbg: dbg, hooks: hooks, flashPager: flashPager,
+    openDoc: openDoc, closeDoc: closeDoc, setStatus: setStatus, pageText: pageText, dbg: dbg, hooks: hooks, flashPager: flashPager,
     activate: activate, pageAt: pageAt, focusPage: focusPage, pageInfo: pageInfo, capturePage: capturePage, r4: r4, nid: nid,
     stillPage: function () { return st && !still.hidden ? st.n : 0; }, stillEl: still, refreshStillInk: refreshStillInk,
     busy: function () { return !!(drawing || turning); },
