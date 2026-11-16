@@ -12,7 +12,13 @@
   var C = window.APP_CONFIG;
   // 権限を drive.file → drive に広げたので、前の権限のトークンは使わない（キー名を変えた）
   var TOKEN_KEY = 'gauth:token:drive', REFRESH_KEY = 'gauth:refresh',
-    STATE_KEY = 'gauth:state', AFTER_KEY = 'gauth:after', VERIFIER_KEY = 'gauth:verifier';
+    STATE_KEY = 'gauth:state', AFTER_KEY = 'gauth:after', VERIFIER_KEY = 'gauth:verifier', RETURN_KEY = 'gauth:return';
+  /* 同じサイトにある別のアプリ（dokusho/ の「読書ノート」）も、このファイルでログインする。
+     Googleに登録してある戻り先は手書きノートの場所だけなので、読書ノートから始めたログインは、
+     いったん手書きノートに戻ってくる。そのときは結果に手を付けず、そのまま読書ノートへ渡す（consumeRedirect）
+     - C.REDIRECT_URI: 戻り先を固定するとき（読書ノートが指定する）
+     - C.RETURN_TO: ログインを始めたアプリの場所（読書ノートは 'dokusho/'） */
+  var RETURN_OK = ['dokusho/'];
   var token = null, expiresAt = 0, refreshP = null, serverP = null, serverOk = null;
 
   function store(k, v) { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} }
@@ -30,7 +36,7 @@
     return standalone ? 'redirect' : 'popup';
   }
   // Google Cloudに登録したリダイレクトURIと完全一致させる（…/pdf-tegaki/ の形）
-  function redirectUri() { return location.origin + location.pathname.replace(/index\.html$/, ''); }
+  function redirectUri() { return C.REDIRECT_URI || (location.origin + location.pathname.replace(/index\.html$/, '')); }
 
   function saveToken(t, sec) {
     token = t; expiresAt = Date.now() + (Math.max(120, sec) - 60) * 1000;
@@ -113,6 +119,7 @@
     var state = randomHex(16);
     store(STATE_KEY, state);
     store(AFTER_KEY, after || null);
+    store(RETURN_KEY, C.RETURN_TO || null);
     var q = new URLSearchParams({
       client_id: C.CLIENT_ID,
       redirect_uri: redirectUri(),
@@ -140,6 +147,13 @@
     var fromHash = !!h && (h.indexOf('access_token=') >= 0 || h.indexOf('error=') >= 0);
     var fromQuery = !!s && s.indexOf('state=') >= 0 && (s.indexOf('code=') >= 0 || s.indexOf('error=') >= 0);
     if (!fromHash && !fromQuery) return null;
+    // 別のアプリから始めたログインなら、結果をそのまま渡して、ここでは何もしない
+    var back = read(RETURN_KEY);
+    if (back && back !== (C.RETURN_TO || '')) {
+      store(RETURN_KEY, null);
+      if (RETURN_OK.indexOf(back) >= 0) { location.replace(redirectUri() + back + s + h); return never(); }
+    }
+    store(RETURN_KEY, null);
     var p = new URLSearchParams(fromHash ? h.slice(1) : s.slice(1));
     // URLから結果を消す（?auth=… などの指定は残す）
     var keep = new URLSearchParams(s);

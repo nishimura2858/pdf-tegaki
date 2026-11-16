@@ -1,0 +1,840 @@
+/* テーマ: 生成りの紙・こげ茶の太い線・コーラルのアクセント（アイコンの絵と同じ色合い） */
+:root {
+  /* テーマ: iidaの携帯電話の色（本体の赤・ボタンのクリーム・水色寄りの薄紫） */
+  --red: #d7282f; --cream: #f3eee2; --lav: #b3c7ee;
+  --bg: #f1ece0;
+  --bar: #fffdf7;          /* ポップアップ・ダイアログの面 */
+  --text: #3a3633;
+  --muted: #7d776b;
+  --line: #e4ddcd;
+  --accent: #d7282f;       /* 本体の赤 */
+  --accent-text: #ffffff;
+  --stage: #e9e3d5;
+  --head: #f7f3e9;         /* 道具のバー（クリーム） */
+  --head-2: #f2ede0;
+  --head-text: #3a3633;
+  --head-muted: #a59d8d;
+  --head-line: #e3dccb;
+  --chip: #d7282f;         /* 選んでいる道具の背景（赤） */
+  --chip-text: #ffffff;
+  --chip-glow: rgba(215,40,47,.30);
+  --pal: #fbf8f0;          /* パレット（クリーム） */
+  --pal-2: #f1ebdc;
+  --pal-text: #3a3633;
+  --pal-muted: #8a8274;
+  --pal-chip: #d7282f;
+  --pal-chip-text: #ffffff;
+  --pal-line: rgba(58,54,51,.15);
+  --pal-hi: rgba(58,54,51,.08);
+  --pal-warn: #c3222a;
+  --sel: #f7d8d9;
+  --warn: #d9822b;
+  --cur: #e53935;          /* いまの色（JSで更新） */
+  --curd: 11px;
+  --sat: env(safe-area-inset-top, 0px); --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px); --sar: env(safe-area-inset-right, 0px);
+  --pop-shadow: 0 14px 36px rgba(52,44,34,.20), 0 2px 6px rgba(52,44,34,.08);
+  box-sizing: border-box;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1a1916; --bar: #26241f; --text: #f1ece3; --muted: #a8a093; --line: #3a372f;
+    --accent: #f07a73; --accent-text: #1a1916; --stage: #141310;
+    --head: #2a2823; --head-2: #24221e; --head-text: #f1ece3; --head-muted: #8f8779; --head-line: #3a372f;
+    --chip: #f07a73; --chip-text: #ffffff; --sel: #4a2f2c;
+    --pal: #3a372f; --pal-2: #302d27; --chip-glow: rgba(240,122,115,.3); --pal-text: #f4efe6; --pal-muted: #b5ad9f; --pal-chip: #f4efe6; --pal-chip-text: #34312c; --pal-line: rgba(255,255,255,.18); --pal-hi: rgba(255,255,255,.16); --pal-warn: #ffb0a8; --lav: #4a5578; --cream: #3a372f;
+    --pop-shadow: 0 14px 36px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1a1916; --bar: #26241f; --text: #f1ece3; --muted: #a8a093; --line: #3a372f;
+  --accent: #f07a73; --accent-text: #1a1916; --stage: #141310;
+  --head: #2a2823; --head-2: #24221e; --head-text: #f1ece3; --head-muted: #8f8779; --head-line: #3a372f;
+  --chip: #f07a73; --chip-text: #ffffff; --sel: #4a2f2c;
+  --pal: #3a372f; --pal-2: #302d27; --chip-glow: rgba(240,122,115,.3); --pal-text: #f4efe6; --pal-muted: #b5ad9f; --pal-chip: #f4efe6; --pal-chip-text: #34312c; --pal-line: rgba(255,255,255,.18); --pal-hi: rgba(255,255,255,.16); --pal-warn: #ffb0a8; --lav: #4a5578; --cream: #3a372f;
+  --pop-shadow: 0 14px 36px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.3);
+}
+html, body { height: 100%; margin: 0; }
+/* ホーム画面のアプリでは、時計の欄の下まで使う設定にすると、100% が時計の欄の分だけ短くなり、下が空く（iPadの癖）。画面の高さそのものを使う */
+@media (display-mode: standalone) { html, body { height: 100vh; } }
+body {
+  display: flex; flex-direction: column;
+  background: var(--bg); color: var(--text);
+  font-family: -apple-system, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", sans-serif;
+  font-size: 14px;
+  -webkit-user-select: none; user-select: none;
+}
+[hidden] { display: none !important; }
+svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+svg .fill { fill: currentColor; stroke: none; }
+.btn {
+  min-height: 40px; min-width: 40px; padding: 0 12px;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--bar); color: var(--text);
+  font: inherit; cursor: pointer; touch-action: manipulation;
+}
+.btn:disabled { opacity: .35; cursor: default; }
+.btn.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+
+/* ---------- 1段目: 藍色のバー ---------- */
+header { position: relative; z-index: 10; background: var(--bg); }
+.topbar {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px;
+  background: linear-gradient(180deg, var(--head), var(--head-2));
+  color: var(--head-text);
+  padding: calc(6px + env(safe-area-inset-top, 0px)) 12px 6px;
+  border-bottom: 1.5px solid var(--head-line);
+}
+.topbar .side { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.topbar .right { justify-content: flex-end; }
+.topbar .center { display: flex; align-items: center; gap: 6px; }
+/* 書く道具は、うすい台の上にひとまとめにする */
+.topbar .tools {
+  padding: 3px; border-radius: 16px;
+  background: color-mix(in srgb, var(--head-text) 6%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--head-text) 7%, transparent);
+}
+.topbar .tsep { width: 1.5px; height: 24px; margin: 0 6px; border-radius: 1px; background: var(--head-line); flex: none; }
+/* ページ一覧のいちばん上の検索ボタン */
+#sidebar .side-head { position: sticky; top: 0; z-index: 1; padding: 10px 10px 4px; background: var(--bar); }
+#sideSearch {
+  width: 100%; height: 36px; display: flex; align-items: center; gap: 7px; padding: 0 10px;
+  border: 0; border-radius: 10px; background: var(--bg); color: var(--muted); font: inherit; font-size: 13px; cursor: pointer;
+}
+#sideSearch svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; flex: none; }
+/* その他メニューの見出しと区切り */
+.menu .mhead { font-size: 11.5px; color: var(--muted); padding: 10px 12px 4px; line-height: 1.4; }
+.menu .mline { height: 1px; background: var(--line); margin: 6px 4px; }
+/* メニューの中の、いくつかから1つ選ぶボタン */
+.menu .mseg { display: flex; gap: 4px; padding: 2px 10px 8px; }
+.menu .mseg button {
+  flex: 1; border: 1px solid var(--line); background: transparent; color: inherit; font: inherit; font-size: 13px;
+  padding: 7px 0; border-radius: 9px; cursor: pointer; touch-action: manipulation;
+}
+.menu .mseg button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.menu #shareBtn { display: flex; align-items: center; gap: 8px; }
+.menu #shareBtn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.topbar .btn.icon {
+  width: 44px; height: 42px; min-width: 0; min-height: 0; padding: 0; flex: none;
+  border: 0; border-radius: 12px; background: transparent; color: var(--head-text);
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background .15s, color .15s, transform .12s;
+}
+.topbar .btn.icon svg { width: 26px; height: 26px; stroke-width: 2.1; }
+.topbar .btn.icon:active { transform: scale(.92); }
+.topbar .btn.icon:not(.on):hover { background: rgba(52,49,44,.06); }
+.topbar .btn.icon.on { background: var(--chip); color: var(--chip-text); box-shadow: 0 3px 10px var(--chip-glow); }
+/* 選んでいるペンは、アイコンは白一色にして、下にいまの色の小さな印を出す（コーラルの上では色が見えにくいので） */
+.topbar .btn.icon { position: relative; }
+.topbar .btn.icon.on .tip { stroke: currentColor; opacity: 1; }
+:root[data-group="pens"] .topbar .btn.icon.on::after {
+  content: ""; position: absolute; left: 50%; bottom: -6px; width: 16px; height: 3.5px; border-radius: 2px;
+  background: var(--cur); transform: translateX(-50%); box-shadow: 0 0 0 1px rgba(255,255,255,.7);
+}
+
+/* Drive: ふだんは雲のアイコンだけ。ログインが必要なときなどは文字も出す */
+.topbar #syncBtn { width: auto; min-width: 44px; padding: 0 8px; gap: 5px; font-size: 13px; white-space: nowrap; }
+#syncBtn svg .ok, #syncBtn svg .up { display: none; }
+#syncBtn.s-ok svg .ok { display: inline; }
+#syncBtn.s-ok { color: #4f9a68; }
+#syncBtn.s-busy svg .up, #syncBtn.s-pending svg .up { display: inline; }
+#syncBtn.s-busy { color: var(--accent); }
+#syncBtn.s-pending { color: var(--head-muted); }
+#syncText { display: none; }
+.topbar #syncBtn.warn { color: var(--warn); box-shadow: inset 0 0 0 1px var(--warn); padding: 0 12px 0 8px; }
+#syncBtn.warn #syncText { display: inline; }
+
+/* ペンのアイコンの先に、いまの色を出す */
+.topbar .btn.icon .tip { stroke: var(--cur); stroke-width: 2.6; }
+.topbar .btn.icon:not(.on) .tip { stroke: currentColor; opacity: .4; }
+.topbar .btn.icon:disabled { opacity: .3; }
+.slots { display: flex; align-items: center; gap: 4px; }
+.esize i { display: block; width: var(--d); height: var(--d); border-radius: 50%; border: 1.6px solid currentColor; box-sizing: border-box; }
+@media (max-width: 860px) {
+  .topbar { padding-left: 6px; padding-right: 6px; gap: 4px; }
+  .topbar .center { gap: 2px; }
+  .topbar .side { gap: 0; }
+  .topbar .btn.icon { width: 40px; }
+  /* 縦向きでは幅が足りないので、Driveの注意は色つきのアイコンだけにする（内容は下のお知らせで出す） */
+  #syncBtn.warn #syncText { display: none; }
+  .topbar #syncBtn.warn { padding: 0 8px; }
+}
+
+/* 色の丸（2段目・パレット・ポップアップで共通） */
+.swatch {
+  width: 30px; height: 30px; border-radius: 50%; padding: 0; border: 0; cursor: pointer; margin: 0 4px;
+  background: var(--c); box-shadow: inset 0 0 0 1px rgba(0,0,0,.14);
+  transition: transform .12s; touch-action: manipulation; flex: none; position: relative;
+}
+.swatch:active { transform: scale(.88); }
+.swatch.on { box-shadow: 0 0 0 3px var(--bar), 0 0 0 5px rgba(120,130,150,.35); }
+/* パレットで選んでいる色: もう一度タップで色を変えられる印（∨） */
+#palPanel .swatch.on::after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px;
+  border-right: 2px solid rgba(255,255,255,.95); border-bottom: 2px solid rgba(255,255,255,.95);
+  transform: translate(-50%, -70%) rotate(45deg);
+}
+
+/* ---------- ポップアップ（ふわっと開く） ---------- */
+.pop {
+  position: fixed; left: 0; top: 0; z-index: 30; --ax: 50%;
+  background: var(--bar); color: var(--text); border-radius: 16px; padding: 12px;
+  box-shadow: var(--pop-shadow);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transform: translateY(-6px) scale(.94); transform-origin: var(--ax) 0;
+  transition: opacity .16s ease, transform .22s cubic-bezier(.2,1.3,.4,1), visibility 0s .22s;
+}
+.pop::before {  /* 吹き出しの三角 */
+  content: ""; position: absolute; top: -6px; left: var(--ax); width: 12px; height: 12px;
+  background: var(--bar); transform: translateX(-50%) rotate(45deg); border-radius: 2px;
+}
+.pop.up { transform: translateY(6px) scale(.94); transform-origin: var(--ax) 100%; }
+.pop.up::before { top: auto; bottom: -6px; }
+.pop.open {
+  opacity: 1; visibility: visible; pointer-events: auto; transform: none;
+  transition: opacity .16s ease, transform .26s cubic-bezier(.2,1.3,.4,1), visibility 0s;
+}
+.pop-title { font-size: 12px; color: var(--muted); margin: 0 2px 8px; font-weight: 600; letter-spacing: .04em; }
+.menu { min-width: 230px; padding: 6px; }
+.menu .item {
+  display: block; width: 100%; min-height: 46px; padding: 0 14px; text-align: left; border: 0; border-radius: 10px;
+  background: transparent; color: var(--text); font: inherit; cursor: pointer;
+}
+.menu .item:active { background: var(--bg); }
+.menu .item:disabled { opacity: .35; }
+.menu .item.check { position: relative; padding: 9px 50px 9px 14px; line-height: 1.35; }
+.menu .item.check small { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+/* オン・オフのスイッチ */
+.menu .item.check::after {
+  content: ""; position: absolute; right: 12px; top: 50%; width: 32px; height: 20px; margin-top: -10px; border-radius: 10px;
+  background: var(--line); box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); transition: background .15s;
+}
+.menu .item.check::before {
+  content: ""; position: absolute; right: 26px; top: 50%; width: 16px; height: 16px; margin-top: -8px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); z-index: 1; transition: right .15s;
+}
+.menu .item.check[aria-pressed="true"]::after { background: var(--accent); }
+.menu .item.check[aria-pressed="true"]::before { right: 14px; }
+#flow.spread.act-r { justify-content: flex-end; }
+.color-grid { display: grid; grid-template-columns: repeat(5, 40px); gap: 10px; }
+.color-grid .swatch { width: 40px; height: 40px; margin: 0; }
+.width-row { display: flex; gap: 4px; }
+.wopt {
+  width: 46px; height: 46px; border: 0; border-radius: 12px; background: transparent; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; touch-action: manipulation;
+}
+.wopt i { display: block; width: var(--d); height: var(--d); border-radius: 50%; background: var(--cur); }
+.wopt.on { background: var(--bg); box-shadow: inset 0 0 0 2px var(--accent); }
+
+/* その他メニューのバージョン */
+.menu .ver { font-size: 11.5px; color: var(--muted); padding: 8px 14px 4px; border-top: 1px solid var(--line); margin-top: 4px; }
+
+/* 検索 */
+#searchPop { width: min(380px, calc(100vw - 16px)); box-sizing: border-box; }
+#searchInput {
+  width: 100%; box-sizing: border-box; height: 40px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--text); font: inherit; font-size: 16px; padding: 0 12px;
+  -webkit-user-select: text; user-select: text;
+}
+#searchInfo { color: var(--muted); font-size: 12px; margin: 8px 2px 4px; }
+#searchResults { max-height: 50vh; overflow: auto; -webkit-overflow-scrolling: touch; }
+.hit {
+  display: flex; gap: 10px; width: 100%; text-align: left; border: 0; background: transparent; color: var(--text);
+  font: inherit; font-size: 13px; padding: 9px 6px; border-radius: 8px; cursor: pointer; line-height: 1.5;
+}
+.hit:active { background: var(--bg); }
+.hit .pn { color: var(--accent); font-weight: 600; flex: none; width: 56px; }
+.hit .snip { overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.hit mark { background: #ffe066; color: inherit; border-radius: 2px; }
+#marks { position: absolute; inset: 0; pointer-events: none; }
+#marks i { position: absolute; background: rgba(255,214,0,.38); border-radius: 2px; mix-blend-mode: multiply; }
+
+/* ---------- 机とページ一覧 ---------- */
+#main { flex: 1; min-height: 0; display: flex; position: relative; }
+/* ページ一覧: 紙の上に左から滑り出す（紙の大きさは変えないので、なめらかに動く） */
+#sidebar {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 172px; z-index: 6;
+  overflow: hidden auto; background: var(--bar); border-right: 1px solid var(--line);
+  -webkit-overflow-scrolling: touch; will-change: transform;
+  transform: translate3d(-100%, 0, 0); visibility: hidden;
+  transition: transform .28s cubic-bezier(.2,.9,.3,1), box-shadow .28s, visibility 0s .28s;
+}
+.side-open #sidebar {
+  transform: none; visibility: visible; box-shadow: 6px 0 24px rgba(52,44,34,.18);
+  transition: transform .28s cubic-bezier(.2,.9,.3,1), box-shadow .28s, visibility 0s;
+}
+#thumbs { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 8px 0 80px; width: 172px; }
+.thumb {
+  border: 0; background: transparent; padding: 0; cursor: pointer; display: flex; flex-direction: column;
+  align-items: center; gap: 6px; color: var(--muted); font: inherit; font-size: 12px; touch-action: manipulation;
+}
+.thumb .paper {
+  display: block; width: 132px; min-height: 60px; aspect-ratio: 595 / 842; background: #fff; border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(52,44,34,.18); overflow: hidden; outline: 3px solid transparent; outline-offset: 2px;
+}
+.thumb.ready .paper { aspect-ratio: auto; min-height: 0; }
+.thumb canvas { display: block; }
+.thumb.on .paper { outline-color: var(--accent); }
+.thumb.on .num { color: var(--accent); font-weight: 600; }
+.thumb { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.thumb .tfoot { display: flex; align-items: center; gap: 2px; }
+.thumb .tmore { display: grid; place-items: center; width: 28px; height: 24px; border-radius: 8px; color: var(--muted); }
+.thumb .tmore:active { background: var(--bg); }
+.thumb .tmore svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.thumb.dragging { opacity: .3; }
+.thumb-ghost {
+  position: fixed; left: 0; top: 0; z-index: 40; pointer-events: none; background: #fff; border-radius: 4px; overflow: hidden;
+  box-shadow: 0 10px 30px rgba(52,44,34,.35); outline: 3px solid var(--accent); outline-offset: 2px;
+}
+.thumb-ghost canvas { display: block; width: 100%; height: 100%; }
+#pageMenu .item.danger { color: #d64541; }
+#pageMenu .mhead:last-child { padding-bottom: 8px; }
+#stage {
+  flex: 1; min-width: 0; overflow: auto; background: var(--stage);
+  -webkit-overflow-scrolling: touch; position: relative;
+  -webkit-touch-callout: none;
+}
+/* flow: 書ける紙（wrap）と、見開きのもう片方（still）、めくる紙（turn）をまとめたもの */
+#flow { position: relative; margin: 0 auto; padding: 4px 0 44px; }
+#flow.noscrub { padding-bottom: 8px; }
+#flow.pinching { will-change: transform; }
+#flow.spread { display: flex; align-items: flex-start; }
+#flow.spread #wrap { flex: none; }
+#flow.spread.act-r #wrap { order: 2; }
+#flow.spread.act-r #still { order: 1; }
+#still {
+  position: relative; flex: none; background: #fff; touch-action: none; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none;
+  box-shadow: 0 1px 2px rgba(52,44,34,.10), 0 8px 24px rgba(52,44,34,.12);
+}
+#still canvas, #stillUp canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
+/* 縦スクロール: 前のページ（上）・書ける紙・次のページ（下）を縦に並べる */
+#stillUp {
+  position: relative; background: #fff; touch-action: none; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none;
+  box-shadow: 0 1px 2px rgba(52,44,34,.10), 0 8px 24px rgba(52,44,34,.12); margin-bottom: 14px;
+}
+#flow.vert #still { margin-top: 14px; }
+#spine {
+  display: none; position: absolute; top: 4px; width: 44px; margin-left: -22px; pointer-events: none; z-index: 3;
+  background: linear-gradient(90deg, rgba(0,0,0,0), rgba(0,0,0,.07) 40%, rgba(0,0,0,.16) 50%, rgba(0,0,0,.07) 60%, rgba(0,0,0,0));
+}
+#flow.spread #spine { display: block; }
+#turn { display: none; position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; z-index: 6; perspective: 2400px; }
+#turn.on { display: block; }
+/* 小口（ページの束の端）: 紙の外側に出す。長押しの間、次々めくれる。束の厚さは残りのページ数で変わる */
+.edge { position: absolute; top: 4px; display: none; touch-action: none; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; z-index: 2; }
+.edge.on { display: block; }
+.edge i { position: absolute; top: 3px; bottom: 3px; width: var(--th, 10px); pointer-events: none;
+  background: repeating-linear-gradient(90deg, #e9e7e2 0 2px, #bcb7ad 2px 3px);
+  box-shadow: 0 1px 2px rgba(52,44,34,.12), 0 6px 16px rgba(52,44,34,.10); transition: filter .12s; }
+#edgeL i { right: 0; border-radius: 3px 0 0 3px; }
+#edgeR i { left: 0; border-radius: 0 3px 3px 0; }
+.edge.press i { filter: brightness(.9); }
+/* 紙の下のバー: 指でなぞると、その位置のページまでパラパラめくれる */
+#scrub { position: absolute; left: 0; height: 32px; display: none; touch-action: none; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; cursor: ew-resize; z-index: 2; }
+#scrub.on { display: block; }
+#scrub i { position: absolute; left: 0; right: 0; top: 8px; height: 16px; border-radius: 5px; pointer-events: none;
+  background: repeating-linear-gradient(to right, #e9e7e2 0 2px, #bcb7ad 2px 3px);
+  box-shadow: inset 0 0 0 1px rgba(52,44,34,.14), 0 2px 6px rgba(52,44,34,.10); }
+#scrub .mark { position: absolute; top: 3px; bottom: 3px; width: 4px; margin-left: -2px; border-radius: 2px; background: var(--accent); box-shadow: 0 0 0 2px var(--bar); pointer-events: none; }
+#scrub.press i { filter: brightness(.92); }
+#turn .tu, #turn .lf { position: absolute; }
+#turn .tu { background: #fff; overflow: hidden; }
+#turn .tu.none { background: var(--stage); }
+#turn .tu::after { content: ""; position: absolute; inset: 0; opacity: var(--sh, 0); background: linear-gradient(var(--gd, 90deg), #000, rgba(0,0,0,0) 45%); }
+#turn .fc { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: #fff; overflow: hidden; box-shadow: 0 0 22px rgba(0,0,0,.22); }
+#turn .fc.bk { transform: rotateY(180deg); }
+#turn .fc.blank { background: #f1efea; }
+#turn .fc::after { content: ""; position: absolute; inset: 0; background: #000; opacity: var(--sh, 0); }
+#turn canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
+#wrap {
+  position: relative; margin: 0; background: #fff; display: none;
+  box-shadow: 0 1px 2px rgba(52,44,34,.10), 0 8px 24px rgba(52,44,34,.12);
+}
+#wrap canvas { position: absolute; left: 0; top: 0; display: block; }
+#livec, #wrap canvas.vp { pointer-events: none; }
+#wrap canvas[hidden] { display: none; }
+#ink { touch-action: none; cursor: crosshair; -webkit-touch-callout: none; }
+#hint {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 6px; text-align: center;
+  color: var(--muted); padding: 24px; pointer-events: none; line-height: 1.7;
+}
+#hint strong { color: var(--text); font-size: 17px; font-weight: 600; }
+
+/* 本のボタンで出る「本の小口」。開いている見開きは半分ずつ、ほかのページは端だけ見える */
+#bookShade {
+  position: absolute; inset: 0; z-index: 8; display: none; background: rgba(40,34,26,.16);
+  opacity: 0; transition: opacity .2s; touch-action: none;
+}
+#bookShade.on { display: block; }
+#bookShade.show { opacity: 1; }
+#book {
+  position: absolute; left: 12px; top: 8px; width: 700px; height: 480px; z-index: 9; display: none;
+  flex-direction: column; overflow: hidden; border-radius: 22px;
+  background: var(--bar); box-shadow: 0 24px 60px rgba(52,44,34,.28), 0 4px 14px rgba(52,44,34,.12);
+  touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  opacity: 0; transform: scale(.4);
+  transition: opacity .16s, transform .26s cubic-bezier(.2,1.25,.4,1);
+}
+#book.on { display: flex; }
+#book.show { opacity: 1; transform: none; }
+#book .top { display: flex; align-items: center; justify-content: center; padding: 10px 16px 0; position: relative; }
+#book .lbl { display: flex; align-items: baseline; gap: 6px; color: var(--text); font-variant-numeric: tabular-nums; }
+#book .lbl b { font-size: 26px; font-weight: 700; letter-spacing: .5px; }
+#book .lbl span { font-size: 15px; color: var(--muted); }
+#bookClose {
+  position: absolute; right: 12px; top: 10px; width: 34px; height: 34px; border-radius: 50%; border: 0;
+  background: var(--bg); color: var(--text); font-size: 22px; line-height: 1; box-shadow: 0 1px 4px rgba(52,44,34,.15); cursor: pointer;
+}
+#bookStage { flex: 1; position: relative; min-height: 0; cursor: ew-resize; perspective: 1500px; perspective-origin: 50% 45%; }
+#bookStage .leaf {
+  position: absolute; left: 0; top: 0; background: #fff; overflow: hidden; will-change: transform;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+}
+#bookStage .leaf canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
+/* ページの端の線（小口の紙の重なり） */
+#bookStage .leaf::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(var(--dir, 90deg), rgba(60,50,38,0) 0%, rgba(60,50,38,var(--sh, 0)) 100%);
+  box-shadow: inset var(--ex, 1px) 0 0 rgba(60,50,38,.28);
+}
+#bookStage .leaf .ph {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 34px; font-weight: 700; color: #d6cfc3; font-variant-numeric: tabular-nums;
+}
+#bookStage .leaf.mid { box-shadow: 0 10px 30px rgba(52,44,34,.20); }
+#bookStage .leaf.sel { outline: 3px solid var(--accent); outline-offset: 0; }
+#bookStage .pno {
+  position: absolute; transform: translateX(-50%); font-size: 13px; font-weight: 600; color: var(--muted);
+  font-variant-numeric: tabular-nums; pointer-events: none; white-space: nowrap;
+}
+#bookStage .pno.sel { color: var(--accent); }
+#bookEdge {
+  position: relative; height: 28px; margin: 0 max(20px, 7%) 8px; border-radius: 6px; cursor: ew-resize;
+  background: repeating-linear-gradient(to right, #fbf9f5 0 2px, #d9d1c4 2px 3px);
+  box-shadow: inset 0 0 0 1px rgba(52,44,34,.12), 0 2px 6px rgba(52,44,34,.10);
+}
+#bookEdge .mark {
+  position: absolute; top: -5px; bottom: -5px; width: 4px; margin-left: -2px; border-radius: 2px; background: var(--accent);
+  box-shadow: 0 0 0 2px var(--bar);
+}
+#book .tip { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16px 12px; }
+.book-open #palette { visibility: hidden; }
+
+/* 上下に引っぱってページを移る・増やす */
+#pull {
+  position: absolute; left: 50%; bottom: 76px; z-index: 4; pointer-events: none;
+  display: flex; align-items: center; gap: 8px; padding: 8px 16px 8px 10px; border-radius: 22px;
+  background: var(--bar); color: var(--muted); font-size: 13px; box-shadow: var(--pop-shadow);
+  opacity: 0; transform: translate(-50%, 16px) scale(.9); transition: opacity .15s, transform .2s, background .15s, color .15s;
+}
+#pull.top { bottom: auto; top: 16px; transform: translate(-50%, -16px) scale(.9); }
+#pull.show { opacity: 1; transform: translate(-50%, 0) scale(calc(.85 + .15 * var(--k, 0))); }
+#pull .ic {
+  width: 26px; height: 26px; border-radius: 50%; background: var(--bg); position: relative; flex: none;
+  transition: background .15s, transform .25s cubic-bezier(.2,1.4,.4,1);
+}
+#pull .ic::before, #pull .ic::after { content: ""; position: absolute; left: 50%; top: 50%; background: currentColor; border-radius: 1px; }
+#pull.next .ic::before, #pull.prev .ic::before { width: 8px; height: 8px; background: none; border-left: 2px solid; border-top: 2px solid; transform: translate(-50%, -25%) rotate(45deg); }
+#pull.prev .ic { transform: rotate(180deg); }
+#pull.add .ic::before { width: 12px; height: 2px; transform: translate(-50%, -50%); }
+#pull.add .ic::after { width: 2px; height: 12px; transform: translate(-50%, -50%); }
+#pull.ready { background: var(--accent); color: var(--accent-text); }
+#pull.ready .ic { background: rgba(255,255,255,.22); }
+#pull.ready.add .ic { transform: rotate(90deg) scale(1.1); }
+#pull.ready.next .ic { transform: translateY(-2px); }
+
+/* 投げ縄で選んだもの */
+#selBox { position: absolute; border: 1.5px dashed var(--accent); border-radius: 6px; background: rgba(236,111,105,.05); pointer-events: none; }
+#selBox .handle {
+  position: absolute; right: -9px; bottom: -9px; width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; border: 2px solid var(--accent); box-shadow: 0 1px 4px rgba(0,0,0,.25);
+}
+#selMenu {
+  position: absolute; display: flex; gap: 2px; padding: 4px; border-radius: 12px; z-index: 5;
+  background: var(--pal); box-shadow: 0 6px 18px rgba(52,44,34,.3);
+}
+#selMenu button {
+  border: 0; background: transparent; color: #fff; font: inherit; font-size: 14px; padding: 8px 14px;
+  border-radius: 8px; cursor: pointer; touch-action: manipulation;
+}
+#selMenu button:active { background: rgba(255,255,255,.15); }
+#selMenu .danger { color: #ff9a9a; }
+
+/* ---------- 動かせる道具パレット ---------- */
+#palette { position: fixed; z-index: 16; width: 52px; height: 52px; display: none; }
+.has-file #palette { display: block; }
+#palBubble {
+  width: 52px; height: 52px; border-radius: 50%; border: 0; padding: 0; cursor: grab;
+  background: linear-gradient(160deg, var(--pal), var(--pal-2)); color: var(--pal-text);
+  box-shadow: 0 0 0 3px var(--cur), 0 8px 22px rgba(52,44,34,.35);
+  display: flex; align-items: center; justify-content: center;
+  touch-action: none; transition: transform .2s cubic-bezier(.2,1.3,.4,1), box-shadow .2s;
+}
+:root:not([data-group="pens"]) #palBubble { box-shadow: 0 0 0 3px var(--pal-muted), 0 8px 22px rgba(52,44,34,.35); }
+#palIcon { display: flex; }
+#palette.open #palBubble { transform: scale(.9); }
+#palette.dragging #palBubble { transform: scale(1.08); cursor: grabbing; }
+#palPanel {
+  position: absolute; top: 50%; left: 62px;
+  display: flex; align-items: center; gap: 2px; padding: 6px 8px; border-radius: 28px;
+  background: linear-gradient(160deg, var(--pal), var(--pal-2)); color: var(--pal-text);
+  box-shadow: 0 12px 30px rgba(52,44,34,.35);
+  opacity: 0; visibility: hidden; pointer-events: none; white-space: nowrap;
+  transform: translate(-14px, -50%) scale(.55); transform-origin: 0 50%;
+  transition: opacity .15s ease, transform .2s ease, visibility 0s .2s;
+}
+#palette.to-left #palPanel { left: auto; right: 62px; transform: translate(14px, -50%) scale(.55); transform-origin: 100% 50%; }
+#palette.open #palPanel {
+  opacity: 1; visibility: visible; pointer-events: auto;
+  transform: translate(0, -50%) scale(1);
+  transition: opacity .18s ease, transform .34s cubic-bezier(.2,1.35,.35,1), visibility 0s;
+}
+.pbtn {
+  width: 40px; height: 40px; border: 0; border-radius: 50%; padding: 0; cursor: pointer;
+  background: transparent; color: var(--pal-text); touch-action: manipulation;
+  display: inline-flex; align-items: center; justify-content: center; transition: background .15s, transform .12s;
+}
+.pbtn:active { transform: scale(.9); }
+.pbtn.on { background: var(--pal-chip); color: var(--pal-chip-text); }
+.pbtn:disabled { opacity: .3; }
+.pbtn .tip { stroke: var(--cur); stroke-width: 2.4; }
+.pbtn:not(.on) .tip { opacity: .45; stroke: currentColor; }
+.psep { width: 1px; height: 22px; background: var(--pal-line); margin: 0 4px; }
+:root:not([data-group="pens"]) .g-pens, :root:not([data-group="pens"]) .g-shape,
+:root[data-tool="highlighter"] .g-shape,
+:root:not([data-group="eraser"]) .g-eraser,
+:root:not([data-group="lasso"]) .g-lasso,
+:root:not([data-group="laser"]) .g-laser { display: none; }
+#palPanel .widths { display: flex; align-items: center; }
+#palPanel .wopt { width: 36px; height: 40px; border-radius: 50%; }
+#palPanel .wopt i { background: var(--cur); box-shadow: 0 0 0 1px rgba(255,255,255,.25); }
+#palPanel .wopt.on { background: var(--pal-hi); box-shadow: none; }
+#palPanel .esize.on { background: var(--pal-chip); color: var(--pal-chip-text); }
+#palPanel .pbtn.on#shapeBtn { background: var(--pal-chip); color: var(--pal-chip-text); }
+.ptext {
+  border: 0; background: var(--pal-hi); color: var(--pal-warn); font: inherit; font-size: 13px;
+  height: 36px; padding: 0 14px; border-radius: 18px; cursor: pointer; touch-action: manipulation;
+}
+.ptext:active { background: rgba(255,255,255,.2); }
+.pnote { color: var(--pal-muted); font-size: 12.5px; padding: 0 10px 0 6px; }
+#palPanel .swatch { width: 26px; height: 26px; margin: 0 3px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.25); }
+#palPanel .swatch.on { box-shadow: 0 0 0 2px var(--pal), 0 0 0 4px #fff; }
+
+/* ---------- 下に浮かぶお知らせ（数秒で消える） ---------- */
+#status {
+  position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  transform: translate(-50%, 8px); max-width: calc(100% - 140px);
+  background: rgba(52,49,44,.92); color: #fff; font-size: 13px; line-height: 1.5;
+  padding: 8px 16px; border-radius: 18px; pointer-events: none; z-index: 32;
+  opacity: 0; transition: opacity .25s, transform .25s; text-align: center;
+  box-shadow: 0 6px 18px rgba(52,44,34,.25);
+}
+#status.show { opacity: 1; transform: translate(-50%, 0); }
+/* 右下のページ番号（めくったとき・拡大したときに表示） */
+#pager {
+  position: fixed; right: 12px; bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  display: flex; align-items: center; z-index: 15;
+  background: rgba(52,49,44,.85); color: #fff; border-radius: 18px; padding: 5px 13px;
+  font-size: 13px; font-variant-numeric: tabular-nums; pointer-events: none;
+  opacity: 0; transition: opacity .3s;
+}
+#pager.show { opacity: 1; }
+#pager .pg { display: none; }
+
+/* ---------- ダイアログ（手書きデータ・共有） ---------- */
+#dlg, #shareDlg {
+  position: fixed; inset: 0; background: rgba(10,15,30,.45); display: none;
+  align-items: center; justify-content: center; padding: 16px; z-index: 40;
+}
+#dlg.open, #shareDlg.open { display: flex; }
+#dlg .box, #shareDlg .box {
+  background: var(--bar); border-radius: 16px; box-shadow: var(--pop-shadow);
+  width: min(640px, 100%); max-height: 100%; padding: 16px; display: flex; flex-direction: column; gap: 10px;
+}
+#shareDlg .box { width: min(420px, 100%); }
+.box .row { display: flex; align-items: center; gap: 8px; }
+.box p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+#json {
+  width: 100%; height: 220px; box-sizing: border-box; resize: none;
+  background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+  font-family: ui-monospace, Menlo, monospace; font-size: 12px; padding: 8px;
+  -webkit-user-select: text; user-select: text;
+}
+
+/* 押したまま滑らせて選ぶときのガラスの玉（js/slide.js） */
+#lens {
+  position: fixed; left: 0; top: 0; z-index: 9999; pointer-events: none; opacity: 0;
+  transition: transform .24s cubic-bezier(.25,1.4,.5,1), width .2s, height .2s, opacity .16s;
+  background: rgba(255,255,255,.16);
+  -webkit-backdrop-filter: blur(1.5px) saturate(1.9) brightness(1.08); backdrop-filter: blur(1.5px) saturate(1.9) brightness(1.08);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.75), inset 0 1.5px 6px rgba(255,255,255,.55), inset 0 -2px 6px rgba(0,0,0,.06), 0 8px 22px rgba(0,0,0,.18);
+}
+#lens.on { opacity: 1; }
+.slide-hot svg, .slide-hot i { transform: scale(1.12); transition: transform .15s; }
+.topbar .tools, #palSlots, #palPanel .widths, #palPanel .esize, #colorPop .color-grid { touch-action: none; }
+
+/* ---------- ホーム画面（PDFを選ぶ） ---------- */
+#home {
+  position: fixed; inset: 0; z-index: 20; overflow: auto; -webkit-overflow-scrolling: touch;
+  background: var(--bg); color: var(--text);
+  padding: calc(14px + env(safe-area-inset-top, 0px)) calc(24px + env(safe-area-inset-right, 0px)) calc(40px + env(safe-area-inset-bottom, 0px)) calc(24px + env(safe-area-inset-left, 0px));
+  box-sizing: border-box;
+}
+.home-on #palette, .home-on #pager { display: none; }
+#homeMenu { z-index: 34; max-width: min(340px, calc(100vw - 16px)); }
+#homeMenu .item.danger { color: #d64541; }
+.h-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 1100px; margin: 0 auto 10px; min-height: 44px; }
+.h-top h1 { font-size: 26px; font-weight: 700; margin: 0; letter-spacing: .02em; }
+.h-close {
+  height: 40px; padding: 0 16px; border: 0; border-radius: 20px; background: var(--accent); color: #fff;
+  font: inherit; font-weight: 600; cursor: pointer; touch-action: manipulation;
+}
+.h-sec { max-width: 1100px; margin: 0 auto 26px; }
+.h-head { display: flex; align-items: center; gap: 10px; min-height: 40px; margin-bottom: 8px; }
+.h-head h2 { font-size: 18px; font-weight: 700; margin: 0; }
+.h-crumb { display: flex; align-items: center; gap: 8px; font-size: 18px; min-width: 0; }
+.h-crumb:empty { display: none; }
+.h-crumb button { border: 0; background: transparent; color: var(--accent); font: inherit; font-weight: 700; padding: 6px 0; cursor: pointer; }
+.h-crumb span { color: var(--muted); }
+.h-crumb b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.h-link { margin-left: auto; border: 0; background: transparent; color: var(--accent); font: inherit; font-weight: 600; padding: 8px 4px; cursor: pointer; }
+.h-empty { color: var(--muted); font-size: 13.5px; margin: 4px 2px 0; }
+.h-open { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.h-card {
+  display: flex; align-items: center; gap: 14px; text-align: left; padding: 18px 20px; border: 0; border-radius: 18px;
+  background: var(--bar); color: var(--text); font: inherit; cursor: pointer; touch-action: manipulation;
+  box-shadow: 0 1px 2px rgba(52,44,34,.08), 0 4px 14px rgba(52,44,34,.06);
+}
+.h-card:active { transform: scale(.98); }
+.h-card svg { width: 40px; height: 40px; color: var(--accent); stroke-width: 1.7; }
+.h-card b { display: block; font-size: 17px; }
+.h-card small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 3px; }
+.h-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 18px 14px; }
+.h-grid:empty { display: none; }
+.tile { position: relative; display: flex; flex-direction: column; align-items: center; }
+.t-open {
+  width: 100%; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 6px; border: 0; border-radius: 12px;
+  background: transparent; color: var(--text); font: inherit; cursor: pointer; touch-action: manipulation;
+}
+.t-open:active { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.t-thumb {
+  position: relative; width: 108px; height: 146px; border-radius: 6px; background: #fff; overflow: hidden;
+  box-shadow: 0 0 0 1px var(--line), 0 2px 8px rgba(52,44,34,.14);
+}
+.t-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.tile.on .t-thumb { box-shadow: 0 0 0 3px var(--accent), 0 2px 8px rgba(52,44,34,.14); }
+.t-name {
+  width: 100%; font-size: 13px; line-height: 1.35; text-align: center; overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-all;
+}
+.t-when { font-size: 11.5px; color: var(--muted); }
+.tile.folder .t-thumb { display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--accent) 14%, var(--bar)); box-shadow: none; border-radius: 14px; }
+.tile.folder .t-thumb svg { width: 64px; height: 64px; color: var(--accent); stroke-width: 1.4; }
+.tile.folder .t-thumb b { position: absolute; bottom: 10px; font-size: 12px; color: var(--muted); font-weight: 600; }
+.t-act {
+  position: absolute; top: 0; width: 32px; height: 32px; border: 0; border-radius: 50%; padding: 0;
+  display: flex; align-items: center; justify-content: center; cursor: pointer; touch-action: manipulation;
+  background: var(--bar); color: var(--muted); box-shadow: 0 1px 4px rgba(0,0,0,.18); font-size: 16px;
+}
+.t-act svg { width: 18px; height: 18px; }
+.t-act { right: calc(50% - 64px); }
+.t-star { left: calc(50% - 64px); right: auto; }
+.t-star.on { color: #f2a900; }
+.t-star.on svg { fill: currentColor; }
+.h-help { max-width: 1100px; margin: 0 auto; color: var(--muted); font-size: 13px; line-height: 1.8; }
+.h-help summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
+
+/* ---------- 横画面のiPad: 道具のバーを左に縦に並べ、その分、紙を大きく ---------- */
+@media (orientation: landscape) and (min-width: 1000px) {
+  body { flex-direction: row; }
+  header { flex: none; height: 100%; }
+  .topbar {
+    height: 100%; box-sizing: border-box; width: calc(62px + env(safe-area-inset-left, 0px));
+    display: flex; flex-direction: column; justify-content: space-between; align-items: center; gap: 6px;
+    padding: calc(8px + env(safe-area-inset-top, 0px)) 6px calc(10px + env(safe-area-inset-bottom, 0px)) calc(6px + env(safe-area-inset-left, 0px));
+    border-bottom: 0; border-right: 1.5px solid var(--head-line);
+    background: linear-gradient(90deg, var(--head), var(--head-2));
+    overflow: hidden auto;
+  }
+  .topbar .side, .topbar .center { flex-direction: column; gap: 4px; }
+  .topbar .right { justify-content: flex-start; }
+  .topbar .tsep { width: 24px; height: 1.5px; margin: 4px 0; }
+  .topbar .btn.icon { width: 46px; height: 42px; }
+  #syncBtn.warn #syncText { display: none; }
+  .topbar #syncBtn.warn { padding: 0 8px; }
+  /* 選んでいるペンの色の印は、ボタンの右に縦に出す */
+  :root[data-group="pens"] .topbar .btn.icon.on::after {
+    left: auto; right: -6px; bottom: auto; top: 50%; width: 3.5px; height: 16px; transform: translateY(-50%);
+  }
+  #main { flex: 1; min-width: 0; height: 100%; }
+  /* 紙の場所は時計・電池の欄の下まで使う。ページ一覧だけは時計と重ならないように下げる */
+  #thumbs { padding-top: calc(8px + env(safe-area-inset-top, 0px)); }
+}
+/* 左のバーから出すポップアップ（三角は左に） */
+.pop.side { transform: translateX(-6px) scale(.94); transform-origin: 0 var(--ay, 50%); }
+.pop.side::before { top: var(--ay, 50%); left: -6px; transform: translateY(-50%) rotate(45deg); }
+.pop.side.open { transform: none; }
+
+/* ---------- 集中モード: 道具のバーを隠して紙を大きく。右上に小さなバーだけ出す ---------- */
+#focusBar { display: none; }
+.focus header { display: none; }
+.focus.has-file:not(.home-on) #focusBar {
+  display: flex; align-items: center; gap: 2px; position: fixed; z-index: 18;
+  top: calc(8px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px));
+  padding: 4px; border-radius: 14px; background: var(--bar); opacity: .9;
+  box-shadow: 0 2px 10px rgba(52,44,34,.22);
+}
+#focusBar .ftools { display: flex; gap: 2px; }
+#focusBar button {
+  width: 40px; height: 38px; border: 0; border-radius: 10px; background: transparent; color: var(--muted);
+  display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; touch-action: manipulation;
+}
+#focusBar svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+#focusBar svg .fill { fill: currentColor; stroke: none; }
+#focusBar button.on { background: var(--accent); color: var(--accent-text, #fff); }
+#focusBar #focusExit { margin-left: 4px; border-left: 1px solid var(--line); border-radius: 0 10px 10px 0; }
+/* 指でドラッグして動かせる。画面の上下の辺では横向き、左右の辺では縦向き */
+#focusBar { touch-action: none; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+.focus.has-file:not(.home-on) #focusBar.vert { flex-direction: column; }
+#focusBar.vert .ftools { flex-direction: column; }
+#focusBar.vert #focusExit { margin: 4px 0 0; border-left: 0; border-top: 1px solid var(--line); border-radius: 0 0 10px 10px; }
+#focusBar.dragging { opacity: 1; box-shadow: 0 8px 24px rgba(52,44,34,.3); transition: none; }
+
+/* 左のバーのアイコンは線の色だけ（ボタンは塗らない）。上の3つは赤、道具の欄と下のボタンは薄紫 */
+.topbar .btn.icon.on { background: #fffdf7; box-shadow: 0 1px 5px rgba(58,54,51,.18), inset 0 0 0 1px var(--head-line); }
+.topbar #sideBtn, .topbar #openBtn,
+.topbar #bookBtn { color: var(--red); }
+.topbar #undo, .topbar #redo, .topbar #focusBtn, .topbar #moreBtn,
+.topbar #syncBtn.s-ok, .topbar #syncBtn.s-pending { color: #7d95d8; }
+/* 道具の欄は元のまま: ふだんは黒っぽい線、選んでいるものは赤いボタンに白い線 */
+.topbar .center .btn.icon.on { background: var(--chip); color: var(--chip-text); box-shadow: 0 3px 10px var(--chip-glow); }
+
+/* ホーム画面: 白紙のノートと「フォルダを作る」は薄紫。見出しのアイコンは、お気に入り＝薄紫の星、最近開いた＝赤い時計 */
+#homeBlank svg, #newFolder { color: #7d95d8; }
+.h-head h2 { display: flex; align-items: center; gap: 8px; }
+.h-ic { width: 22px; height: 22px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.h-ic.fav { color: #7d95d8; }
+.h-ic.recent { color: var(--red); }
+
+/* お気に入りのドラッグ */
+#favGrid .tile { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+#favGrid .tile img { -webkit-user-drag: none; pointer-events: none; }
+.tile.dragging { opacity: .3; }
+.drag-ghost { position: fixed; z-index: 40; pointer-events: none; transform: scale(1.06) rotate(-2deg); opacity: .92; filter: drop-shadow(0 10px 18px rgba(52,44,34,.3)); }
+.drag-ghost .t-act { display: none; }
+.tile.folder.drop-hot .t-thumb { box-shadow: 0 0 0 3px #7d95d8; transform: scale(1.06); transition: transform .12s; }
+.h-crumb.drop-hot #favUp { background: #7d95d8; color: #fff; border-radius: 8px; }
+/* 本のボタンは長押しを使うので、iPadの長押しメニュー・文字選択を出さない */
+#bookBtn { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+
+/* ==================== ここから下は、読書ノートで足したもの ==================== */
+/* 手書きノートと見分けがつくように、アクセントの色を深い緑にする */
+:root {
+  --red: #1f7a6d; --accent: #1f7a6d; --chip: #1f7a6d; --chip-glow: rgba(31,122,109,.30);
+  --pal-chip: #1f7a6d; --pal-warn: #b3261e; --sel: #d5ebe6; --note: #ffd84d;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --accent: #5cc2b1; --chip: #2f9c8b; --chip-glow: rgba(92,194,177,.3); --sel: #24413c; --red: #5cc2b1; --pal-chip: #f4efe6; --pal-warn: #ffb0a8; }
+}
+:root[data-theme="dark"] { --accent: #5cc2b1; --chip: #2f9c8b; --chip-glow: rgba(92,194,177,.3); --sel: #24413c; --red: #5cc2b1; --pal-chip: #f4efe6; --pal-warn: #ffb0a8; }
+
+/* 本のときだけ・スクラップブックのときだけ出すもの */
+:root[data-kind="scrap"] .k-book, :root:not([data-kind="scrap"]) .k-scrap { display: none !important; }
+/* パレットの中身: 付箋の道具のときは、付箋の色 */
+:root:not([data-group="note"]) .g-note { display: none; }
+#palNotes .swatch.on::after { display: none; }
+:root[data-group="note"] #palBubble { box-shadow: 0 0 0 3px var(--note), 0 8px 22px rgba(52,44,34,.35); }
+.menu .item small { margin-left: 10px; font-size: 11.5px; color: var(--muted); }
+.menu .item.check small { margin-left: 0; }
+.menu #shareBtn { display: flex; align-items: center; gap: 8px; }
+#moreMenu #bookTitle { font-size: 13px; color: var(--text); font-weight: 600; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#scrapMenu { max-width: min(360px, calc(100vw - 16px)); max-height: 70vh; overflow: auto; -webkit-overflow-scrolling: touch; }
+#scrapMenu .item { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.topbar #scrapBtn { margin-left: 2px; }
+
+/* ページ一覧の上のタブ（ページ・付箋） */
+#sideTabs { display: flex; gap: 4px; padding: 0 0 8px; }
+#sideTabs button {
+  flex: 1; height: 32px; border: 0; border-radius: 9px; background: var(--bg); color: var(--muted);
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; touch-action: manipulation;
+}
+#sideTabs button.on { background: var(--accent); color: #fff; }
+#sideTabs b { font-weight: 600; margin-left: 4px; font-size: 11.5px; opacity: .85; }
+#sidebar[data-tab="notes"] #thumbs, #sidebar[data-tab="notes"] #sideSearch { display: none; }
+#sidebar:not([data-tab="notes"]) #noteList { display: none; }
+#noteList { padding: 4px 8px 80px; display: flex; flex-direction: column; gap: 6px; }
+.nrow {
+  display: grid; grid-template-columns: 14px 1fr; column-gap: 8px; row-gap: 3px; align-items: center; text-align: left;
+  border: 0; border-radius: 10px; background: var(--bg); color: var(--text); font: inherit; padding: 8px 10px; cursor: pointer; touch-action: manipulation;
+}
+.nrow:active { background: var(--sel); }
+.nrow i { width: 14px; height: 14px; border-radius: 3px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.14); }
+.nrow .np { font-size: 12px; color: var(--muted); font-weight: 600; }
+.nrow .nt {
+  grid-column: 1 / -1; font-size: 13px; line-height: 1.45; overflow: hidden; word-break: break-all; white-space: pre-wrap;
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
+}
+.nrow .nt.none { color: var(--muted); }
+.nl-empty { color: var(--muted); font-size: 12.5px; line-height: 1.7; padding: 8px 4px; margin: 0; }
+@media (orientation: landscape) and (min-width: 1000px) { #sidebar .side-head { padding-top: calc(10px + env(safe-area-inset-top, 0px)); } }
+
+/* 付箋を開いたときのポップアップ */
+#notePop { width: min(300px, calc(100vw - 16px)); box-sizing: border-box; z-index: 31; }
+.np-colors { display: flex; justify-content: center; gap: 2px; padding-bottom: 10px; }
+.np-colors .swatch { width: 28px; height: 28px; }
+#noteText {
+  display: block; width: 100%; height: 120px; box-sizing: border-box; resize: none; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--bg); color: var(--text); font: inherit; font-size: 16px; line-height: 1.6; padding: 8px 10px;
+  -webkit-user-select: text; user-select: text;
+}
+.np-row { display: flex; align-items: center; gap: 8px; padding-top: 10px; }
+#notePage { flex: 1; text-align: center; color: var(--muted); font-size: 12px; }
+#noteDel { border: 0; background: transparent; color: #d64541; font: inherit; padding: 8px 4px; cursor: pointer; touch-action: manipulation; }
+#noteClose {
+  border: 0; border-radius: 17px; background: var(--accent); color: #fff; font: inherit; font-weight: 600;
+  height: 34px; padding: 0 16px; cursor: pointer; touch-action: manipulation;
+}
+#noteAnchor { position: fixed; left: 0; top: 0; pointer-events: none; visibility: hidden; }
+
+/* スクラップブックの、いまのページの出典（押すと元の本へ） */
+#srcChip {
+  position: fixed; right: 12px; bottom: calc(50px + env(safe-area-inset-bottom, 0px)); z-index: 15;
+  max-width: min(60vw, 420px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  border: 0; border-radius: 16px; padding: 6px 12px; font: inherit; font-size: 12.5px; cursor: pointer; touch-action: manipulation;
+  background: var(--bar); color: var(--accent); box-shadow: 0 2px 10px rgba(52,44,34,.22);
+}
+.home-on #srcChip, .focus #srcChip { display: none; }
+
+/* 本棚 */
+.h-links { margin-left: auto; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: flex-end; }
+.h-links .h-link { margin-left: 0; }
+.h-link:disabled { opacity: .5; }
+.h-sub { color: var(--muted); font-size: 12px; }
+.h-ic.scrap { color: #d9822b; }
+.h-ic.shelf { color: var(--accent); }
+.h-ic.recent { color: #7d95d8; }
+.h-folder { font-size: 13.5px; font-weight: 700; color: var(--muted); margin: 18px 2px 8px; padding-bottom: 5px; border-bottom: 1px solid var(--line); }
+#shelf .h-grid + .h-folder { margin-top: 26px; }
+.h-card2 { background: var(--bar); border-radius: 14px; padding: 16px 18px; line-height: 1.8; font-size: 13.5px; box-shadow: 0 0 0 1px var(--line); margin: 4px 0 12px; }
+.h-card2 b { color: var(--text); }
+.h-usage { max-width: 1100px; margin: 0 auto 12px; color: var(--muted); font-size: 12px; }
+.h-help b { color: var(--text); }
+#home .h-empty { line-height: 1.7; }
+.t-ph {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
+  padding: 10px 8px; font-size: 12px; line-height: 1.45; color: #5d574c; word-break: break-all; overflow: hidden;
+  background: linear-gradient(160deg, #f7f1e3, #e9e0cb);
+}
+.tile.scrap .t-thumb { border-radius: 4px 10px 10px 4px; box-shadow: -4px 0 0 #d9822b, 0 0 0 1px var(--line), 0 2px 8px rgba(52,44,34,.14); }
+.tile.scrap .t-ph { background: linear-gradient(160deg, #fbf3e0, #f3e2c2); }
+.tile.cloud .t-thumb img, .tile.cloud .t-ph { opacity: .55; }
+.t-cloud {
+  position: absolute; right: 6px; bottom: 6px; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: var(--bar); color: var(--accent); box-shadow: 0 1px 4px rgba(0,0,0,.2);
+}
+.t-cloud svg { width: 20px; height: 20px; }
+.t-dl { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(30,28,24,.5); color: #fff; font-size: 15px; font-variant-numeric: tabular-nums; }
+.t-prog { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(0,0,0,.12); }
+.t-prog i { display: block; height: 100%; background: var(--accent); }
+#homeMenu .mhead { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--text); font-size: 12.5px; }

@@ -8,7 +8,9 @@ const ORIGINS = ['https://nishimura2858.github.io', 'http://localhost:8000'];
 const REDIRECTS = ['https://nishimura2858.github.io/pdf-tegaki/', 'http://localhost:8000/'];
 
 function reply(obj, status, origin) {
-  return new Response(JSON.stringify(obj), {
+  // 204（ブラウザからの事前確認への返事）は、中身を付けられない。付けるとサーバーがエラーになり、
+  // ブラウザからの /token・/refresh がすべて止められていた（2026-11-16 に見つけて直した）
+  return new Response(status === 204 ? null : JSON.stringify(obj), {
     status: status || 200,
     headers: {
       'Content-Type': 'application/json; charset=UTF-8',

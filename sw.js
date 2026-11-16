@@ -5,7 +5,7 @@
    - ?v= 付きの部品とライブラリは「控えがあれば控えから」（v が変われば別の物として取り直す）
    - Googleのログイン・Drive・ログインサーバーへの通信は、取っておかない（いつもネットへ）
    index.html の ?v= を上げたら、下の V も同じ番号にすること（古い控えを片づけるため） */
-var V = '79';
+var V = '80';
 var CACHE = 'tegaki-v' + V;
 var CORE = [
   './',
@@ -49,9 +49,14 @@ self.addEventListener('fetch', function (e) {
   if (req.method !== 'GET') return;
   var url = new URL(req.url);
   if (!cacheable(url)) return; // Google・Drive・ログインサーバーは、いつもネットへ
+  // 同じ場所にある別のアプリ（dokusho/ の「読書ノート」）は、そちらのサービスワーカーに任せる
+  var base = new URL('./', self.location.href).pathname;
+  if (url.origin === self.location.origin && url.pathname.indexOf(base + 'dokusho/') === 0) return;
 
   // ページ本体: ネット優先（4秒で諦めて控えへ）
   if (req.mode === 'navigate') {
+    // このアプリのページ本体だけを受け持つ（privacy.html などを、ページ本体の控えに入れてしまわないように）
+    if (url.origin !== self.location.origin || (url.pathname !== base && url.pathname !== base + 'index.html')) return;
     e.respondWith(new Promise(function (resolve) {
       var done = false;
       function fallback() {
