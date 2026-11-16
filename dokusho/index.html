@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="css/app.css?v=2">
+<link rel="stylesheet" href="css/app.css?v=3">
 </head>
 <body class="home-on">
 <header>
@@ -55,8 +55,6 @@
     <button id="trayExit"><svg viewBox="0 0 24 24"><path d="M9 4v5H4"/><path d="M15 4v5h5"/><path d="M9 20v-5H4"/><path d="M15 20v-5h5"/></svg>全画面を終える</button>
   </div>
 </div>
-<!-- 全画面のときに、指で長押しすると出る「輪のメニュー」 -->
-<div id="ring" hidden></div>
 
 <div id="main">
   <!-- ページ一覧と、付箋の一覧 -->
@@ -127,7 +125,7 @@
     <b>読む</b>：本を押すと、最初の1回だけこのiPadにダウンロードしてから開きます。次からはすぐ開き、電波がなくても読めます。横向きにすると見開きになり、指で左右に払うとめくれます。2本指で拡大、2回たたくと拡大・元に戻す。<br>
     <b>書く</b>：マーカーとペンは、Apple Pencilで書きます（指はめくる・動かすのに使います）。<br>
     <b>付箋</b>：付箋のボタンを押してから、貼りたい場所を軽くたたきます（指でも貼れます）。付箋をたたくとメモを書け、引っぱると動かせます。左上のページ一覧の「付箋」に、貼った付箋が並びます。<br>
-    <b>全画面</b>：右上の四角いボタンで、道具をすべて隠して本だけにできます。指で1回たたくと、画面の下に道具・色・太さがまとめて出ます。指で長押しすると、その場に道具が輪の形に並び、指を滑らせて離すと選べます。2本指でたたくと、元に戻します（全画面でなくても使えます）。<br>
+    <b>全画面</b>：右上の四角いボタンで、道具をすべて隠して本だけにできます。指で1回たたくと、画面の下に道具・色・太さがまとめて出ます。2本指でたたくと、元に戻します（全画面でなくても使えます）。<br>
     <b>スクラップブック</b>：上のはさみのボタンで、いま開いているページを、選んだスクラップブックに写します（書き込み・付箋も一緒に写ります）。写したあとは独立したノートなので、元の本を端末から消しても読めます。<br>
     書き込み・付箋・スクラップブックは、このiPadと、Googleドライブの「読書ノート」フォルダの中に自動で保存されます。</p></details>
 </div>
@@ -236,20 +234,20 @@
 window.APP_CONFIG.REDIRECT_URI = new URL('../', location.href).href;
 window.APP_CONFIG.RETURN_TO = 'dokusho/';
 </script>
-<script src="js/store.js?v=2"></script>
-<script src="js/source.js?v=2"></script>
-<script src="js/app.js?v=2"></script>
-<script src="js/toolbar.js?v=2"></script>
-<script src="js/pages.js?v=2"></script>
+<script src="js/store.js?v=3"></script>
+<script src="js/source.js?v=3"></script>
+<script src="js/app.js?v=3"></script>
+<script src="js/toolbar.js?v=3"></script>
+<script src="js/pages.js?v=3"></script>
 <script src="../js/google-auth.js?v=80"></script>
-<script src="js/drive.js?v=2"></script>
-<script src="js/notes.js?v=2"></script>
-<script src="js/scrap.js?v=2"></script>
-<script src="js/sync.js?v=2"></script>
-<script src="js/library.js?v=2"></script>
-<script src="js/quick.js?v=2"></script>
-<script src="js/palette.js?v=2"></script>
-<script src="js/slide.js?v=2"></script>
+<script src="js/drive.js?v=3"></script>
+<script src="js/notes.js?v=3"></script>
+<script src="js/scrap.js?v=3"></script>
+<script src="js/sync.js?v=3"></script>
+<script src="js/library.js?v=3"></script>
+<script src="js/quick.js?v=3"></script>
+<script src="js/palette.js?v=3"></script>
+<script src="js/slide.js?v=3"></script>
 <script>
 // 電波がなくても開けるように、アプリの部品をこの端末に取っておく（sw.js）
 // 新しい版が届いたら: 本を開いていなければすぐ、開いていれば、ほかのアプリから戻ってきたときに読み直す

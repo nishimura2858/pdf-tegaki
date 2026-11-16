@@ -171,14 +171,14 @@
   });
 
   /* ---------- 全画面: 道具のバーもパレットも隠して、本だけにする ----------
-     道具は、指で1回たたく（まとめた帯）・長押し（輪のメニュー）で呼び出す（quick.js） */
+     道具は、指で1回たたくと出る「道具の帯」で選ぶ（quick.js） */
   function setFocus(on) {
     closePops();
     document.body.classList.toggle('focus', on);
     App.emit('focus', on);
     if (S.hasFile) App.renderPage(); // 紙の大きさを、広くなった（狭くなった）場所に合わせ直す
     window.dispatchEvent(new Event('resize'));
-    if (on) App.setStatus('全画面: 指で1回たたくと道具が出ます。長押しで道具の輪');
+    if (on) App.setStatus('全画面: 指で1回たたくと道具が出ます');
   }
 
   // 「その他」のいちばん下に、バージョン番号（読み込んだ app.js の ?v=）を出す

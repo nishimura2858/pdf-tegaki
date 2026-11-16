@@ -30,8 +30,8 @@
   // ほかのファイルとのつなぎ目
   // save: この端末に保存する / saved・opened: Drive同期への知らせ
   // drawNotes: 付箋を描く / noteAt: その場所にある付箋 / tap: 指で軽くたたいたとき（付箋を貼る・開く）
-  // singleTap: 指で1回たたいた（2回たたく拡大ではないと分かってから）/ hold: 指で長押しした / twoTap: 2本指でたたいた
-  var hooks = { save: null, saved: null, opened: null, drawNotes: null, noteAt: null, tap: null, singleTap: null, hold: null, twoTap: null };
+  // singleTap: 指で1回たたいた（2回たたく拡大ではないと分かってから）/ twoTap: 2本指でたたいた
+  var hooks = { save: null, saved: null, opened: null, drawNotes: null, noteAt: null, tap: null, singleTap: null, twoTap: null };
   var tools = {};                            // 投げ縄・レーザーなど、別ファイルの道具
   var listeners = {};
   function on(ev, fn) { (listeners[ev] = listeners[ev] || []).push(fn); }
@@ -1638,19 +1638,7 @@
     setText($('pullText'), PULL_TEXT[kind][ready ? 1 : 0]);
     return ready ? kind : null;
   }
-  /* 指で長押し（動かさずに0.45秒）: hooks.hold が返したもの（輪のメニュー）に、そのあとの指の動きを渡す */
-  var HOLD_MS = 450;
-  function startHold(p) {
-    if (!hooks.hold) return;
-    p.holdT = setTimeout(function () {
-      if (pan !== p || p.axis || p.turn || p.want || p.pull || pinch || turning || drawing) return;
-      var h = hooks.hold(p.x0, p.y0);
-      if (h) { p.ring = h; lastTap = null; }
-    }, HOLD_MS);
-  }
-  function clearHold() { if (pan && pan.holdT) { clearTimeout(pan.holdT); pan.holdT = 0; } }
   function panMove(e) {
-    if (pan.ring) { pan.ring.move(e); return; }
     if (pan.turn) { turnMove(e); return; }
     if (pan.want) { pan.last = e; chainTurn(); return; } // 入れかわりを待っている
     if (!pan.axis) {
@@ -1863,11 +1851,8 @@
           atL: stage.scrollLeft <= 1, atR: stage.scrollLeft >= stage.scrollWidth - stage.clientWidth - 1,
           // 縦も同じ: 端まで来てから引っぱると、ページを移る
           atT: stage.scrollTop <= 1, atB: stage.scrollTop >= stage.scrollHeight - stage.clientHeight - 1, pull: 0, fling: wasFling };
-        startHold(pan);
       }
       else if (n === 2) {
-        clearHold();
-        if (pan && pan.ring) { pan.ring.up(e, true); pan = null; }
         if (pan && pan.turn) turnUp(pan.turn, true);
         else if (pan && pan.pull) endPull(pan, true);
         pan = null; startPinch();
@@ -1969,9 +1954,7 @@
       delete touches[e.pointerId];
       if (pinch) { if (e.type === 'pointerup') endPinch(); else cancelPinch(); }
       if (pan && pan.id === e.pointerId) {
-        clearHold();
-        if (pan.ring) pan.ring.up(e, e.type !== 'pointerup');
-        else if (pan.turn) turnUp(pan.turn, e.type !== 'pointerup');
+        if (pan.turn) turnUp(pan.turn, e.type !== 'pointerup');
         else if (pan.want) { if (e.type === 'pointerup') { if (T || turning) queued += pan.want; else autoTurn(pan.want); } } // 入れかわる前に離した: そのままめくる
         else if (pan.pull || pan.ready) endPull(pan, e.type !== 'pointerup');
         else if (e.type === 'pointerup') { fingerUp(pan, e); fling(pan); }
