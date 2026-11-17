@@ -795,6 +795,20 @@ header { position: relative; z-index: 10; background: var(--bg); }
   border: 0; border-radius: 17px; background: var(--accent); color: #fff; font: inherit; font-weight: 600;
   height: 34px; padding: 0 16px; cursor: pointer; touch-action: manipulation;
 }
+/* 付箋の形を選ぶボタン（中の i が形の見本） */
+.np-shapes { display: flex; justify-content: center; gap: 6px; padding-bottom: 10px; }
+.nshapes { display: flex; align-items: center; gap: 2px; }
+.nshape {
+  width: 40px; height: 36px; border: 0; border-radius: 9px; background: transparent; display: grid; place-items: center;
+  cursor: pointer; touch-action: manipulation; padding: 0;
+}
+.nshape.on { background: var(--sel); box-shadow: inset 0 0 0 2px var(--accent); }
+.nshape i { display: block; background: var(--note); border-radius: 2px; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
+#notePop .nshape i { background: var(--ncur, var(--note)); }
+.nshape .ns-sq { width: 20px; height: 20px; }
+.nshape .ns-wide { width: 28px; height: 10px; }
+.nshape .ns-tall { width: 8px; height: 26px; }
+.nshape .ns-mini { width: 9px; height: 9px; }
 #noteAnchor { position: fixed; left: 0; top: 0; pointer-events: none; visibility: hidden; }
 
 /* スクラップブックの、いまのページの出典（押すと元の本へ） */

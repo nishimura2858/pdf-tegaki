@@ -279,30 +279,12 @@
   }
   // 文字は絵にして貼る（PDFに日本語の文字をそのまま入れるには、フォントを丸ごと埋め込む必要があるため）
   var FONT = '-apple-system, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", sans-serif';
-  function wrapText(ctx, text, max, limit) {
-    var lines = [];
-    String(text).split('\n').forEach(function (para) {
-      var line = '';
-      Array.from(para).forEach(function (ch) {
-        if (ctx.measureText(line + ch).width > max && line) { lines.push(line); line = ch; } else line += ch;
-      });
-      lines.push(line);
-    });
-    if (lines.length > limit) { lines = lines.slice(0, limit); lines[limit - 1] = lines[limit - 1].slice(0, -1) + '…'; }
-    return lines;
-  }
   function pngBytes(canvas) { return Source.canvasBlob(canvas, 'image/png').then(function (b) { return b.arrayBuffer(); }); }
-  // 付箋（メモの文字つき）の絵
+  // 付箋を、画面と同じ見た目で絵にする（ページの横幅を P ピクセルとして描く）
   function noteCanvas(t) {
-    var W = 520, pad = 26, fs = 30, lh = 42, c = document.createElement('canvas'), x = c.getContext('2d');
-    x.font = fs + 'px ' + FONT;
-    var lines = t.text ? wrapText(x, t.text, W - pad * 2, 14) : [];
-    c.width = lines.length ? W : 90; c.height = lines.length ? pad * 2 + lines.length * lh : 90;
-    x = c.getContext('2d');
-    x.fillStyle = t.color || '#ffd84d'; x.fillRect(0, 0, c.width, c.height);
-    x.fillStyle = 'rgba(0,0,0,.14)'; x.fillRect(0, c.height - 6, c.width, 6);
-    x.font = fs + 'px ' + FONT; x.fillStyle = '#2b2620'; x.textBaseline = 'top';
-    lines.forEach(function (l, i) { x.fillText(l, pad, pad + i * lh + 4); });
+    var P = 1600, b = Notes.box(t), c = document.createElement('canvas');
+    c.width = Math.ceil(b.w * P); c.height = Math.ceil(b.h * P);
+    Notes.paint(c.getContext('2d'), t, c.width / 2, c.height / 2, P, true);
     return c;
   }
   function captionCanvas(text) {
@@ -331,8 +313,8 @@
       var notes = (v.ann.notes || {})[i + 1] || [];
       for (var k = 0; k < notes.length; k++) {
         var t = notes[k], nc = noteCanvas(t), img = await pdf.embedPng(await pngBytes(nc));
-        var nw = t.text ? w * 0.3 : w * 0.05, nh = nw * nc.height / nc.width;
-        var nx = Math.max(0, Math.min(w - nw, t.x * w - (t.text ? 0 : nw / 2))), ny = Math.max(STRIP, Math.min(STRIP + h - nh, STRIP + h - t.y * h - (t.text ? nh : nh / 2)));
+        var nw = w * Notes.box(t).w, nh = nw * nc.height / nc.width;
+        var nx = Math.max(0, Math.min(w - nw, t.x * w - nw / 2)), ny = Math.max(STRIP, Math.min(STRIP + h - nh, STRIP + h - t.y * h - nh / 2));
         page.drawImage(img, { x: nx, y: ny, width: nw, height: nh, opacity: 0.96 });
         nc.width = nc.height = 0;
       }

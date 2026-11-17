@@ -1615,15 +1615,14 @@
     if (startTurn(dir)) settleTurn(true);
   }
 
-  /* ---------- 上下に引っぱってページを移る ----------
-     ページの下の端で、さらに指を上へ引っぱる → 次のページ（最後のページなら、同じページを追加）
-     ページの上の端で、さらに指を下へ引っぱる → 前のページ（どちらも、めくって移る） */
+  /* ---------- 下の端で引っぱって次のページへ ----------
+     ページの下の端で、さらに指を上へ引っぱる → 次のページ（めくって移る）
+     上の端で下へ引っぱって前のページへ行くのは、ユーザーの希望でなくした（2026-11-18。上の端では何も起きない） */
   var pullEl = $('pull'), PULL_MAX = 150, PULL_READY = 64;
-  function pullKind(dir) { return dir > 0 ? (canStep(1) ? 'next' : null) : (canStep(-1) ? 'prev' : null); } // 本は、最後のページで引っぱってもページを足さない
+  function pullKind(dir) { return dir > 0 && canStep(1) ? 'next' : null; } // 本は、最後のページで引っぱってもページを足さない
   var PULL_TEXT = {
     next: ['引っぱると次のページ', '離すと次のページへ'],
-    add: ['引っぱるとページを追加', '離すとページを追加'],
-    prev: ['引っぱると前のページ', '離すと前のページへ']
+    add: ['引っぱるとページを追加', '離すとページを追加']
   };
   function setFlow(y) { flow.style.transform = y ? 'translateY(' + y + 'px)' : ''; }
   // pull: 引っぱった量（正: 上へ、負: 下へ）。紙をゴムのように少し動かし、案内を出す
@@ -1674,7 +1673,7 @@
       var before = stage.scrollTop;
       stage.scrollTop += want;
       var rest = want - (stage.scrollTop - before); // 端まで来て、スクロールしきれなかった分
-      if ((rest > 0.5 && pan.atB) || (rest < -0.5 && pan.atT)) pan.pull += rest;
+      if (rest > 0.5 && pan.atB) pan.pull += rest;
     }
     if (pan.pull || pan.ready !== undefined) pan.ready = showPull(pan.pull);
     checkVert();
@@ -1753,7 +1752,7 @@
     flow.style.transition = 'transform .32s cubic-bezier(.2,1.3,.4,1)';
     if (kind === 'add') { addTurn(); return; }
     setFlow(0); settle();
-    if (kind) autoTurn(kind === 'prev' ? -1 : 1);
+    if (kind) autoTurn(1);
   }
   // 最後のページで引っぱったとき: ページを足して、にゅっと出す
   function addTurn() {
@@ -1903,7 +1902,7 @@
   });
   upEl.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   still.addEventListener('contextmenu', function (e) { e.preventDefault(); });
-  ink.addEventListener('pointermove', function (e) {
+  function onInkMove(e) {
     if (touches[e.pointerId]) {
       touches[e.pointerId].x = e.clientX; touches[e.pointerId].y = e.clientY;
       if (pinch && Object.keys(touches).length === 2) { movePinch(); return; }
@@ -1929,7 +1928,8 @@
     });
     if (s.points.length > drawnIdx && !rafId) rafId = requestAnimationFrame(flushDraw);
     holdWatch(e);
-  });
+  }
+  ink.addEventListener('pointermove', onInkMove);
   /* 書いたあと、ペンを離さずに止めておくと（約1秒）、きれいな図形に直す */
   var SHAPE_HOLD = 1000;
   function holdWatch(e) {
@@ -2013,6 +2013,14 @@
   }
   ink.addEventListener('pointerup', endPointer);
   ink.addEventListener('pointercancel', endPointer);
+  /* 見開きのもう片方（still）・縦スクロールの上のページ（upEl）で始まった指は、書ける紙（ink）に捕まえ直しているが、
+     iPad では指の動き・離した知らせが、始まった部品のほうに届くことがある。
+     届かないと、右のページをたたいても「1回たたいた」にならず、全画面で道具の帯が出なかった（2026-11-18） */
+  [still, upEl].forEach(function (el) {
+    el.addEventListener('pointermove', onInkMove);
+    el.addEventListener('pointerup', endPointer);
+    el.addEventListener('pointercancel', endPointer);
+  });
   ink.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   // iPadのスクリブル等がペン入力を横取りしないように、手書き面での標準タッチ動作を止める。
   // touchmove だけで止める。touchstart/touchend でも止めると、スクリブルとぶつかって
