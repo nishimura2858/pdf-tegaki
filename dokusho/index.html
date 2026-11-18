@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="css/app.css?v=8">
+<link rel="stylesheet" href="css/app.css?v=9">
 </head>
 <body class="home-on">
 <header>
@@ -52,9 +52,14 @@
     <span id="trayPage"></span><button id="traySrc" hidden></button>
     <span class="tgap"></span>
     <button id="trayScrap" class="k-book"><svg viewBox="0 0 24 24"><circle cx="6.5" cy="6.8" r="2.6"/><circle cx="6.5" cy="17.2" r="2.6"/><path d="M8.7 8.4L20.5 18M8.7 15.6L20.5 6"/></svg>スクラップに入れる</button>
+    <button id="trayBw" class="k-scrap"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17" /><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" style="fill:currentColor;stroke:none"/></svg>白黒</button>
     <button id="trayExit"><svg viewBox="0 0 24 24"><path d="M9 4v5H4"/><path d="M15 4v5h5"/><path d="M9 20v-5H4"/><path d="M15 20v-5h5"/></svg>全画面を終える</button>
   </div>
 </div>
+
+<!-- スクラップの「一部を切り抜く」の最中（js/scrap.js） -->
+<div id="cutBar" hidden><span id="cutText"></span><button id="cutCancel">やめる</button></div>
+<div id="cutBox" hidden></div>
 
 <div id="main">
   <!-- ページ一覧と、付箋の一覧 -->
@@ -126,7 +131,7 @@
     <b>書く</b>：マーカーとペンは、Apple Pencilで書きます（指はめくる・動かすのに使います）。<br>
     <b>付箋</b>：付箋のボタンを押してから、貼りたい場所を軽くたたきます（指でも貼れます）。付箋をたたくとメモを書け、引っぱると動かせます。左上のページ一覧の「付箋」に、貼った付箋が並びます。<br>
     <b>全画面</b>：右上の四角いボタンで、道具をすべて隠して本だけにできます。指で1回たたくと、画面の下に道具・色・太さがまとめて出ます。2本指でたたくと、元に戻します（全画面でなくても使えます）。<br>
-    <b>スクラップブック</b>：上のはさみのボタンで、いま開いているページを、選んだスクラップブックに写します（書き込み・付箋も一緒に写ります）。写したあとは独立したノートなので、元の本を端末から消しても読めます。<br>
+    <b>スクラップブック</b>：上のはさみのボタンで、いま開いているページを、選んだスクラップブックに写します（書き込み・付箋も一緒に写ります）。「一部を切り抜く」を選ぶと、ペンを紙に当てて離さずに引っぱり、囲んだ所だけを写せます。スクラップブックの中では、「その他」やページ一覧の「…」で、ページごとに白黒にできます（書き込みの色はそのまま）。写したあとは独立したノートなので、元の本を端末から消しても読めます。<br>
     書き込み・付箋・スクラップブックは、このiPadと、Googleドライブの「読書ノート」フォルダの中に自動で保存されます。</p></details>
 </div>
 
@@ -134,6 +139,7 @@
 <div class="pop menu" id="moreMenu">
   <div class="mhead" id="bookTitle"></div>
   <button class="item k-scrap" id="shareBtn"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M7 10.5H6A1.5 1.5 0 0 0 4.5 12v7.5A1.5 1.5 0 0 0 6 21h12a1.5 1.5 0 0 0 1.5-1.5V12a1.5 1.5 0 0 0-1.5-1.5h-1"/></svg>PDFにして共有</button>
+  <button class="item k-scrap" id="bwBtn">このページを白黒に<small>書き込み・付箋の色はそのまま</small></button>
   <div class="mline"></div>
   <button class="item check" id="shiftBtn" aria-pressed="false">見開きを1ページずらす<small>横画面のとき。表紙を右に1枚だけ出して、2-3、4-5…で並べます（この本だけ）</small></button>
   <button class="item check" id="scrubBtn" aria-pressed="true">紙の下のめくるバー<small>なぞると、その位置のページまでパラパラめくれます</small></button>
@@ -240,26 +246,26 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async></script>
 <!-- Googleの設定とログインは、手書きノート（1つ上のフォルダ）と同じものを使う -->
-<script src="../js/config.js?v=80"></script>
+<script src="../js/config.js?v=90"></script>
 <script>
 // ログインの戻り先は、Googleに登録してある手書きノートの場所。そこから、このアプリへ結果が渡される（../js/google-auth.js）
 window.APP_CONFIG.REDIRECT_URI = new URL('../', location.href).href;
 window.APP_CONFIG.RETURN_TO = 'dokusho/';
 </script>
-<script src="js/store.js?v=8"></script>
-<script src="js/source.js?v=8"></script>
-<script src="js/app.js?v=8"></script>
-<script src="js/toolbar.js?v=8"></script>
-<script src="js/pages.js?v=8"></script>
-<script src="../js/google-auth.js?v=80"></script>
-<script src="js/drive.js?v=8"></script>
-<script src="js/notes.js?v=8"></script>
-<script src="js/scrap.js?v=8"></script>
-<script src="js/sync.js?v=8"></script>
-<script src="js/library.js?v=8"></script>
-<script src="js/quick.js?v=8"></script>
-<script src="js/palette.js?v=8"></script>
-<script src="js/slide.js?v=8"></script>
+<script src="js/store.js?v=9"></script>
+<script src="js/source.js?v=9"></script>
+<script src="js/app.js?v=9"></script>
+<script src="js/toolbar.js?v=9"></script>
+<script src="js/pages.js?v=9"></script>
+<script src="../js/google-auth.js?v=90"></script>
+<script src="js/drive.js?v=9"></script>
+<script src="js/notes.js?v=9"></script>
+<script src="js/scrap.js?v=9"></script>
+<script src="js/sync.js?v=9"></script>
+<script src="js/library.js?v=9"></script>
+<script src="js/quick.js?v=9"></script>
+<script src="js/palette.js?v=9"></script>
+<script src="js/slide.js?v=9"></script>
 <script>
 // 電波がなくても開けるように、アプリの部品をこの端末に取っておく（sw.js）
 // 新しい版が届いたら: 本を開いていなければすぐ、開いていれば、ほかのアプリから戻ってきたときに読み直す

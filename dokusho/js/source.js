@@ -91,10 +91,11 @@
 
   /* ---------- スクラップブック: 絵の集まりを、PDFと同じ形の入れ物にする ---------- */
   var imgs = new Map(), IMG_KEEP = 8;
-  function pageImage(id) {
-    var hit = imgs.get(id);
-    if (hit) { imgs.delete(id); imgs.set(id, hit); return hit; }
-    var p = Store.getPage(id).then(function (rec) {
+  // bw: 白黒にした絵を返す（スクラップのページごとの「白黒にする」。書き込みは別に描くので色のまま）
+  function pageImage(id, bw) {
+    var key = bw ? id + '|bw' : id, hit = imgs.get(key);
+    if (hit) { imgs.delete(key); imgs.set(key, hit); return hit; }
+    var p = bw ? pageImage(id).then(toBw) : Store.getPage(id).then(function (rec) {
       if (!rec || !rec.data) throw new Error('page_missing');
       return new Promise(function (resolve, reject) {
         var url = URL.createObjectURL(new Blob([rec.data], { type: 'image/jpeg' })), im = new Image();
@@ -103,13 +104,72 @@
         im.src = url;
       });
     });
-    imgs.set(id, p);
-    p.catch(function () { imgs.delete(id); });
+    imgs.set(key, p);
+    p.catch(function () { imgs.delete(key); });
     while (imgs.size > IMG_KEEP) imgs.delete(imgs.keys().next().value);
     return p;
   }
-  function forgetImage(id) { imgs.delete(id); }
-  // items: [{ id, w, h }]（w, h はページの大きさ。PDFの単位）
+  function forgetImage(id) { imgs.delete(id); imgs.delete(id + '|bw'); }
+  /* 白黒にする: 灰色にしてから、紙の色（黄ばみ・のどの影・ムラ）を白に、文字を黒に寄せる。
+     紙の明るさは場所ごとに測る（小さな区画ごとの「明るいほうの平均」を、まわりと合わせてなめらかにしたもの）ので、
+     のどの近くが暗いスキャンでも、紙はむらなく白くなる。写真などの濃淡は残す（白と黒の2色にはしない） */
+  function toBw(im) {
+    var W = im.naturalWidth || im.width, H = im.naturalHeight || im.height;
+    var c = document.createElement('canvas'); c.width = W; c.height = H;
+    var x = c.getContext('2d');
+    x.drawImage(im, 0, 0);
+    var d = x.getImageData(0, 0, W, H), a = d.data, n = W * H, L = new Uint8Array(n), i, j;
+    for (i = 0, j = 0; i < n; i++, j += 4) L[i] = (a[j] * 77 + a[j + 1] * 150 + a[j + 2] * 29) >> 8;
+    // 区画ごとの紙の明るさ
+    var cs = Math.max(8, Math.round(Math.max(W, H) / 48)), gw = Math.ceil(W / cs), gh = Math.ceil(H / cs);
+    var bg = new Float32Array(gw * gh), gx, gy, px, py;
+    for (gy = 0; gy < gh; gy++) for (gx = 0; gx < gw; gx++) {
+      var x0 = gx * cs, y0 = gy * cs, x1 = Math.min(W, x0 + cs), y1 = Math.min(H, y0 + cs), s = 0, k = 0;
+      for (py = y0; py < y1; py += 2) for (px = x0; px < x1; px += 2) { s += L[py * W + px]; k++; }
+      var mean = s / k, su = 0, ku = 0;
+      for (py = y0; py < y1; py += 2) for (px = x0; px < x1; px += 2) { var v = L[py * W + px]; if (v >= mean) { su += v; ku++; } }
+      bg[gy * gw + gx] = ku ? su / ku : mean;
+    }
+    var sorted = Array.prototype.slice.call(bg).sort(function (p, q) { return p - q; });
+    var paper = sorted[Math.floor(sorted.length * 0.8)] || 255;
+    // 紙の明るさが大きく下がってよいのは、左右の端（のどの影が出る所）だけ。まん中の写真・図は、紙として扱わない
+    var floorAt = new Float32Array(gw);
+    for (gx = 0; gx < gw; gx++) {
+      var e = Math.min(gx + 0.5, gw - gx - 0.5) / gw;
+      floorAt[gx] = paper * (e >= 0.14 ? 0.85 : 0.3 + 0.55 * e / 0.14);
+    }
+    // まわりの区画のいちばん明るい値にそろえ（太い文字・図の上の区画も、紙の明るさにする）、なめらかにする
+    function pass(src, fn) {
+      var out = new Float32Array(gw * gh);
+      for (gy = 0; gy < gh; gy++) for (gx = 0; gx < gw; gx++) {
+        var acc = 0, cnt = 0;
+        for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) {
+          var X = gx + dx, Y = gy + dy; if (X < 0 || Y < 0 || X >= gw || Y >= gh) continue;
+          var b = src[Y * gw + X];
+          if (fn === 'max') acc = Math.max(acc, b); else { acc += b; cnt++; }
+        }
+        out[gy * gw + gx] = fn === 'max' ? Math.max(floorAt[gx], acc) : acc / cnt;
+      }
+      return out;
+    }
+    bg = pass(pass(pass(bg, 'max'), 'avg'), 'avg');
+    // 紙の明るさに対する割合で、白黒の濃さを決める
+    var LO = 0.3, HI = 0.9, map = new Uint8Array(1024);
+    for (i = 0; i < 1024; i++) { var t = Math.max(0, Math.min(1, (i / 1023 * 1.25 - LO) / (HI - LO))); map[i] = Math.round(255 * Math.pow(t, 1.2)); }
+    for (py = 0; py < H; py++) {
+      var fy = Math.max(0, Math.min(gh - 1, py / cs - 0.5)), ya = Math.floor(fy), yb = Math.min(gh - 1, ya + 1), wy = fy - ya;
+      for (px = 0; px < W; px++) {
+        var fx = Math.max(0, Math.min(gw - 1, px / cs - 0.5)), xa = Math.floor(fx), xb = Math.min(gw - 1, xa + 1), wx = fx - xa;
+        var top = bg[ya * gw + xa] * (1 - wx) + bg[ya * gw + xb] * wx, bot = bg[yb * gw + xa] * (1 - wx) + bg[yb * gw + xb] * wx;
+        var r = L[py * W + px] / Math.max(1, top * (1 - wy) + bot * wy); // 0〜1.25 を 0〜1023 に
+        var g = map[Math.min(1023, Math.round(r / 1.25 * 1023))], q = (py * W + px) * 4;
+        a[q] = a[q + 1] = a[q + 2] = g; a[q + 3] = 255;
+      }
+    }
+    x.putImageData(d, 0, 0);
+    return c;
+  }
+  // items: [{ id, w, h, bw }]（w, h はページの大きさ。PDFの単位。bw: 白黒で見せる）
   function imageDoc(items) {
     function page(it) {
       return {
@@ -122,7 +182,7 @@
         },
         render: function (o) {
           var stop = false;
-          var p = pageImage(it.id).then(function (im) {
+          var p = pageImage(it.id, !!it.bw).then(function (im) {
             if (stop) { var e = new Error('cancelled'); e.name = 'RenderingCancelledException'; throw e; }
             var c = o.canvasContext, v = o.viewport;
             c.save();

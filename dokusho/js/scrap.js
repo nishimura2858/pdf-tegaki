@@ -140,8 +140,43 @@
     var url = c.toDataURL('image/jpeg', 0.75); c.width = c.height = 0;
     return url;
   }
-  // 開いている本の pages（ページ番号の並び）を、スクラップブック sid に写す
-  async function add(sid, pages) {
+  /* 切り抜き（cut: そのページの中の四角。ページに対する割合 { x, y, w, h }）
+     ページの絵はその四角だけを写し、書き込み・付箋は、その四角を新しい紙として位置と大きさを直して写す */
+  var r4 = function (v) { return Math.round(v * 1e4) / 1e4; };
+  function cutCanvas(src, r) {
+    var sx = Math.round(r.x * src.width), sy = Math.round(r.y * src.height);
+    var sw = Math.max(1, Math.round(r.w * src.width)), sh = Math.max(1, Math.round(r.h * src.height));
+    var k = Math.min(1, PX / Math.max(sw, sh)), c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(sw * k)); c.height = Math.max(1, Math.round(sh * k));
+    var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+    x.drawImage(src, sx, sy, sw, sh, 0, 0, c.width, c.height);
+    return c;
+  }
+  function cutStrokes(list, r) {
+    var out = [];
+    list.forEach(function (s) {
+      if (!s || s.tool === 'image' || !Array.isArray(s.points) || !s.points.length) return;
+      var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+      s.points.forEach(function (p) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); });
+      if (x1 < r.x || x0 > r.x + r.w || y1 < r.y || y0 > r.y + r.h) return; // 四角にかからない線
+      var y = clone(s); delete y.link;
+      y.points = s.points.map(function (p) { return [r4((p[0] - r.x) / r.w), r4((p[1] - r.y) / r.h), p[2]]; });
+      y.width = Math.round(Math.min(200, (+s.width || 4) / r.w) * 100) / 100; // 線の太さは紙の横幅に対する割合なので、紙が小さくなるぶん太く
+      out.push(y);
+    });
+    return out;
+  }
+  function cutNotes(list, r) {
+    return list.filter(function (t) { return t.x >= r.x && t.x <= r.x + r.w && t.y >= r.y && t.y <= r.y + r.h; }).map(function (t) {
+      var y = clone(t), k = +t.k >= 0.5 && +t.k <= 2 ? +t.k : 1;
+      y.id = App.nid(); y.x = r4((t.x - r.x) / r.w); y.y = r4((t.y - r.y) / r.h);
+      k = Math.max(0.5, Math.min(2, Math.round(k * r.w * 20) / 20)); // 見た目の大きさが変わらないように（50%〜200%の中で）
+      if (k === 1) delete y.k; else y.k = k;
+      return y;
+    });
+  }
+  // 開いている本の pages（ページ番号の並び）を、スクラップブック sid に写す。cut があれば、そのページの一部だけ
+  async function add(sid, pages, cut) {
     if (adding || !S.hasFile || S.kind !== 'book' || !pages.length) return;
     adding = true;
     try {
@@ -152,21 +187,26 @@
       if (!ann.pages) ann.pages = {};
       var base = (rec.items || []).length, fresh = [], thumb = rec.thumb || '', dn = 0;
       var from = { book: S.key, name: Library.bare(S.name) };
-      App.setStatus('スクラップブックに入れています…');
+      App.setStatus(cut ? '切り抜いています…' : 'スクラップブックに入れています…');
       for (var i = 0; i < pages.length; i++) {
-        var n = pages[i], cap = await App.capturePage(n, PX);
-        var buf = await (await Source.canvasBlob(cap.canvas, 'image/jpeg', 0.85)).arrayBuffer();
-        if (!thumb && !base && !i) thumb = small(cap.canvas);
-        cap.canvas.width = cap.canvas.height = 0;
+        var n = pages[i], cap = await App.capturePage(n, cut ? Math.min(3600, PX / Math.max(cut.w, cut.h)) : PX);
+        var pic = cap.canvas, pw = cap.w, ph = cap.h;
+        if (cut) { pic = cutCanvas(cap.canvas, cut); cap.canvas.width = cap.canvas.height = 0; pw = cap.w * cut.w; ph = cap.h * cut.h; }
+        var buf = await (await Source.canvasBlob(pic, 'image/jpeg', 0.85)).arrayBuffer();
+        if (!thumb && !base && !i) thumb = small(pic);
+        pic.width = pic.height = 0;
         var pid = Source.rid('p'), now = Date.now();
-        await Store.putPage({ id: pid, scrap: sid, data: buf, w: cap.w, h: cap.h, at: now });
-        fresh.push({ id: pid, w: Math.round(cap.w * 100) / 100, h: Math.round(cap.h * 100) / 100,
-          from: { book: from.book, name: from.name, page: n }, at: now });
+        await Store.putPage({ id: pid, scrap: sid, data: buf, w: pw, h: ph, at: now });
+        var item = { id: pid, w: Math.round(pw * 100) / 100, h: Math.round(ph * 100) / 100,
+          from: { book: from.book, name: from.name, page: n }, at: now };
+        if (cut) item.cut = { x: r4(cut.x), y: r4(cut.y), w: r4(cut.w), h: r4(cut.h) };
+        fresh.push(item);
         // 並べ替え・削除をしたあと（layout がある）なら、その並びの最後に足す
         if (Array.isArray(ann.layout) && ann.layout.length) { ann.layout.push({ src: base + fresh.length }); dn = ann.layout.length; }
         else dn = base + fresh.length;
-        var st = (S.strokes[n] || []).filter(function (x) { return x.tool !== 'image'; }).map(function (x) { var y = clone(x); delete y.link; return y; });
-        var nt = (S.notes[n] || []).map(function (x) { var y = clone(x); y.id = App.nid(); return y; });
+        var st = cut ? cutStrokes(S.strokes[n] || [], cut) :
+          (S.strokes[n] || []).filter(function (x) { return x.tool !== 'image'; }).map(function (x) { var y = clone(x); delete y.link; return y; });
+        var nt = cut ? cutNotes(S.notes[n] || [], cut) : (S.notes[n] || []).map(function (x) { var y = clone(x); y.id = App.nid(); return y; });
         if (st.length) ann.pages[dn] = st; else delete ann.pages[dn];
         if (nt.length) { ann.notes = ann.notes || {}; ann.notes[dn] = nt; } else if (ann.notes) delete ann.notes[dn];
       }
@@ -174,7 +214,7 @@
       await Store.patchBook(sid, function (r) {
         return { items: (r.items || []).concat(fresh), pages: dn, dirty: true, editedAt: Date.now(), thumb: r.thumb || thumb || undefined };
       });
-      App.setStatus('「' + rec.name + '」に入れました（' + (pages.length > 1 ? pages.length + 'ページ・' : '') + '全部で' + dn + 'ページ）');
+      App.setStatus((cut ? n + 'ページの一部を切り抜いて、' : '') + '「' + rec.name + '」に入れました（' + (pages.length > 1 ? pages.length + 'ページ・' : '') + '全部で' + dn + 'ページ）');
       touched(sid);
     } catch (e) {
       console.error(e);
@@ -184,9 +224,14 @@
 
   /* ---------- どのスクラップブックに入れるかを選ぶ ---------- */
   function label(p) { return p.length > 1 ? p[0] + '・' + p[1] + 'ページ目' : p[0] + 'ページ目'; }
+  // 「ページ全体」か「一部を切り抜く」か（前に選んだほうを、この端末に覚えておく）
+  var cutMode = false, canCut = false;
+  try { cutMode = localStorage.getItem('dk:ui:scrapCut') === '1'; } catch (e) {}
   async function pick(pages, anchor) {
     if (!S.hasFile || S.kind !== 'book') return;
-    var seg = '';
+    var seg = '', mode = '';
+    canCut = !pages; // 上のボタン・全画面の帯から開いたときだけ（ページ一覧からはページ全体）
+    if (canCut) mode = '<div class="mseg" id="scrapMode"><button data-mode="page">ページ全体</button><button data-mode="cut">一部を切り抜く</button></div>';
     if (!pages) {
       pages = [S.page];
       var m = S.spread ? App.stillPage() : 0;
@@ -199,7 +244,8 @@
     }
     sel = pages;
     var all = await list();
-    menu.innerHTML = '<div class="mhead" id="scrapHead"></div>' + seg +
+    menu.innerHTML = '<div class="mhead" id="scrapHead"></div>' + mode + seg +
+      '<div class="mnote" id="scrapCutHint">入れる先を選んだら、切り抜きたい所を、ペンで角から角へ引っぱって囲みます</div>' +
       all.map(function (b) {
         return '<button class="item" data-sid="' + esc(b.id) + '">' + esc(b.name) + '<small>' + (b.pages != null ? b.pages : b.items ? b.items.length : 0) + 'ページ</small></button>';
       }).join('') +
@@ -208,22 +254,153 @@
     markSel();
     App.toolbar.showPop(menu, anchor || $('scrapBtn'));
   }
+  function cutting() { return canCut && cutMode; }
   function markSel() {
-    var h = $('scrapHead'); if (h) h.textContent = label(sel) + 'を、スクラップブックに入れる';
+    var h = $('scrapHead'), c = cutting();
+    if (h) h.textContent = c ? 'ページの一部を切り抜いて、スクラップブックに入れる' : label(sel) + 'を、スクラップブックに入れる';
     menu.querySelectorAll('[data-pg]').forEach(function (b) { b.classList.toggle('on', b.dataset.pg === sel.join(',')); });
+    menu.querySelectorAll('[data-mode]').forEach(function (b) { b.classList.toggle('on', (b.dataset.mode === 'cut') === c); });
+    var sg = $('scrapSeg'); if (sg) sg.hidden = c;
+    $('scrapCutHint').hidden = !c;
   }
+  function into(sid) { if (cutting()) startCut(sid); else add(sid, sel.slice()); }
   menu.addEventListener('click', async function (e) {
     var b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.mode) {
+      cutMode = b.dataset.mode === 'cut';
+      try { localStorage.setItem('dk:ui:scrapCut', cutMode ? '1' : '0'); } catch (er) {}
+      markSel(); return;
+    }
     if (b.dataset.pg) { sel = b.dataset.pg.split(',').map(Number); markSel(); return; }
-    var pages = sel.slice();
-    if (b.dataset.sid) { App.toolbar.closePops(); add(b.dataset.sid, pages); return; }
+    if (b.dataset.sid) { App.toolbar.closePops(); into(b.dataset.sid); return; }
     if (b.dataset.new) {
       App.toolbar.closePops();
       var id = await create();
-      if (id) add(id, pages);
+      if (id) into(id);
     }
   });
+
+  /* ---------- 一部を切り抜く ----------
+     ペンを紙に当てた所から、離さずに引っぱって、離した所までの四角を切り抜く（指はいつもどおり、めくる・動かす）。
+     ペンの動きは app.js から hooks.penGrab で受け取る（見開きのもう片方のページでも、ペンが触れたページで切り抜く） */
+  var cutBar = $('cutBar'), cutBox = $('cutBox'), cutSid = null, cg = null;
+  async function startCut(sid) {
+    var rec = await Store.getBook(sid); if (!rec || !S.hasFile || S.kind !== 'book') return;
+    cutSid = sid;
+    $('cutText').textContent = '「' + rec.name + '」に入れる所を、ペンで角から角へ引っぱって囲んでください';
+    cutBar.hidden = false;
+    document.body.classList.add('cutting');
+    if (window.Quick) Quick.hideTray(true);
+    App.hooks.penGrab = grab;
+  }
+  function endCut() {
+    cutSid = null; cg = null;
+    if (App.hooks.penGrab === grab) App.hooks.penGrab = null;
+    cutBar.hidden = true; cutBox.hidden = true; cutBox.classList.remove('done');
+    document.body.classList.remove('cutting');
+  }
+  function clamp01(v) { return Math.max(0, Math.min(1, v)); }
+  function cutRect(g) {
+    var x0 = clamp01(Math.min(g.a[0], g.b[0])), x1 = clamp01(Math.max(g.a[0], g.b[0]));
+    var y0 = clamp01(Math.min(g.a[1], g.b[1])), y1 = clamp01(Math.max(g.a[1], g.b[1]));
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  }
+  function showBox(g) {
+    var r = cutRect(g), rc = g.rc;
+    cutBox.style.left = (rc.left + r.x * rc.width) + 'px'; cutBox.style.top = (rc.top + r.y * rc.height) + 'px';
+    cutBox.style.width = (r.w * rc.width) + 'px'; cutBox.style.height = (r.h * rc.height) + 'px';
+    cutBox.hidden = false;
+  }
+  var grab = {
+    down: function (pt) {
+      if (!cutSid) return;
+      cutBox.classList.remove('done');
+      cg = { n: S.page, rc: S.rc || App.wrap.getBoundingClientRect(), a: pt, b: pt };
+      showBox(cg);
+    },
+    move: function (pt) { if (cg) { cg.b = pt; showBox(cg); } },
+    up: function (e) {
+      var g = cg; cg = null;
+      if (!g || !cutSid) return;
+      var r = cutRect(g);
+      if (e.type === 'pointercancel' || r.w * g.rc.width < 24 || r.h * g.rc.height < 24) {
+        cutBox.hidden = true;
+        if (e.type !== 'pointercancel') App.setStatus('もう少し大きく囲んでください（ペンを離さずに、角から角へ引っぱります）');
+        return;
+      }
+      var sid = cutSid;
+      if (App.hooks.penGrab === grab) App.hooks.penGrab = null;
+      cutBox.classList.add('done');
+      setTimeout(endCut, 450);
+      add(sid, [g.n], r);
+    }
+  };
+  $('cutCancel').addEventListener('click', function () { endCut(); App.setStatus('切り抜きをやめました'); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && cutSid) endCut(); });
+  App.on('open', endCut); App.on('close', endCut);
   $('scrapBtn').addEventListener('click', function (e) { pick(null, e.currentTarget); });
+
+  /* ---------- ページを白黒にする（スクラップブックの中で、ページごとに） ----------
+     ページの絵だけを白黒にする。書き込み・付箋は上に重ねて描くので、色のまま。
+     記録は items の bw（Driveの scrap.json にも入るので、ほかの端末でも白黒になる） */
+  function itemAt(n) {
+    if (!S.hasFile || S.kind !== 'scrap') return null;
+    var e = App.pageEntry(n); return e ? curItems[e.src - 1] || null : null;
+  }
+  function isBw(n) { var it = itemAt(n); return !!(it && it.bw); }
+  async function setBw(n, on) {
+    var it = itemAt(n); if (!it) return;
+    var sid = S.key, id = it.id;
+    if (on) it.bw = true; else delete it.bw;
+    await Store.patchBook(sid, function (r) {
+      return { items: (r.items || []).map(function (x) {
+        if (x.id !== id) return x;
+        var y = Object.assign({}, x); if (on) y.bw = true; else delete y.bw; return y;
+      }), dirty: true, editedAt: Date.now() };
+    });
+    touched(sid);
+    App.repaint(n);
+    App.setStatus(n + 'ページ目を' + (on ? '白黒にしました（書き込み・付箋の色はそのまま）' : 'カラーに戻しました'));
+    markBw();
+  }
+  function shownPages() {
+    var a = [S.page], m = S.spread ? App.stillPage() : 0;
+    if (m) a.push(m);
+    return a.sort(function (x, y) { return x - y; });
+  }
+  // 「その他」と全画面の帯のボタン。見えているページが1枚ならすぐ切りかえ、見開きなら選ぶ
+  var bwMenu = document.createElement('div');
+  bwMenu.className = 'pop menu'; bwMenu.id = 'bwMenu';
+  document.body.appendChild(bwMenu);
+  function markBw() {
+    var one = shownPages().length === 1, b = $('bwBtn'), t = $('trayBw');
+    if (b) {
+      b.classList.toggle('check', one);
+      b.setAttribute('aria-pressed', one && isBw(S.page) ? 'true' : 'false');
+      b.firstChild.nodeValue = one ? 'このページを白黒に' : 'ページを白黒に…';
+    }
+    if (t) t.classList.toggle('on', one && isBw(S.page));
+    bwMenu.querySelectorAll('[data-bw]').forEach(function (x) { x.setAttribute('aria-pressed', isBw(+x.dataset.bw) ? 'true' : 'false'); });
+  }
+  function bwPick(anchor) {
+    if (!S.hasFile || S.kind !== 'scrap') return;
+    var ps = shownPages();
+    if (ps.length === 1) { setBw(ps[0], !isBw(ps[0])); return; }
+    bwMenu.innerHTML = '<div class="mhead">白黒にするページ（書き込みの色はそのまま）</div>' +
+      ps.map(function (n) { return '<button class="item check" data-bw="' + n + '">' + n + 'ページ</button>'; }).join('');
+    markBw();
+    App.toolbar.showPop(bwMenu, anchor);
+  }
+  bwMenu.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-bw]'); if (!b) return;
+    var n = +b.dataset.bw; setBw(n, !isBw(n));
+  });
+  $('bwBtn').addEventListener('click', function (e) {
+    if (shownPages().length === 1) { App.toolbar.closePops(); }
+    bwPick($('moreBtn'));
+  });
+  $('moreBtn').addEventListener('click', markBw);
+  App.on('page', markBw); App.on('open', markBw);
 
   /* ---------- PDFにして共有 ---------- */
   var libP = null;
@@ -307,9 +484,15 @@
       var it = v.items[i], pr = await Store.getPage(it.id);
       if (!pr || !pr.data) continue;
       var w = it.w, h = it.h, page = pdf.addPage([w, h + STRIP]);
-      page.drawImage(await pdf.embedJpg(pr.data), { x: 0, y: STRIP, width: w, height: h });
+      var jpg = pr.data;
+      if (it.bw) { // 白黒にしたページは、白黒の絵にしてから入れる
+        var bc = await Source.pageImage(it.id, true);
+        jpg = await (await Source.canvasBlob(bc, 'image/jpeg', 0.85)).arrayBuffer();
+      }
+      page.drawImage(await pdf.embedJpg(jpg), { x: 0, y: STRIP, width: w, height: h });
       var ops = strokeOps(L, page, (v.ann.pages || {})[i + 1], w, h, STRIP);
-      if (ops.length) page.pushOperators.apply(page, ops);
+      // 線は、ページの絵の中だけに見せる（切り抜いたページでは、四角からはみ出した所がある）
+      if (ops.length) page.pushOperators.apply(page, [L.pushGraphicsState(), L.rectangle(0, STRIP, w, h), L.clip(), L.endPath()].concat(ops, [L.popGraphicsState()]));
       var notes = (v.ann.notes || {})[i + 1] || [];
       for (var k = 0; k < notes.length; k++) {
         var t = notes[k], nc = noteCanvas(t), img = await pdf.embedPng(await pngBytes(nc));
@@ -319,7 +502,7 @@
         nc.width = nc.height = 0;
       }
       if (it.from) {
-        var cc = captionCanvas('「' + it.from.name + '」 ' + it.from.page + 'ページ'), ci = await pdf.embedPng(await pngBytes(cc));
+        var cc = captionCanvas('「' + it.from.name + '」 ' + it.from.page + 'ページ' + (it.cut ? '（一部）' : '')), ci = await pdf.embedPng(await pngBytes(cc));
         var ch = STRIP * 0.72, cw = Math.min(w - 12, ch * cc.width / cc.height);
         page.drawImage(ci, { x: 6, y: (STRIP - ch) / 2, width: cw, height: ch });
         cc.width = cc.height = 0;
@@ -368,6 +551,7 @@
 
   window.Scrap = {
     create: create, rename: rename, remove: remove, open: open, add: add, pick: pick, share: share, buildPdf: buildPdf,
-    sourceOf: sourceOf, openSource: openSource, view: view, normalize: normalize, list: list
+    sourceOf: sourceOf, openSource: openSource, view: view, normalize: normalize, list: list,
+    isBw: isBw, setBw: setBw, bwPick: bwPick, cancelCut: endCut
   };
 })();

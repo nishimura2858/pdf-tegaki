@@ -905,3 +905,28 @@ header { position: relative; z-index: 10; background: var(--bg); }
 }
 #tray .trow.sub button svg { width: 17px; height: 17px; }
 #traySrc { max-width: 40vw; overflow: hidden; text-overflow: ellipsis; color: var(--accent) !important; }
+
+/* ---------- スクラップ: 一部を切り抜く（js/scrap.js） ---------- */
+.menu .mnote { font-size: 11.5px; color: var(--muted); padding: 0 12px 8px; line-height: 1.45; max-width: 290px; }
+.menu .mnote[hidden], .menu .mseg[hidden] { display: none; }
+#cutBar {
+  position: fixed; left: 50%; top: calc(10px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); z-index: 33;
+  display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 24px); box-sizing: border-box;
+  padding: 7px 8px 7px 16px; border-radius: 22px; background: rgba(52,49,44,.94); color: #fff;
+  font-size: 13px; line-height: 1.45; box-shadow: 0 8px 22px rgba(52,44,34,.3);
+}
+#cutBar[hidden] { display: none; }
+#cutBar button {
+  flex: none; height: 32px; padding: 0 14px; border: 0; border-radius: 16px; background: rgba(255,255,255,.18); color: #fff;
+  font: inherit; font-size: 13px; cursor: pointer; touch-action: manipulation;
+}
+#cutBox {
+  position: fixed; z-index: 14; pointer-events: none; box-sizing: border-box;
+  border: 2px dashed var(--accent); background: rgba(255,255,255,.08);
+  box-shadow: 0 0 0 9999px rgba(40,34,26,.22);
+}
+#cutBox[hidden] { display: none; }
+#cutBox.done { border-style: solid; background: rgba(255,255,255,.45); transition: background .4s, opacity .4s; }
+body.cutting #ink, body.cutting #still, body.cutting #stillUp { cursor: crosshair; }
+#trayBw.on { background: var(--pal-chip) !important; color: var(--pal-chip-text) !important; }
+#bwMenu { z-index: 31; }

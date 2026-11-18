@@ -533,6 +533,15 @@
     return slot.p;
   }
   function quickNow(n) { var h = quick[quickKey(n)]; return h ? h.c : null; }
+  // ページの絵そのものが変わったとき（スクラップのページを白黒にした など）: 作っておいた絵を捨てて描き直す
+  function repaint(n) {
+    baseCache = {}; baseList = []; quick = {}; quickList = [];
+    if (st) st.n = -1;
+    if (upSt) upSt.n = -1;
+    hiHide();
+    renderPage();
+    emit('repaint', n);
+  }
   function blankCanvas(w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
   function copyOf(src) { var c = blankCanvas(src.width, src.height); c.getContext('2d').drawImage(src, 0, 0); return c; }
   function inkOf(n, w, h) { var c = blankCanvas(w, h), x = c.getContext('2d'); drawList(x, S.strokes[n] || [], w, h); drawNotes(x, n, w, h); return c; }
@@ -928,7 +937,7 @@
         list.push({
           tool: PENS[s.tool] ? s.tool : 'pen',
           color: /^#[0-9a-f]{3,8}$/i.test(s.color) ? s.color : '#1b2430',
-          width: num(s.width, 0.5, 40, 4),
+          width: num(s.width, 0.5, 200, 4), // 切り抜いて写した線は太くなる（紙が小さくなるぶん）
           points: pts
         });
       });
@@ -1868,8 +1877,9 @@
     S.rc = ink.getBoundingClientRect(); // 書き始めに1回だけ取得
     var pt = pos(e);
     // ペンが付箋に触れたら、どの道具のときでも付箋を扱う（軽くたたくと開く・引っぱると動く）
-    var onNote = hooks.noteAt ? hooks.noteAt(pt) : null;
-    var h = onNote ? tools.note : tools[S.tool];
+    // スクラップの「一部を切り抜く」の最中は、ペンは囲むのに使う（scrap.js が hooks.penGrab を置く）
+    var onNote = !hooks.penGrab && hooks.noteAt ? hooks.noteAt(pt) : null;
+    var h = hooks.penGrab || (onNote ? tools.note : tools[S.tool]);
     if (h) { drawing = { id: e.pointerId, h: h }; h.down(pt, e, onNote); return; }
     if (S.tool === 'eraser') { drawing = { id: e.pointerId, erase: true }; erased = false; eraseAt(pt); return; }
     if (!PENS[S.tool]) return;
@@ -2052,7 +2062,7 @@
     activate: activate, pageAt: pageAt, focusPage: focusPage, pageInfo: pageInfo, capturePage: capturePage, r4: r4, nid: nid,
     stillPage: function () { return st && !still.hidden ? st.n : 0; }, stillEl: still, refreshStillInk: refreshStillInk,
     busy: function () { return !!(drawing || turning); },
-    drawInk: drawInk, drawList: drawList, renderPage: renderPage, renderThumb: renderThumb,
+    drawInk: drawInk, drawList: drawList, renderPage: renderPage, renderThumb: renderThumb, repaint: repaint,
     goPage: goPage, updateUI: updateUI, pushUndo: pushUndo, commit: commit,
     scheduleSave: scheduleSave, flushSave: flushSave, exportData: exportData,
     setTool: setTool, insertPage: insertPage, deletePage: deletePage, movePage: movePage, rotatePage: rotatePage, addPageAt: addPageAt, duplicatePage: duplicatePage, clearPageAt: clearPageAt, addImage: addImage,
