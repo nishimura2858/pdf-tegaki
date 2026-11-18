@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="css/app.css?v=7">
+<link rel="stylesheet" href="css/app.css?v=8">
 </head>
 <body class="home-on">
 <header>
@@ -175,6 +175,15 @@
 <div class="pop" id="notePop">
   <div class="np-colors" id="noteColors"></div>
   <div class="np-shapes" id="noteShapes"></div>
+  <div class="np-look">
+    <button id="noteRot" class="np-rot" aria-label="向きを変える（縦向き・横向き）"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg>向き</button>
+    <span class="np-size">
+      <button id="noteSmaller" aria-label="少し小さく">−</button>
+      <input type="range" id="noteSize" min="0.5" max="2" step="0.05" aria-label="付箋の大きさ">
+      <button id="noteBigger" aria-label="少し大きく">＋</button>
+      <span id="noteSizeV">100%</span>
+    </span>
+  </div>
   <div id="noteSlot"></div>
   <div class="np-row"><button id="noteDel">付箋をはがす</button><span id="notePage"></span><button id="noteClose">閉じる</button></div>
 </div>
@@ -237,20 +246,20 @@
 window.APP_CONFIG.REDIRECT_URI = new URL('../', location.href).href;
 window.APP_CONFIG.RETURN_TO = 'dokusho/';
 </script>
-<script src="js/store.js?v=7"></script>
-<script src="js/source.js?v=7"></script>
-<script src="js/app.js?v=7"></script>
-<script src="js/toolbar.js?v=7"></script>
-<script src="js/pages.js?v=7"></script>
+<script src="js/store.js?v=8"></script>
+<script src="js/source.js?v=8"></script>
+<script src="js/app.js?v=8"></script>
+<script src="js/toolbar.js?v=8"></script>
+<script src="js/pages.js?v=8"></script>
 <script src="../js/google-auth.js?v=80"></script>
-<script src="js/drive.js?v=7"></script>
-<script src="js/notes.js?v=7"></script>
-<script src="js/scrap.js?v=7"></script>
-<script src="js/sync.js?v=7"></script>
-<script src="js/library.js?v=7"></script>
-<script src="js/quick.js?v=7"></script>
-<script src="js/palette.js?v=7"></script>
-<script src="js/slide.js?v=7"></script>
+<script src="js/drive.js?v=8"></script>
+<script src="js/notes.js?v=8"></script>
+<script src="js/scrap.js?v=8"></script>
+<script src="js/sync.js?v=8"></script>
+<script src="js/library.js?v=8"></script>
+<script src="js/quick.js?v=8"></script>
+<script src="js/palette.js?v=8"></script>
+<script src="js/slide.js?v=8"></script>
 <script>
 // 電波がなくても開けるように、アプリの部品をこの端末に取っておく（sw.js）
 // 新しい版が届いたら: 本を開いていなければすぐ、開いていれば、ほかのアプリから戻ってきたときに読み直す

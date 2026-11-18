@@ -5,8 +5,11 @@
    - ページ一覧の「付箋」のタブに、この本の付箋を並べる。押すと、そのページへ移る
    - 付箋には、書いたメモがそのまま見える。形は4種類（正方形・横長・縦長〈縦書き〉・小さい印）。
      形は、付箋を開いたときと、付箋の道具のパレットで選べる（選んだ形は、次に貼る付箋にも使う）
-   データ: App.S.notes = { "ページ番号": [{ id, x, y, color, text, at, shape }, …] }
-     （x, y は付箋のまん中。ページに対する割合。shape がない付箋は正方形として扱う） */
+   - 付箋を開くと、向き（縦向き⇔横向き。縦向きのときは縦書き）と、大きさ（0.5倍〜2倍）も変えられる。
+     選んだ形・向き・大きさは、次に貼る付箋にも使う
+   データ: App.S.notes = { "ページ番号": [{ id, x, y, color, text, at, shape, rot, k }, …] }
+     （x, y は付箋のまん中。ページに対する割合。shape がない付箋は正方形として扱う。
+       rot: 向きを変えた（縦と横を入れかえ、書く向きも入れかえる）、k: 大きさの倍率。ないときは 1） */
 (function () {
   'use strict';
   var App = window.App, S = App.S;
@@ -20,12 +23,22 @@
     mini: { w: 0.065, h: 0.065, label: '小さい印（文字は出さない）' }
   };
   var ORDER = ['sq', 'wide', 'tall', 'mini'], FS = 0.026, FS_MIN = 0.019;
-  var SHAPE_KEY = 'dk:ui:noteShape', defShape = 'sq';
-  try { var sv = localStorage.getItem(SHAPE_KEY); if (SHAPES[sv]) defShape = sv; } catch (e) {}
+  var K_MIN = 0.5, K_MAX = 2;
+  var SHAPE_KEY = 'dk:ui:noteShape', defShape = 'sq', DEF_KEY = 'dk:ui:noteLook', def = { rot: false, k: 1 };
+  try {
+    var sv = localStorage.getItem(SHAPE_KEY); if (SHAPES[sv]) defShape = sv;
+    var dv = JSON.parse(localStorage.getItem(DEF_KEY) || 'null');
+    if (dv) def = { rot: !!dv.rot, k: kOf(dv) };
+  } catch (e) {}
   var hot = null, hotTimer = 0; // いま開いている・目立たせている付箋の id
 
   function shapeOf(t) { return SHAPES[t.shape] ? t.shape : 'sq'; }
-  function box(t) { return SHAPES[shapeOf(t)]; }
+  function kOf(t) { var k = +t.k; return k >= K_MIN && k <= K_MAX ? k : 1; }
+  // 付箋の大きさ（ページの横幅に対する割合）と、縦書きかどうか
+  function box(t) {
+    var sh = shapeOf(t), b = SHAPES[sh], k = kOf(t), rot = !!t.rot && sh !== 'mini';
+    return { w: (rot ? b.h : b.w) * k, h: (rot ? b.w : b.h) * k, k: k, vert: (sh === 'tall') !== rot, mini: sh === 'mini' };
+  }
   // 付箋がページからはみ出さないように、まん中の位置をおさえる（ratio: ページの縦÷横）
   function fit(t, ratio) {
     var b = box(t), r = ratio || (S.cssW ? S.cssH / S.cssW : 1.41);
@@ -94,9 +107,9 @@
   }
   // 付箋を1枚描く。cx, cy: まん中（ピクセル）、W: ページの横幅（ピクセル）。flat: 影と目立たせる枠をつけない（PDFに書き出すとき）
   function paint(ctx, t, cx, cy, W, flat) {
-    var sh = shapeOf(t), b = SHAPES[sh];
+    var b = box(t), vert = b.vert;
     var w = Math.max(5, b.w * W), h = Math.max(5, b.h * W), x = cx - w / 2, y = cy - h / 2;
-    var m = Math.min(w, h), f = m * (sh === 'mini' ? 0.3 : 0.16), r = Math.min(m * 0.13, W * 0.01);
+    var m = Math.min(w, h), f = m * (b.mini ? 0.3 : 0.16), r = Math.min(m * 0.13, W * 0.01);
     ctx.save();
     if (!flat) { ctx.shadowColor = 'rgba(40,30,10,.3)'; ctx.shadowBlur = Math.min(m * 0.2, W * 0.02); ctx.shadowOffsetY = Math.min(m * 0.07, W * 0.006); }
     ctx.fillStyle = t.color;
@@ -110,13 +123,14 @@
     // 折り返した角
     ctx.fillStyle = 'rgba(0,0,0,.18)';
     ctx.beginPath(); ctx.moveTo(x + w, y + h - f); ctx.lineTo(x + w - f, y + h); ctx.lineTo(x + w - f, y + h - f); ctx.closePath(); ctx.fill();
-    var text = (t.text || '').replace(/\s+$/, ''), fs = W * FS;
-    if (text && (sh === 'mini' || fs < 5)) {
+    // 文字は、付箋を大きくすると少し大きく、小さくすると少し小さくなる
+    var text = (t.text || '').replace(/\s+$/, ''), fs = W * FS * Math.sqrt(b.k), fmin = Math.min(fs, W * FS_MIN);
+    if (text && (b.mini || fs < 5)) {
       // 小さい印・ページ一覧の小さな絵: 文字のかわりに横線の印
       ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = Math.max(1, m * 0.075); ctx.lineCap = 'round';
       ctx.beginPath();
       [0.3, 0.52, 0.74].forEach(function (k, i) {
-        if (sh === 'tall') { var lx = x + w * (0.72 - i * 0.22); ctx.moveTo(lx, y + h * 0.12); ctx.lineTo(lx, y + h * (i === 2 ? 0.5 : 0.85)); }
+        if (vert) { var lx = x + w * (0.72 - i * 0.22); ctx.moveTo(lx, y + h * 0.12); ctx.lineTo(lx, y + h * (i === 2 ? 0.5 : 0.85)); }
         else { ctx.moveTo(x + w * 0.22, y + h * k); ctx.lineTo(x + w * (i === 2 ? 0.5 : 0.78), y + h * k); }
       });
       ctx.stroke();
@@ -125,14 +139,14 @@
       ctx.fillStyle = '#2b2620';
       ctx.beginPath(); ctx.rect(x + 1, y + 1, w - 2, h - 2); ctx.clip();
       // 入りきらなければ、文字を少しずつ小さくする（FS_MIN まで）
-      for (var size = fs; ; size = Math.max(W * FS_MIN, size * 0.9)) {
+      for (var size = fs; ; size = Math.max(fmin, size * 0.9)) {
         ctx.font = size + 'px ' + FONT; lh = size * 1.4;
-        res = sh === 'tall'
+        res = vert
           ? colsV(text, Math.max(1, Math.floor(ih / (size * 1.04))), Math.max(1, Math.floor((iw + lh - size) / lh)))
           : linesH(ctx, text, iw, Math.max(1, Math.floor((ih + lh - size * 1.2) / lh)));
-        if (!res.over || size <= W * FS_MIN + 0.01) break;
+        if (!res.over || size <= fmin + 0.01) break;
       }
-      if (sh === 'tall') {
+      if (vert) {
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         drawVert(ctx, res.cols, x + w - pad - size / 2, y + pad, size, lh);
       } else {
@@ -175,6 +189,8 @@
   /* ---------- 貼る・動かす ---------- */
   function create(pt) {
     var t = { id: App.nid(), x: pt[0], y: pt[1], color: S.noteColor || '#ffd84d', text: '', at: Date.now(), shape: defShape };
+    if (def.rot) t.rot = true;
+    if (def.k !== 1) t.k = def.k;
     fit(t);
     (S.notes[S.page] = S.notes[S.page] || []).push(t);
     changed(S.page);
@@ -257,6 +273,28 @@
     App.setStatus('次に貼る付箋: ' + SHAPES[b.dataset.nshape].label);
   });
   markShapes();
+  /* ---------- 向き・大きさ ---------- */
+  function rememberLook(t) {
+    def = { rot: !!t.rot, k: kOf(t) };
+    try { localStorage.setItem(DEF_KEY, JSON.stringify(def)); } catch (e) {}
+  }
+  function markLook() {
+    if (!cur) return;
+    var k = kOf(cur);
+    $('noteSize').value = k;
+    $('noteSizeV').textContent = Math.round(k * 100) + '%';
+    $('noteRot').disabled = shapeOf(cur) === 'mini'; // 小さい印は、向きがない
+    $('noteSmaller').disabled = k <= K_MIN + 0.001; $('noteBigger').disabled = k >= K_MAX - 0.001;
+  }
+  function setK(v) {
+    if (!cur) return;
+    var k = Math.min(K_MAX, Math.max(K_MIN, Math.round(v * 20) / 20));
+    if (k === 1) delete cur.k; else cur.k = k;
+    fit(cur); rememberLook(cur); markLook();
+    if (!raf) raf = requestAnimationFrame(function () { raf = 0; App.drawInk(); });
+    App.scheduleSave(pageOf(cur) || S.page);
+  }
+  $('noteSize').addEventListener('input', function () { setK(+this.value); });
   function markColors() {
     pop.querySelectorAll('[data-nset]').forEach(function (b) { b.classList.toggle('on', !!cur && b.dataset.nset === cur.color); });
     if (cur) pop.style.setProperty('--ncur', cur.color); // 形の見本を、この付箋の色にする
@@ -285,7 +323,7 @@
     });
     $('noteSlot').textContent = ''; $('noteSlot').appendChild(ta);
     $('notePage').textContent = (pageOf(t) || S.page) + 'ページ';
-    markColors(); markShapes();
+    markColors(); markShapes(); markLook();
     showing = true; // 出すときに、ほかのポップアップを閉じる知らせが来る。それで自分を閉じてしまわないように
     App.toolbar.showPop(pop, anchor);
     showing = false;
@@ -308,6 +346,16 @@
       ct.shape = b.dataset.nshape; fit(ct); setDefShape(ct.shape);
       App.toolbar.closePops(); // ここでメモを保存して閉じる（cur は空になる）
       openEditor(ct); // 大きさが変わるので、ポップアップを出し直す
+      return;
+    }
+    if (b.id === 'noteSmaller' || b.id === 'noteBigger') { setK(kOf(cur) + (b.id === 'noteBigger' ? 0.05 : -0.05)); return; }
+    if (b.id === 'noteRot') {
+      var rt = cur;
+      if (rt.rot) delete rt.rot; else rt.rot = true;
+      fit(rt); rememberLook(rt);
+      App.toolbar.closePops();
+      openEditor(rt); // 形が変わるので、ポップアップを出し直す
+      App.setStatus(box(rt).vert ? '縦向き（縦書き）にしました' : '横向き（横書き）にしました');
       return;
     }
     if (b.id === 'noteClose') { App.toolbar.closePops(); return; }
