@@ -67,6 +67,7 @@
     if (b.id === 'trayExit') { hideTray(true); App.toolbar.setFocus(false); }
     else if (b.id === 'trayScrap') Scrap.pick(null, b);
     else if (b.id === 'trayBw') Scrap.bwPick(b);
+    else if (b.id === 'trayPiece') Scrap.editShown();
     else if (b.id === 'traySrc') { hideTray(true); Scrap.openSource(S.page); }
   });
   // 帯の外（紙など）をさわったら消す。そのさわった操作（書く・めくる）は、そのまま続く

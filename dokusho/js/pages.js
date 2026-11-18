@@ -92,6 +92,7 @@
   pm.innerHTML = '<div class="mhead"></div>' +
     '<button class="item k-book" data-pm="scrap">スクラップブックに入れる</button>' +
     '<button class="item k-scrap" data-pm="src">元の本を開く</button>' +
+    '<button class="item k-scrap" data-pm="piece">切り抜きを動かす・大きさを変える</button>' +
     '<button class="item check k-scrap" data-pm="bw" aria-pressed="false">白黒にする<small>書き込み・付箋の色はそのまま</small></button>' +
     '<button class="item k-book" data-pm="rot">右に90°回転（書き込みも一緒に）</button>' +
     '<div class="mline"></div>' +
@@ -104,6 +105,7 @@
     pm.querySelector('.mhead').textContent = n + 'ページ目';
     pm.querySelector('[data-pm="del"]').disabled = S.total <= 1;
     pm.querySelector('[data-pm="src"]').disabled = !(window.Scrap && Scrap.sourceOf(n));
+    pm.querySelector('[data-pm="piece"]').hidden = !(window.Scrap && Scrap.isPiece(n));
     pm.querySelector('[data-pm="bw"]').setAttribute('aria-pressed', window.Scrap && Scrap.isBw(n) ? 'true' : 'false');
     App.toolbar.showPop(pm, anchor);
     if (!pm.classList.contains('open')) return;
@@ -121,6 +123,7 @@
     if (a === 'scrap') Scrap.pick([n], thumbs.querySelector('.thumb[data-n="' + n + '"] .tmore') || $('scrapBtn'));
     else if (a === 'src') Scrap.openSource(n);
     else if (a === 'bw') Scrap.setBw(n, !Scrap.isBw(n));
+    else if (a === 'piece') { setSide(false); Scrap.editPiece(n); }
     else if (a === 'rot') App.rotatePage(n);
     else if (a === 'clear') App.clearPageAt(n);
     else if (a === 'del') App.deletePage(n);

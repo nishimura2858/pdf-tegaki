@@ -141,8 +141,59 @@
     return url;
   }
   /* 切り抜き（cut: そのページの中の四角。ページに対する割合 { x, y, w, h }）
-     ページの絵はその四角だけを写し、書き込み・付箋は、その四角を新しい紙として位置と大きさを直して写す */
+     スクラップブックには、元のページと同じ大きさの白い紙を作り、切り抜いた絵を、元の大きさのまま、まん中（box）に貼る。
+     書き込みは四角の中だけを、付箋は四角の中にあるものを、貼った所へ移して写す。
+     貼ったあとは、スクラップブックの中で動かしたり、大きさを変えたりできる（editPiece） */
   var r4 = function (v) { return Math.round(v * 1e4) / 1e4; };
+  // 四角 a の中の点を、四角 b の同じ場所へ
+  function mapPt(p, a, b) { return [r4((p[0] - a.x) / a.w * b.w + b.x), r4((p[1] - a.y) / a.h * b.h + b.y), p[2]]; }
+  // 線を四角 r の中だけに切る（はみ出した所で切れて、いくつかの線に分かれる）
+  function clipSeg(a, b, r) {
+    var dx = b[0] - a[0], dy = b[1] - a[1], t0 = 0, t1 = 1;
+    var p = [-dx, dx, -dy, dy], q = [a[0] - r.x, r.x + r.w - a[0], a[1] - r.y, r.y + r.h - a[1]];
+    for (var i = 0; i < 4; i++) {
+      if (p[i] === 0) { if (q[i] < 0) return null; continue; }
+      var t = q[i] / p[i];
+      if (p[i] < 0) { if (t > t1) return null; if (t > t0) t0 = t; }
+      else { if (t < t0) return null; if (t < t1) t1 = t; }
+    }
+    return [t0, t1];
+  }
+  function lerp(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2]]; }
+  function clipPts(pts, r) {
+    if (pts.length === 1) { var q = pts[0]; return q[0] >= r.x && q[0] <= r.x + r.w && q[1] >= r.y && q[1] <= r.y + r.h ? [[q]] : []; }
+    var runs = [], cur = null;
+    for (var i = 1; i < pts.length; i++) {
+      var c = clipSeg(pts[i - 1], pts[i], r);
+      if (!c) { if (cur) { runs.push(cur); cur = null; } continue; }
+      var A = lerp(pts[i - 1], pts[i], c[0]), B = lerp(pts[i - 1], pts[i], c[1]);
+      if (!cur || c[0] > 0) { if (cur) runs.push(cur); cur = [A]; }
+      cur.push(B);
+      if (c[1] < 1) { runs.push(cur); cur = null; }
+    }
+    if (cur) runs.push(cur);
+    return runs;
+  }
+  // cut の中の書き込みを、box の所へ（大きさは変えない）
+  function pieceStrokes(list, cut, box) {
+    var out = [];
+    list.forEach(function (s) {
+      if (!s || s.tool === 'image' || !Array.isArray(s.points) || !s.points.length) return;
+      clipPts(s.points, cut).forEach(function (run) {
+        var y = clone(s); delete y.link;
+        y.points = run.map(function (p) { return mapPt(p, cut, box); });
+        out.push(y);
+      });
+    });
+    return out;
+  }
+  function pieceNotes(list, cut, box) {
+    return list.filter(function (t) { return t.x >= cut.x && t.x <= cut.x + cut.w && t.y >= cut.y && t.y <= cut.y + cut.h; }).map(function (t) {
+      var y = clone(t), p = mapPt([t.x, t.y], cut, box);
+      y.id = App.nid(); y.x = p[0]; y.y = p[1];
+      return y;
+    });
+  }
   function cutCanvas(src, r) {
     var sx = Math.round(r.x * src.width), sy = Math.round(r.y * src.height);
     var sw = Math.max(1, Math.round(r.w * src.width)), sh = Math.max(1, Math.round(r.h * src.height));
@@ -151,29 +202,6 @@
     var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
     x.drawImage(src, sx, sy, sw, sh, 0, 0, c.width, c.height);
     return c;
-  }
-  function cutStrokes(list, r) {
-    var out = [];
-    list.forEach(function (s) {
-      if (!s || s.tool === 'image' || !Array.isArray(s.points) || !s.points.length) return;
-      var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
-      s.points.forEach(function (p) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); });
-      if (x1 < r.x || x0 > r.x + r.w || y1 < r.y || y0 > r.y + r.h) return; // 四角にかからない線
-      var y = clone(s); delete y.link;
-      y.points = s.points.map(function (p) { return [r4((p[0] - r.x) / r.w), r4((p[1] - r.y) / r.h), p[2]]; });
-      y.width = Math.round(Math.min(200, (+s.width || 4) / r.w) * 100) / 100; // 線の太さは紙の横幅に対する割合なので、紙が小さくなるぶん太く
-      out.push(y);
-    });
-    return out;
-  }
-  function cutNotes(list, r) {
-    return list.filter(function (t) { return t.x >= r.x && t.x <= r.x + r.w && t.y >= r.y && t.y <= r.y + r.h; }).map(function (t) {
-      var y = clone(t), k = +t.k >= 0.5 && +t.k <= 2 ? +t.k : 1;
-      y.id = App.nid(); y.x = r4((t.x - r.x) / r.w); y.y = r4((t.y - r.y) / r.h);
-      k = Math.max(0.5, Math.min(2, Math.round(k * r.w * 20) / 20)); // 見た目の大きさが変わらないように（50%〜200%の中で）
-      if (k === 1) delete y.k; else y.k = k;
-      return y;
-    });
   }
   // 開いている本の pages（ページ番号の並び）を、スクラップブック sid に写す。cut があれば、そのページの一部だけ
   async function add(sid, pages, cut) {
@@ -191,7 +219,7 @@
       for (var i = 0; i < pages.length; i++) {
         var n = pages[i], cap = await App.capturePage(n, cut ? Math.min(3600, PX / Math.max(cut.w, cut.h)) : PX);
         var pic = cap.canvas, pw = cap.w, ph = cap.h;
-        if (cut) { pic = cutCanvas(cap.canvas, cut); cap.canvas.width = cap.canvas.height = 0; pw = cap.w * cut.w; ph = cap.h * cut.h; }
+        if (cut) { pic = cutCanvas(cap.canvas, cut); cap.canvas.width = cap.canvas.height = 0; } // 紙の大きさ（pw, ph）は元のページのまま
         var buf = await (await Source.canvasBlob(pic, 'image/jpeg', 0.85)).arrayBuffer();
         if (!thumb && !base && !i) thumb = small(pic);
         pic.width = pic.height = 0;
@@ -199,14 +227,18 @@
         await Store.putPage({ id: pid, scrap: sid, data: buf, w: pw, h: ph, at: now });
         var item = { id: pid, w: Math.round(pw * 100) / 100, h: Math.round(ph * 100) / 100,
           from: { book: from.book, name: from.name, page: n }, at: now };
-        if (cut) item.cut = { x: r4(cut.x), y: r4(cut.y), w: r4(cut.w), h: r4(cut.h) };
+        var box = null;
+        if (cut) {
+          item.cut = { x: r4(cut.x), y: r4(cut.y), w: r4(cut.w), h: r4(cut.h) };
+          box = item.box = { x: r4((1 - cut.w) / 2), y: r4((1 - cut.h) / 2), w: r4(cut.w), h: r4(cut.h) };
+        }
         fresh.push(item);
         // 並べ替え・削除をしたあと（layout がある）なら、その並びの最後に足す
         if (Array.isArray(ann.layout) && ann.layout.length) { ann.layout.push({ src: base + fresh.length }); dn = ann.layout.length; }
         else dn = base + fresh.length;
-        var st = cut ? cutStrokes(S.strokes[n] || [], cut) :
+        var st = cut ? pieceStrokes(S.strokes[n] || [], cut, box) :
           (S.strokes[n] || []).filter(function (x) { return x.tool !== 'image'; }).map(function (x) { var y = clone(x); delete y.link; return y; });
-        var nt = cut ? cutNotes(S.notes[n] || [], cut) : (S.notes[n] || []).map(function (x) { var y = clone(x); y.id = App.nid(); return y; });
+        var nt = cut ? pieceNotes(S.notes[n] || [], cut, box) : (S.notes[n] || []).map(function (x) { var y = clone(x); y.id = App.nid(); return y; });
         if (st.length) ann.pages[dn] = st; else delete ann.pages[dn];
         if (nt.length) { ann.notes = ann.notes || {}; ann.notes[dn] = nt; } else if (ann.notes) delete ann.notes[dn];
       }
@@ -402,6 +434,151 @@
   $('moreBtn').addEventListener('click', markBw);
   App.on('page', markBw); App.on('open', markBw);
 
+  /* ---------- 切り抜きを動かす・大きさを変える（スクラップブックの中で） ----------
+     切り抜きの上の書き込み・付箋も一緒に動く（始めたときに、切り抜きの中にあったもの）。
+     動かしている間は、紙の絵を隠して、切り抜きの絵（pv）を動かして見せる。終えたら item.box を保存して描き直す */
+  function isPiece(n) { var it = itemAt(n); return !!(it && it.box); }
+  var pe = null, peEl = $('pieceEd'), peBox = peEl.querySelector('.pe-box'), peBar = $('pieceBar');
+  function inBox(b, x, y) { return x >= b.x - 0.01 && x <= b.x + b.w + 0.01 && y >= b.y - 0.01 && y <= b.y + b.h + 0.01; }
+  async function editPiece(n) {
+    if (pe) await donePiece();
+    if (!isPiece(n) || App.busy()) return;
+    if (!App.focusPage(n)) { // 見えていないページ: そのページへ行ってから
+      App.goPage(n);
+      await new Promise(function (r) { setTimeout(r, 450); });
+      if (S.page !== n || !isPiece(n)) return;
+    }
+    App.toolbar.closePops();
+    if (window.Quick) Quick.hideTray(true);
+    var it = itemAt(S.page), img = await Source.pageImage(it.id, !!it.bw);
+    var b0 = clone(it.box), st0 = clone(S.strokes[S.page] || []), nt0 = clone(S.notes[S.page] || []);
+    pe = { n: S.page, it: it, img: img, b0: b0, b: clone(b0), st0: st0, nt0: nt0,
+      selS: st0.map(function (s) {
+        if (!s || s.tool === 'image' || !s.points || !s.points.length) return false;
+        var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+        s.points.forEach(function (p) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); });
+        return inBox(b0, (x0 + x1) / 2, (y0 + y1) / 2);
+      }),
+      selN: nt0.map(function (t) { return inBox(b0, t.x, t.y); }) };
+    // 切り抜きの絵を、紙の絵の代わりに見せる
+    var pv = document.createElement('canvas'); pv.id = 'piecePv';
+    App.wrap.insertBefore(pv, $('ink'));
+    pe.pv = pv;
+    $('pdfc').style.visibility = 'hidden';
+    var hp = $('hipdf'); if (hp) hp.style.visibility = 'hidden';
+    peEl.hidden = false; peBar.hidden = false;
+    document.body.classList.add('piece-on');
+    drawPiece();
+  }
+  function drawPiece() {
+    if (!pe) return;
+    var b = pe.b, pv = pe.pv, r = App.wrap.getBoundingClientRect(), d = Math.min(window.devicePixelRatio || 1, 2);
+    var W = Math.max(1, Math.round(r.width * d)), H = Math.max(1, Math.round(r.height * d));
+    if (pv.width !== W || pv.height !== H) { pv.width = W; pv.height = H; }
+    var x = pv.getContext('2d');
+    x.fillStyle = '#fff'; x.fillRect(0, 0, W, H);
+    x.drawImage(pe.img, b.x * W, b.y * H, b.w * W, b.h * H);
+    peBox.style.left = (b.x * 100) + '%'; peBox.style.top = (b.y * 100) + '%';
+    peBox.style.width = (b.w * 100) + '%'; peBox.style.height = (b.h * 100) + '%';
+    $('pieceSize').textContent = Math.round(b.w / pe.it.cut.w * 100) + '%';
+    // 書き込み・付箋も一緒に
+    var b0 = pe.b0, k = b.w / b0.w, n = pe.n;
+    S.strokes[n] = pe.st0.map(function (s, i) {
+      if (!pe.selS[i]) return s;
+      var y = clone(s);
+      y.points = s.points.map(function (p) { return mapPt(p, b0, b); });
+      y.width = Math.round(Math.max(0.5, Math.min(200, (+s.width || 4) * k)) * 100) / 100;
+      return y;
+    });
+    S.notes[n] = pe.nt0.map(function (t, i) {
+      if (!pe.selN[i]) return t;
+      var y = clone(t), p = mapPt([t.x, t.y], b0, b), tk = +t.k >= 0.5 && +t.k <= 2 ? +t.k : 1;
+      y.x = p[0]; y.y = p[1];
+      tk = Math.max(0.5, Math.min(2, Math.round(tk * k * 20) / 20));
+      if (tk === 1) delete y.k; else y.k = tk;
+      return y;
+    });
+    if (!S.notes[n].length) delete S.notes[n];
+    App.drawInk();
+  }
+  async function donePiece() {
+    var p = pe; if (!p) return;
+    pe = null;
+    peEl.hidden = true; peBar.hidden = true;
+    document.body.classList.remove('piece-on');
+    var b = p.b, same = ['x', 'y', 'w', 'h'].every(function (k) { return Math.abs(b[k] - p.b0[k]) < 1e-4; });
+    function show() {
+      $('pdfc').style.visibility = ''; var hp = $('hipdf'); if (hp) hp.style.visibility = '';
+      if (p.pv.parentNode) p.pv.remove();
+    }
+    if (same) { S.strokes[p.n] = p.st0; S.notes[p.n] = p.nt0; if (!p.nt0.length) delete S.notes[p.n]; App.drawInk(); show(); return; }
+    var box = { x: r4(b.x), y: r4(b.y), w: r4(b.w), h: r4(b.h) };
+    p.it.box = box;
+    S.undo = []; S.redo = []; // 切り抜きの場所は取り消せないので、書き込みの取り消しとずれないように履歴を消す
+    App.commit(p.n);
+    var sid = S.key, id = p.it.id;
+    await Store.patchBook(sid, function (r) {
+      return { items: (r.items || []).map(function (x) { return x.id === id ? Object.assign({}, x, { box: box }) : x; }), dirty: true, editedAt: Date.now() };
+    });
+    touched(sid);
+    try { await App.repaint(p.n); } catch (e) {}
+    show();
+  }
+  // 動かす（中を引っぱる）・大きさを変える（角を引っぱる。縦横の比はそのまま）
+  var pd = null;
+  peEl.addEventListener('pointerdown', function (e) {
+    if (!pe || pd) return;
+    e.preventDefault();
+    var h = e.target.closest('.pe-h'), r = App.wrap.getBoundingClientRect();
+    if (!h && !e.target.closest('.pe-box')) return;
+    pd = { id: e.pointerId, h: h ? h.dataset.h : '', x: e.clientX, y: e.clientY, r: r, b: clone(pe.b) };
+    try { peEl.setPointerCapture(e.pointerId); } catch (er) {}
+  });
+  peEl.addEventListener('pointermove', function (e) {
+    if (!pd || e.pointerId !== pd.id || !pe) return;
+    e.preventDefault();
+    var r = pd.r, b = pd.b, dx = (e.clientX - pd.x) / r.width, dy = (e.clientY - pd.y) / r.height, nb;
+    if (!pd.h) {
+      nb = { x: Math.max(0, Math.min(1 - b.w, b.x + dx)), y: Math.max(0, Math.min(1 - b.h, b.y + dy)), w: b.w, h: b.h };
+    } else {
+      // つかんだ角の反対の角を止めて、縦横の比を変えずに広げる・縮める
+      var L = pd.h.indexOf('l') >= 0, T = pd.h.indexOf('t') >= 0;
+      var ax = L ? b.x + b.w : b.x, ay = T ? b.y + b.h : b.y, ratio = b.h / b.w;
+      var px = (L ? b.x : b.x + b.w) + dx, py = (T ? b.y : b.y + b.h) + dy;
+      var w = Math.max(Math.abs(px - ax), Math.abs(py - ay) / ratio);
+      var maxW = Math.min(L ? ax : 1 - ax, (T ? ay : 1 - ay) / ratio), minW = Math.min(b.w, 0.08);
+      w = Math.max(minW, Math.min(maxW, w));
+      nb = { x: L ? ax - w : ax, y: T ? ay - w * ratio : ay, w: w, h: w * ratio };
+    }
+    pe.b = nb; drawPiece();
+  });
+  function pdEnd(e) { if (pd && e.pointerId === pd.id) pd = null; }
+  peEl.addEventListener('pointerup', pdEnd);
+  peEl.addEventListener('pointercancel', pdEnd);
+  $('pieceDone').addEventListener('click', function () { donePiece(); });
+  $('pieceReset').addEventListener('click', function () { // 切り抜いたときの大きさに戻す（まん中はそのまま）
+    if (!pe) return;
+    var c = pe.it.cut, b = pe.b, cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+    pe.b = { x: Math.max(0, Math.min(1 - c.w, cx - c.w / 2)), y: Math.max(0, Math.min(1 - c.h, cy - c.h / 2)), w: c.w, h: c.h };
+    drawPiece();
+  });
+  App.on('page', function () { if (pe && S.page !== pe.n) donePiece(); });
+  App.on('close', function () { if (pe) { pe = null; peEl.hidden = true; peBar.hidden = true; document.body.classList.remove('piece-on'); var v = $('piecePv'); if (v) v.remove(); $('pdfc').style.visibility = ''; } });
+  App.on('resize', function () { if (pe) drawPiece(); });
+  // 見えているページのうち、切り抜きのページ（今のページを先に）
+  function shownPiece() {
+    var a = [S.page], m = S.spread ? App.stillPage() : 0; if (m) a.push(m);
+    for (var i = 0; i < a.length; i++) if (isPiece(a[i])) return a[i];
+    return 0;
+  }
+  function markPiece() {
+    var n = shownPiece();
+    $('pieceBtn').hidden = !n; $('trayPiece').hidden = !n;
+  }
+  $('pieceBtn').addEventListener('click', function () { var n = shownPiece(); App.toolbar.closePops(); if (n) editPiece(n); });
+  $('moreBtn').addEventListener('click', markPiece);
+  App.on('page', markPiece); App.on('open', markPiece); App.on('layout', markPiece);
+
   /* ---------- PDFにして共有 ---------- */
   var libP = null;
   function loadLib() {
@@ -489,7 +666,8 @@
         var bc = await Source.pageImage(it.id, true);
         jpg = await (await Source.canvasBlob(bc, 'image/jpeg', 0.85)).arrayBuffer();
       }
-      page.drawImage(await pdf.embedJpg(jpg), { x: 0, y: STRIP, width: w, height: h });
+      var bx = it.box || { x: 0, y: 0, w: 1, h: 1 }; // 切り抜きは、白い紙の box の所に
+      page.drawImage(await pdf.embedJpg(jpg), { x: bx.x * w, y: STRIP + h - (bx.y + bx.h) * h, width: bx.w * w, height: bx.h * h });
       var ops = strokeOps(L, page, (v.ann.pages || {})[i + 1], w, h, STRIP);
       // 線は、ページの絵の中だけに見せる（切り抜いたページでは、四角からはみ出した所がある）
       if (ops.length) page.pushOperators.apply(page, [L.pushGraphicsState(), L.rectangle(0, STRIP, w, h), L.clip(), L.endPath()].concat(ops, [L.popGraphicsState()]));
@@ -552,6 +730,7 @@
   window.Scrap = {
     create: create, rename: rename, remove: remove, open: open, add: add, pick: pick, share: share, buildPdf: buildPdf,
     sourceOf: sourceOf, openSource: openSource, view: view, normalize: normalize, list: list,
-    isBw: isBw, setBw: setBw, bwPick: bwPick, cancelCut: endCut
+    isBw: isBw, setBw: setBw, bwPick: bwPick, cancelCut: endCut,
+    isPiece: isPiece, editPiece: editPiece, editShown: function () { var n = shownPiece(); if (n) editPiece(n); }, donePiece: donePiece
   };
 })();

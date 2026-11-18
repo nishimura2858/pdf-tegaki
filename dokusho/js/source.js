@@ -169,7 +169,8 @@
     x.putImageData(d, 0, 0);
     return c;
   }
-  // items: [{ id, w, h, bw }]（w, h はページの大きさ。PDFの単位。bw: 白黒で見せる）
+  // items: [{ id, w, h, bw, box }]（w, h はページの大きさ。PDFの単位。bw: 白黒で見せる。
+  //   box: 切り抜きのとき、絵を貼る場所 { x, y, w, h }（ページに対する割合。まわりは白い紙）
   function imageDoc(items) {
     function page(it) {
       return {
@@ -192,6 +193,9 @@
               c.translate(v.width / 2, v.height / 2); c.rotate(v.rotation * Math.PI / 180);
               var side = v.rotation % 180 !== 0, dw = side ? v.height : v.width, dh = side ? v.width : v.height;
               c.drawImage(im, -dw / 2, -dh / 2, dw, dh);
+            } else if (it.box) { // 切り抜き: 白い紙の、box の所に貼る
+              var b = it.box;
+              c.drawImage(im, b.x * v.width, b.y * v.height, b.w * v.width, b.h * v.height);
             } else c.drawImage(im, 0, 0, v.width, v.height);
             c.restore();
           });

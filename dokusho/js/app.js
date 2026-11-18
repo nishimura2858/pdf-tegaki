@@ -539,8 +539,9 @@
     if (st) st.n = -1;
     if (upSt) upSt.n = -1;
     hiHide();
-    renderPage();
+    var p = renderPage();
     emit('repaint', n);
+    return p;
   }
   function blankCanvas(w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
   function copyOf(src) { var c = blankCanvas(src.width, src.height); c.getContext('2d').drawImage(src, 0, 0); return c; }
