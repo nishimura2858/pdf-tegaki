@@ -980,8 +980,10 @@
           text: typeof t.text === 'string' ? t.text.slice(0, 4000) : '', at: +t.at || 0
         };
         // 形・向き・大きさ・小口に出すか（読み込みのときに落とさない）
-        if (['sq', 'wide', 'tall', 'mini'].indexOf(t.shape) >= 0) o.shape = t.shape;
+        if (['sq', 'wide', 'thin', 'mini'].indexOf(t.shape) >= 0) o.shape = t.shape;
         if (t.rot === true) o.rot = true;
+        // 前の版の「縦長」は、「細長」を縦向きにしたものと同じ
+        if (t.shape === 'tall') { o.shape = 'thin'; if (t.rot === true) delete o.rot; else o.rot = true; }
         if (+t.k >= 0.5 && +t.k <= 2 && +t.k !== 1) o.k = +t.k;
         if (t.tab === true) o.tab = true;
         list.push(o);
@@ -1819,6 +1821,7 @@
   var drawAt = 0, drawLast = null;
   function dropStaleDrawing(e) {
     if (!drawing || e.pointerId === drawing.id || performance.now() - drawAt < 4000) return;
+    if (drawing.touch && e.pointerType === 'touch') return; // 指でつかんでいる付箋に、2本目の指（ひねる）
     dbg('!! 離した知らせが届かなかった線#' + drawing.id + 'を確定');
     var l = drawLast || e;
     endPointer({ pointerId: drawing.id, type: 'pointerup', pointerType: l.pointerType, clientX: l.clientX, clientY: l.clientY, pressure: l.pressure });
@@ -1832,6 +1835,12 @@
     dropStaleDrawing(e);
     // 指はスクロール・ページめくり（1本で横に払う）・拡大縮小（2本）に使う（書くのはペンだけ）
     if (e.pointerType === 'touch') {
+      // 指でつかんでいる付箋に、2本目の指: ひねって向きを変える（notes.js）
+      if (drawing && drawing.touch && !drawing.id2 && drawing.h.second && drawing.h.second(e)) {
+        drawing.id2 = e.pointerId;
+        try { ink.setPointerCapture(e.pointerId); } catch (er) {}
+        return;
+      }
       if (drawing || performance.now() - lastPenUp < 500) { // 手のひらの接触は無視
         dbg('指#' + e.pointerId + ' 無視（' + (drawing ? 'ペンで書いている最中' : 'ペンを離した直後') + '）');
         return;
@@ -1938,6 +1947,7 @@
       touches[e.pointerId].x = e.clientX; touches[e.pointerId].y = e.clientY;
       if (pinch && Object.keys(touches).length === 2) { movePinch(); return; }
     }
+    if (drawing && drawing.id2 === e.pointerId) { e.preventDefault(); drawing.h.move2(e); return; }
     if (pan && e.pointerId === pan.id) {
       if (pan.holdT && Math.hypot(e.clientX - pan.x0, e.clientY - pan.y0) >= 10) { clearTimeout(pan.holdT); pan.holdT = 0; }
       panMove(e); return;
@@ -1997,6 +2007,7 @@
       }
       return;
     }
+    if (drawing && drawing.id2 === e.pointerId) { drawing.id2 = 0; if (drawing.h.up2) drawing.h.up2(e); return; }
     if (!drawing || e.pointerId !== drawing.id) return;
     dbg('ペン#' + e.pointerId + ' ' + (e.type === 'pointercancel' ? '!! 取り消し（OSに中断された）' : '離す') +
       (S.live ? '（' + S.live.points.length + '点）' : ''));

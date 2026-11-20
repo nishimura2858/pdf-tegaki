@@ -6,7 +6,9 @@
    - 付箋には、書いたメモがそのまま見える。形は4種類（正方形・横長・縦長〈縦書き〉・小さい印）。
      形は、付箋を開いたときと、付箋の道具のパレットで選べる（選んだ形は、次に貼る付箋にも使う）
    - 付箋を開くと、向き（縦向き⇔横向き。縦向きのときは縦書き）と、大きさ（0.5倍〜2倍）も変えられる。
-     選んだ形・向き・大きさは、次に貼る付箋にも使う
+     選んだ形・大きさは、次に貼る付箋にも使う。向きは、新しい付箋はいつも横向きから
+   - 指2本でつまんでひねると、向き（縦向き⇔横向き）が変わる
+   - 引っぱって、ページの外側（小口）へはみ出させると「小口に出す」になる（端から中へ戻すと外れる）
    データ: App.S.notes = { "ページ番号": [{ id, x, y, color, text, at, shape, rot, k }, …] }
      （x, y は付箋のまん中。ページに対する割合。shape がない付箋は正方形として扱う。
        rot: 向きを変えた（縦と横を入れかえ、書く向きも入れかえる）、k: 大きさの倍率。ないときは 1） */
@@ -19,14 +21,15 @@
   var SHAPES = {
     sq:   { w: 0.24,  h: 0.24,  label: '正方形' },
     wide: { w: 0.40,  h: 0.13,  label: '横長' },
-    tall: { w: 0.085, h: 0.36,  label: '縦長（縦書き）' },
+    thin: { w: 0.36,  h: 0.085, label: '細長（ひねると縦向き・縦書き）' },
+    tall: { w: 0.085, h: 0.36,  label: '縦長（縦書き）' }, // 前の版の形。読み込むときに thin＋向きに直す（app.js）
     mini: { w: 0.065, h: 0.065, label: '小さい印（文字は出さない）' }
   };
-  var ORDER = ['sq', 'wide', 'tall', 'mini'], FS = 0.026, FS_MIN = 0.019;
+  var ORDER = ['sq', 'wide', 'thin', 'mini'], FS = 0.026, FS_MIN = 0.019;
   var K_MIN = 0.5, K_MAX = 2;
   var SHAPE_KEY = 'dk:ui:noteShape', defShape = 'sq', DEF_KEY = 'dk:ui:noteLook', def = { rot: false, k: 1 };
   try {
-    var sv = localStorage.getItem(SHAPE_KEY); if (SHAPES[sv]) defShape = sv;
+    var sv = localStorage.getItem(SHAPE_KEY); if (sv === 'tall') sv = 'thin'; if (SHAPES[sv]) defShape = sv;
     var dv = JSON.parse(localStorage.getItem(DEF_KEY) || 'null');
     if (dv) def = { rot: !!dv.rot, k: kOf(dv) };
   } catch (e) {}
@@ -189,7 +192,6 @@
   /* ---------- 貼る・動かす ---------- */
   function create(pt) {
     var t = { id: App.nid(), x: pt[0], y: pt[1], color: S.noteColor || '#ffd84d', text: '', at: Date.now(), shape: defShape };
-    if (def.rot) t.rot = true;
     if (def.k !== 1) t.k = def.k;
     fit(t);
     (S.notes[S.page] = S.notes[S.page] || []).push(t);
@@ -199,27 +201,92 @@
   }
   var g = null, raf = 0;
   function start(pt, e, t) {
-    g = { t: t || null, p0: pt, x0: e.clientX, y0: e.clientY, moved: false, ox: t ? t.x - pt[0] : 0, oy: t ? t.y - pt[1] : 0 };
+    g = { t: t || null, p0: pt, x0: e.clientX, y0: e.clientY, moved: false, ox: t ? t.x - pt[0] : 0, oy: t ? t.y - pt[1] : 0,
+      cx: e.clientX, cy: e.clientY, edge0: t ? atEdge(t) : false, out: false };
+  }
+  /* 小口: ページの外側の辺。見開きでは外側だけ（のどの側は違う）。1ページずつのときは左右どちらも */
+  function outerSides() {
+    var st = S.spread && App.stillPage ? App.stillPage() : 0;
+    if (!st) return { l: true, r: true };
+    return st > S.page ? { l: true, r: false } : { l: false, r: true };
+  }
+  // 付箋が、小口の側の端に着いているか
+  function atEdge(t) {
+    var b = box(t), sd = outerSides();
+    return (sd.l && t.x - b.w / 2 < 0.012) || (sd.r && t.x + b.w / 2 > 0.988);
+  }
+  // 引っぱっている付箋を、小口から外へはみ出させようとしているか（付箋の幅の1/4以上、外へ）
+  function pushedOut(t, wantX) {
+    var b = box(t), sd = outerSides();
+    return (sd.l && wantX - b.w / 2 < -b.w * 0.25) || (sd.r && wantX + b.w / 2 > 1 + b.w * 0.25);
+  }
+  /* 指2本でひねる: 2本の指を結ぶ線の向きが 40°以上変わると、縦向き⇔横向き。
+     続けて同じ向きにひねっても変わらない（大きくひねって2回変わり、元に戻ってしまわないように）。逆にひねると戻る */
+  function angle() { return Math.atan2(g.two.y - g.cy, g.two.x - g.cx); }
+  function twist() {
+    var d = angle() - g.two.a0;
+    while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+    if (Math.abs(d) < 40 * Math.PI / 180) return;
+    if (g.two.dir && (d > 0) === (g.two.dir > 0)) { g.two.a0 = angle(); return; } // 同じ向きに、さらにひねった
+    g.two.a0 = angle(); g.two.dir = d > 0 ? 1 : -1;
+    var t = g.t;
+    if (t.rot) delete t.rot; else t.rot = true;
+    fit(t); g.two.n++;
+    App.drawInk();
+    App.setStatus(box(t).vert ? '縦向き（縦書き）にしました' : '横向き（横書き）にしました');
   }
   App.tools.note = {
     // 指で付箋に触れたとき（付箋の上でなければ、ふつうのスクロール・めくりに任せる）
     grab: function (pt, e) { var t = at(pt); if (!t) return false; start(pt, e, t); return true; },
     down: function (pt, e, onNote) { start(pt, e, onNote || at(pt)); },
+    // つかんでいる付箋に2本目の指が来たとき（app.js）。ひねって向きを変える。小さい印は向きがない
+    second: function (e) {
+      if (!g || !g.t || shapeOf(g.t) === 'mini') return false;
+      g.two = { x: e.clientX, y: e.clientY, a0: 0, n: 0 };
+      g.two.a0 = angle();
+      if (g.moved) { g.moved = false; g.wasMoved = true; } // ひねっている間は動かさない
+      g.out = false;
+      App.toolbar.closePops();
+      setHot(g.t.id);
+      return true;
+    },
+    move2: function (e) { if (!g || !g.two) return; g.two.x = e.clientX; g.two.y = e.clientY; twist(); },
+    up2: function () {},
     move: function (pt, e) {
       if (!g) return;
+      g.cx = e.clientX; g.cy = e.clientY;
+      if (g.two) { twist(); return; }
       if (!g.moved) {
         if (Math.hypot(e.clientX - g.x0, e.clientY - g.y0) < 7) return;
         g.moved = true;
         if (g.t) App.toolbar.closePops();
       }
       if (!g.t) return;
-      g.t.x = pt[0] + g.ox; g.t.y = pt[1] + g.oy; fit(g.t);
+      var wantX = pt[0] + g.ox;
+      g.t.x = wantX; g.t.y = pt[1] + g.oy; fit(g.t);
+      // 小口からはみ出させようとしている: 離すと「小口に出す」になる
+      var out = pushedOut(g.t, wantX);
+      if (out !== g.out) {
+        g.out = out;
+        setHot(out ? g.t.id : null);
+        if (out && !g.t.tab) App.setStatus('離すと、小口のインデックスになります');
+      }
       if (!raf) raf = requestAnimationFrame(function () { raf = 0; App.drawInk(); });
     },
     up: function (e) {
       var q = g; g = null;
       if (!q) return;
+      if (q.two) { if (hot === q.t.id) setHot(null); if (q.two.n || q.wasMoved) changed(); return; } // ひねった
       if (e && e.type === 'pointercancel') { if (q.t && q.moved) changed(); return; }
+      if (q.t && q.moved) {
+        var t = q.t;
+        if (q.out) {
+          setHot(t.id, 1200);
+          if (!t.tab) { t.tab = true; App.setStatus('小口に出しました（紙を1回たたくと、画面の端に出ます）'); }
+        } else if (t.tab && q.edge0 && !atEdge(t)) { // 小口から、中へ戻した
+          delete t.tab; App.setStatus('小口から外しました');
+        }
+      }
       if (q.t) { if (q.moved) changed(); else openEditor(q.t); }
       else if (!q.moved && S.tool === 'note') create(q.p0);
     }
