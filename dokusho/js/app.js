@@ -973,12 +973,18 @@
       var list = [];
       arr.forEach(function (t) {
         if (!t || !isFinite(t.x) || !isFinite(t.y)) return;
-        list.push({
+        var o = {
           id: typeof t.id === 'string' && t.id ? t.id.slice(0, 40) : nid(),
           x: num(t.x, 0, 1, 0.5), y: num(t.y, 0, 1, 0.5),
           color: /^#[0-9a-f]{6}$/i.test(t.color) ? t.color : '#ffd84d',
           text: typeof t.text === 'string' ? t.text.slice(0, 4000) : '', at: +t.at || 0
-        });
+        };
+        // 形・向き・大きさ・小口に出すか（読み込みのときに落とさない）
+        if (['sq', 'wide', 'tall', 'mini'].indexOf(t.shape) >= 0) o.shape = t.shape;
+        if (t.rot === true) o.rot = true;
+        if (+t.k >= 0.5 && +t.k <= 2 && +t.k !== 1) o.k = +t.k;
+        if (t.tab === true) o.tab = true;
+        list.push(o);
       });
       if (list.length) notes[k] = list;
     });

@@ -284,6 +284,8 @@
     $('noteSize').value = k;
     $('noteSizeV').textContent = Math.round(k * 100) + '%';
     $('noteRot').disabled = shapeOf(cur) === 'mini'; // 小さい印は、向きがない
+    $('noteTab').setAttribute('aria-pressed', cur.tab ? 'true' : 'false');
+    $('noteTabW').hidden = !cur.tab;
     $('noteSmaller').disabled = k <= K_MIN + 0.001; $('noteBigger').disabled = k >= K_MAX - 0.001;
   }
   function setK(v) {
@@ -358,6 +360,12 @@
       App.setStatus(box(rt).vert ? '縦向き（縦書き）にしました' : '横向き（横書き）にしました');
       return;
     }
+    if (b.id === 'noteTab') {
+      if (cur.tab) delete cur.tab; else cur.tab = true;
+      markLook(); App.scheduleSave(pageOf(cur) || S.page); App.emit('notes');
+      App.setStatus(cur.tab ? '小口に出しました（画面を1回たたくと、端に出ます）' : '小口から外しました');
+      return;
+    }
     if (b.id === 'noteClose') { App.toolbar.closePops(); return; }
     if (b.id === 'noteDel') {
       var t = cur, n = pageOf(t);
@@ -414,5 +422,5 @@
   App.on('layout', renderList);
   setTab('pages');
 
-  window.Notes = { shapes: SHAPES, box: box, paint: paint, draw: drawNote };
+  window.Notes = { shapes: SHAPES, box: box, paint: paint, draw: drawNote, flash: function (id) { setHot(id, 1800); } };
 })();

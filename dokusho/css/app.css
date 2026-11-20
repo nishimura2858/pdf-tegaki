@@ -964,3 +964,44 @@ body.cutting #ink, body.cutting #still, body.cutting #stillUp { cursor: crosshai
 }
 #pieceBar button.go { background: var(--accent); }
 .menu .item[hidden], #tray .trow.sub button[hidden] { display: none; }
+
+/* 小口のインデックス（「小口に出す」にした付箋。js/quick.js） */
+#edgeTabs { position: fixed; inset: 0; z-index: 18; pointer-events: none; }
+#edgeTabs[hidden] { display: none; }
+#edgeTabs .etab {
+  position: fixed; pointer-events: auto; box-sizing: border-box; border: 0; padding: 0; margin: 0; background: transparent;
+  display: flex; align-items: stretch; cursor: pointer; touch-action: manipulation; font: inherit;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  transition: transform .24s cubic-bezier(.2,1.2,.4,1), opacity .16s ease; opacity: 0;
+}
+#edgeTabs .etab.l { justify-content: flex-start; transform: translateX(-100%); }
+#edgeTabs .etab.r { justify-content: flex-end; transform: translateX(100%); }
+#edgeTabs.on .etab { transform: none; opacity: 1; }
+#edgeTabs .strip {
+  width: var(--w, 9px); flex: none; box-sizing: border-box; background: var(--c, #ffd84d); color: #2a2620; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 3px 0;
+}
+#edgeTabs .l .strip { border-radius: 0 6px 6px 0; box-shadow: 2px 2px 5px rgba(0,0,0,.22); }
+#edgeTabs .r .strip { border-radius: 6px 0 0 6px; box-shadow: -2px 2px 5px rgba(0,0,0,.22); }
+#edgeTabs .strip b { writing-mode: vertical-rl; font-size: 13px; font-weight: 700; line-height: 1; letter-spacing: 1px; }
+#edgeTabs .strip small { font-size: 10px; font-weight: 600; opacity: .7; font-variant-numeric: tabular-nums; }
+#edgeTabs .here .strip { box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.85), 0 1px 4px rgba(0,0,0,.18); }
+#edgeTabs.on .etab.here { opacity: .6; }
+/* 付箋を開いた画面の「小口に出す」 */
+.np-tab {
+  display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box; margin: 0 0 10px; padding: 7px 10px;
+  border: 0; border-radius: 10px; background: var(--bg); color: var(--text); font: inherit; font-size: 13px; font-weight: 600;
+  text-align: left; cursor: pointer; touch-action: manipulation;
+}
+.np-tab small { display: block; font-size: 11px; font-weight: 400; color: var(--muted); }
+.np-tab[aria-pressed="true"] { background: var(--sel); box-shadow: inset 0 0 0 2px var(--accent); }
+.np-tab svg { flex: none; }
+.np-tabw { display: flex; align-items: center; gap: 4px; margin: -4px 0 10px; font-size: 12px; color: var(--muted); }
+.np-tabw[hidden] { display: none; }
+.np-tabw > span { flex: 1; }
+.np-tabw small { font-size: 10px; }
+.np-tabw button {
+  border: 0; border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; font-size: 12px; font-weight: 600;
+  height: 30px; padding: 0 9px; cursor: pointer; touch-action: manipulation;
+}
+.np-tabw button.on { background: var(--sel); box-shadow: inset 0 0 0 2px var(--accent); }

@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="css/app.css?v=11">
+<link rel="stylesheet" href="css/app.css?v=12">
 </head>
 <body class="home-on">
 <header>
@@ -45,6 +45,8 @@
 </header>
 
 <!-- 全画面のときに、指で1回たたくと出る「道具の帯」（js/quick.js）。色・太さの欄は、パレットの中身をここへ移して使う -->
+<!-- 小口のインデックス（「小口に出す」にした付箋。画面を1回たたくと、左右の端に出る。js/quick.js） -->
+<div id="edgeTabs" hidden></div>
 <div id="tray" hidden>
   <div class="trow"><div id="trayTools"></div></div>
   <div class="trow" id="trayPanel"></div>
@@ -132,7 +134,7 @@
     <b>本を入れる</b>：Googleドライブの「読書ノート」フォルダに、自炊した本のPDFを入れます（MacのFinderから入れられます。フォルダで分けてもかまいません）。「Driveの本を更新」を押すと本棚に並びます。<br>
     <b>読む</b>：本を押すと、最初の1回だけこのiPadにダウンロードしてから開きます。次からはすぐ開き、電波がなくても読めます。横向きにすると見開きになり、指で左右に払うとめくれます。2本指で拡大、2回たたくと拡大・元に戻す。<br>
     <b>書く</b>：マーカーとペンは、Apple Pencilで書きます（指はめくる・動かすのに使います）。<br>
-    <b>付箋</b>：付箋のボタンを押してから、貼りたい場所を軽くたたきます（指でも貼れます）。付箋をたたくとメモを書け、引っぱると動かせます。左上のページ一覧の「付箋」に、貼った付箋が並びます。<br>
+    <b>付箋</b>：付箋のボタンを押してから、貼りたい場所を軽くたたきます（指でも貼れます）。付箋をたたくとメモを書け、引っぱると動かせます。左上のページ一覧の「付箋」に、貼った付箋が並びます。付箋を開いて「小口に出す」を入れると、紙を1回たたいたときに画面の左右の端にインデックスとして出て、たたくとそのページへ飛べます（今より前のページは左、後ろのページは右に出ます。帯の幅は、付箋を開いた画面で「細い・ふつう・太い」から選べます）。<br>
     <b>全画面</b>：右上の四角いボタンで、道具をすべて隠して本だけにできます。指で1回たたくと、画面の下に道具・色・太さがまとめて出ます。2本指でたたくと、元に戻します（全画面でなくても使えます）。<br>
     <b>スクラップブック</b>：上のはさみのボタンで、いま開いているページを、選んだスクラップブックに写します（書き込み・付箋も一緒に写ります）。「一部を切り抜く」を選ぶと、ペンを紙に当てて離さずに引っぱり、囲んだ所だけを写せます（白い紙のまん中に、元の大きさで貼られます。スクラップブックの中で、切り抜きを指で長押しすると、そのままつかんで動かせます。大きさは「その他」から変えられます）。スクラップブックの中では、「その他」やページ一覧の「…」で、ページごとに白黒にできます（書き込みの色はそのまま）。写したあとは独立したノートなので、元の本を端末から消しても読めます。<br>
     書き込み・付箋・スクラップブックは、このiPadと、Googleドライブの「読書ノート」フォルダの中に自動で保存されます。</p></details>
@@ -194,6 +196,8 @@
       <span id="noteSizeV">100%</span>
     </span>
   </div>
+  <button id="noteTab" class="np-tab" aria-pressed="false"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 4h11l5 4v12H4z"/><path d="M15 4v4h5"/></svg><span>小口に出す（インデックス）<small>画面を1回たたくと、端に出て、そこから飛べる</small></span></button>
+  <div id="noteTabW" class="np-tabw" hidden><span>帯の幅<small>（全部の付箋で共通）</small></span><button data-tw="s">細い</button><button data-tw="m">ふつう</button><button data-tw="l">太い</button></div>
   <div id="noteSlot"></div>
   <div class="np-row"><button id="noteDel">付箋をはがす</button><span id="notePage"></span><button id="noteClose">閉じる</button></div>
 </div>
@@ -256,20 +260,20 @@
 window.APP_CONFIG.REDIRECT_URI = new URL('../', location.href).href;
 window.APP_CONFIG.RETURN_TO = 'dokusho/';
 </script>
-<script src="js/store.js?v=11"></script>
-<script src="js/source.js?v=11"></script>
-<script src="js/app.js?v=11"></script>
-<script src="js/toolbar.js?v=11"></script>
-<script src="js/pages.js?v=11"></script>
+<script src="js/store.js?v=12"></script>
+<script src="js/source.js?v=12"></script>
+<script src="js/app.js?v=12"></script>
+<script src="js/toolbar.js?v=12"></script>
+<script src="js/pages.js?v=12"></script>
 <script src="../js/google-auth.js?v=100"></script>
-<script src="js/drive.js?v=11"></script>
-<script src="js/notes.js?v=11"></script>
-<script src="js/scrap.js?v=11"></script>
-<script src="js/sync.js?v=11"></script>
-<script src="js/library.js?v=11"></script>
-<script src="js/quick.js?v=11"></script>
-<script src="js/palette.js?v=11"></script>
-<script src="js/slide.js?v=11"></script>
+<script src="js/drive.js?v=12"></script>
+<script src="js/notes.js?v=12"></script>
+<script src="js/scrap.js?v=12"></script>
+<script src="js/sync.js?v=12"></script>
+<script src="js/library.js?v=12"></script>
+<script src="js/quick.js?v=12"></script>
+<script src="js/palette.js?v=12"></script>
+<script src="js/slide.js?v=12"></script>
 <script>
 // 電波がなくても開けるように、アプリの部品をこの端末に取っておく（sw.js）
 // 新しい版が届いたら: 本を開いていなければすぐ、開いていれば、ほかのアプリから戻ってきたときに読み直す
