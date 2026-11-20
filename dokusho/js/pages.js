@@ -75,6 +75,13 @@
     document.body.classList.toggle('side-open', v);
     $('sideBtn').classList.toggle('on', v);
   }
+  // 一覧の外（紙・上のバーなど）をさわったら、一覧を閉じる。さわった操作（書く・めくる・ボタン）は、そのまま続く。
+  // 一覧から開いたメニュー・窓の中は別（閉じない）
+  document.addEventListener('pointerdown', function (e) {
+    if (!sideOpen || !e.target.closest) return;
+    if (side.contains(e.target) || e.target.closest('#sideBtn, .pop, #shareDlg')) return;
+    setSide(false);
+  }, true);
   $('sideBtn').addEventListener('click', function () {
     if (!S.hasFile) { App.setStatus('先にPDFを開いてください'); return; }
     setSide(!sideOpen);

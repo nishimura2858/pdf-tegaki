@@ -943,6 +943,8 @@ body.cutting #ink, body.cutting #still, body.cutting #stillUp { cursor: crosshai
   position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; touch-action: none;
   background: #fff; border: 2px solid var(--accent); box-sizing: border-box; box-shadow: 0 2px 6px rgba(0,0,0,.2);
 }
+#pieceEd.held .pe-h { display: none; }
+#pieceEd.held .pe-box { box-shadow: 0 8px 22px rgba(0,0,0,.28); }
 #pieceEd .pe-h::before { content: ''; position: absolute; inset: -12px; } /* 指でつかみやすく */
 #pieceEd .pe-h[data-h="lt"] { left: 0; top: 0; cursor: nwse-resize; }
 #pieceEd .pe-h[data-h="rt"] { left: 100%; top: 0; cursor: nesw-resize; }

@@ -6,7 +6,7 @@
    - 本のPDFそのものは、ここではなく IndexedDB に入れている（js/store.js）
    index.html の ?v= を上げたら、下の V も同じ番号にすること（古い控えを片づけるため）
    AUTH_V は、手書きノートと共通で使っている ../js/config.js・../js/google-auth.js の番号（index.html と合わせる） */
-var V = '10', AUTH_V = '80';
+var V = '11', AUTH_V = '80';
 var CACHE = 'dokusho-v' + V;
 var CORE = [
   './',

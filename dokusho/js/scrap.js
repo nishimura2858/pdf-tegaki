@@ -562,6 +562,44 @@
     pe.b = { x: Math.max(0, Math.min(1 - c.w, cx - c.w / 2)), y: Math.max(0, Math.min(1 - c.h, cy - c.h / 2)), w: c.w, h: c.h };
     drawPiece();
   });
+  // 切り抜きを指で長押しすると、そのままつかんで動かせる（離すと、そこに置いて保存する）
+  App.hooks.hold = function (cx, cy) {
+    if (S.kind !== 'scrap' || pe || App.busy()) return null;
+    var at = App.pageAt(cx, cy); if (!at || !isPiece(at.n)) return null;
+    var r = at.rect, b = itemAt(at.n).box;
+    if (!inBox(b, (cx - r.left) / r.width, (cy - r.top) / r.height)) return null;
+    var g = { x: cx, y: cy, last: null, end: null, b: null, r: null, raf: 0 };
+    function apply() {
+      g.raf = 0;
+      if (!pe || !g.b || !g.last) return;
+      var b = g.b, dx = (g.last.clientX - g.x) / g.r.width, dy = (g.last.clientY - g.y) / g.r.height;
+      pe.b = { x: Math.max(0, Math.min(1 - b.w, b.x + dx)), y: Math.max(0, Math.min(1 - b.h, b.y + dy)), w: b.w, h: b.h };
+      drawPiece();
+    }
+    function finish() {
+      if (g.raf) { cancelAnimationFrame(g.raf); apply(); }
+      if (g.end === 'cancel' && pe) pe.b = clone(pe.b0); // OSに取り消された: 元の場所へ
+      var moved = pe && ['x', 'y'].some(function (k) { return Math.abs(pe.b[k] - pe.b0[k]) > 1e-4; });
+      donePiece().then(function () { if (moved) App.setStatus('切り抜きを動かしました'); });
+    }
+    editPiece(at.n).then(function () {
+      if (!pe) return;
+      g.b = clone(pe.b); g.r = App.wrap.getBoundingClientRect();
+      peEl.classList.add('held'); peBar.hidden = true;
+      if (g.end) finish(); else { App.setStatus('指を動かして、置きたい所で離してください'); apply(); }
+    });
+    return {
+      move: function (pt, e) {
+        g.last = { clientX: e.clientX, clientY: e.clientY };
+        if (g.b && !g.raf) g.raf = requestAnimationFrame(apply);
+      },
+      up: function (e) {
+        peEl.classList.remove('held');
+        g.end = e && e.type === 'pointercancel' ? 'cancel' : 'up';
+        if (g.b) finish();
+      }
+    };
+  };
   App.on('page', function () { if (pe && S.page !== pe.n) donePiece(); });
   App.on('close', function () { if (pe) { pe = null; peEl.hidden = true; peBar.hidden = true; document.body.classList.remove('piece-on'); var v = $('piecePv'); if (v) v.remove(); $('pdfc').style.visibility = ''; } });
   App.on('resize', function () { if (pe) drawPiece(); });

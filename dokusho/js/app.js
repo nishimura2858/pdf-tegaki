@@ -31,7 +31,8 @@
   // save: この端末に保存する / saved・opened: Drive同期への知らせ
   // drawNotes: 付箋を描く / noteAt: その場所にある付箋 / tap: 指で軽くたたいたとき（付箋を貼る・開く）
   // singleTap: 指で1回たたいた（2回たたく拡大ではないと分かってから）/ twoTap: 2本指でたたいた
-  var hooks = { save: null, saved: null, opened: null, drawNotes: null, noteAt: null, tap: null, singleTap: null, twoTap: null };
+  // hold: 指1本で長押しした（動かさずに約0.45秒）。つかむもの（move/up を持つ）を返すと、その指はそれを動かすのに使う
+  var hooks = { save: null, saved: null, opened: null, drawNotes: null, noteAt: null, tap: null, singleTap: null, twoTap: null, hold: null };
   var tools = {};                            // 投げ縄・レーザーなど、別ファイルの道具
   var listeners = {};
   function on(ev, fn) { (listeners[ev] = listeners[ev] || []).push(fn); }
@@ -1860,8 +1861,21 @@
           atL: stage.scrollLeft <= 1, atR: stage.scrollLeft >= stage.scrollWidth - stage.clientWidth - 1,
           // 縦も同じ: 端まで来てから引っぱると、ページを移る
           atT: stage.scrollTop <= 1, atB: stage.scrollTop >= stage.scrollHeight - stage.clientHeight - 1, pull: 0, fling: wasFling };
+        if (hooks.hold) {
+          var hp = pan;
+          hp.holdT = setTimeout(function () {
+            hp.holdT = 0;
+            if (pan !== hp || hp.axis || hp.turn || hp.pull || T || turning || drawing || Object.keys(touches).length !== 1) return;
+            var hh = hooks.hold(hp.x0, hp.y0);
+            if (!hh) return;
+            dbg('指#' + hp.id + ' 長押し → つかむ');
+            pan = null; delete touches[hp.id]; lastTap = null;
+            drawing = { id: hp.id, h: hh, touch: true }; drawAt = performance.now();
+          }, 450);
+        }
       }
       else if (n === 2) {
+        if (pan) clearTimeout(pan.holdT);
         if (pan && pan.turn) turnUp(pan.turn, true);
         else if (pan && pan.pull) endPull(pan, true);
         pan = null; startPinch();
@@ -1918,7 +1932,10 @@
       touches[e.pointerId].x = e.clientX; touches[e.pointerId].y = e.clientY;
       if (pinch && Object.keys(touches).length === 2) { movePinch(); return; }
     }
-    if (pan && e.pointerId === pan.id) { panMove(e); return; }
+    if (pan && e.pointerId === pan.id) {
+      if (pan.holdT && Math.hypot(e.clientX - pan.x0, e.clientY - pan.y0) >= 10) { clearTimeout(pan.holdT); pan.holdT = 0; }
+      panMove(e); return;
+    }
     if (!drawing || e.pointerId !== drawing.id) return;
     e.preventDefault();
     drawAt = performance.now(); drawLast = e;
@@ -1965,6 +1982,7 @@
       delete touches[e.pointerId];
       if (pinch) { if (e.type === 'pointerup') endPinch(); else cancelPinch(); }
       if (pan && pan.id === e.pointerId) {
+        clearTimeout(pan.holdT);
         if (pan.turn) turnUp(pan.turn, e.type !== 'pointerup');
         else if (pan.want) { if (e.type === 'pointerup') { if (T || turning) queued += pan.want; else autoTurn(pan.want); } } // 入れかわる前に離した: そのままめくる
         else if (pan.pull || pan.ready) endPull(pan, e.type !== 'pointerup');
