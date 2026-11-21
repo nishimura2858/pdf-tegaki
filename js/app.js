@@ -117,11 +117,93 @@
   /* ペン・えんぴつの線: 点ごとの丸と、となりの丸をつなぐ帯を1つの形にまとめて、一度で塗る
      （区切りごとに線を重ねて描くと、重なった所のふちが濃くなってギザギザに見えたため。2026-11-16）
      - 筆圧は前後の点と平均して、太さが急に変わらないように
-     - 点の間が少し開いている所は、なめらかな曲線（Catmull-Rom）で点を補う（図形の辺のような長い区間はまっすぐ） */
+     - 点と点の間は、どれだけ離れていても、なめらかな曲線（求心型 Catmull-Rom）で点を補う
+       （速く書くと点の間が開く。前は離れた所を直線で結んでいたので、曲線がカクカクになった。2026-11-21）
+     - 向きが急に変わる所（Z・N の折り返しなど）は角として残し、その前後は曲げない
+     - 図形に直した線（三角・四角・直線）は、まっすぐのまま */
+  // 求心型 Catmull-Rom: 点の間隔がばらばらでも、行き過ぎたり輪になったりしにくい。b〜c の間の t（0〜1）の所
   function cr(a, b, c, d, t) {
-    var t2 = t * t, t3 = t2 * t;
-    function f(i) { return 0.5 * (2 * b[i] + (c[i] - a[i]) * t + (2 * a[i] - 5 * b[i] + 4 * c[i] - d[i]) * t2 + (3 * b[i] - a[i] - 3 * c[i] + d[i]) * t3); }
+    function kn(p, q) { return Math.max(1e-4, Math.sqrt(Math.hypot(q[0] - p[0], q[1] - p[1]))); }
+    var t1 = kn(a, b), t2 = t1 + kn(b, c), t3 = t2 + kn(c, d), u = t1 + (t2 - t1) * t;
+    function f(i) {
+      var A1 = ((t1 - u) * a[i] + u * b[i]) / t1;
+      var A2 = ((t2 - u) * b[i] + (u - t1) * c[i]) / (t2 - t1);
+      var A3 = ((t3 - u) * c[i] + (u - t2) * d[i]) / (t3 - t2);
+      var B1 = ((t2 - u) * A1 + u * A2) / t2;
+      var B2 = ((t3 - u) * A2 + (u - t1) * A3) / (t3 - t1);
+      return ((t2 - u) * B1 + (u - t1) * B2) / (t2 - t1);
+    }
     return [f(0), f(1), b[2] + (c[2] - b[2]) * t];
+  }
+  function refl(p, q) { return [2 * p[0] - q[0], 2 * p[1] - q[1], p[2]]; } // p をはさんで q の反対側
+  // 図形に直した線か（前の版で直した線は印がないので、点が少なく筆圧が一定かで見分ける）
+  function isShape(s) {
+    if (s.shape) return true;
+    var p = s.points;
+    if (p.length > 6) return false;
+    for (var i = 0; i < p.length; i++) if (p[i][2] !== 0.5) return false;
+    return true;
+  }
+  /* 線の形を、細かい点の並び [x, y, 半径] にする（W×H の大きさで）。画面にもPDFにも使う
+     step: 補う点の間かくのめやす */
+  function strokeOutline(s, W, H, step) {
+    var p = s.points, n = p.length, i, P = [], lim = W * 0.02;
+    step = step || 2.5;
+    // 筆圧は前から・後ろからの両方でならす（太さがゆっくりしか変わらないように）
+    var pr = [], f = p[0][2];
+    for (i = 0; i < n; i++) { f += (p[i][2] - f) * 0.18; pr.push(f); }
+    f = pr[n - 1];
+    for (i = n - 1; i >= 0; i--) { f += (pr[i] - f) * 0.18; pr[i] = f; }
+    var X = [], Y = [];
+    for (i = 0; i < n; i++) { X.push(p[i][0] * W); Y.push(p[i][1] * H); }
+    var shape = isShape(s);
+    if (shape && n <= 6) { // 三角・四角・直線: 角をそのまま
+      for (i = 0; i < n; i++) P.push([X[i], Y[i], Math.max(0.35, widthAt(s, W, pr[i]) / 2)]);
+      return P;
+    }
+    // 角（向きが80°以上かわる所）。点が近すぎる所は手のぶれなので角にしない
+    function corners() {
+      var c = [];
+      for (var i = 0; i < n; i++) {
+        c.push(false);
+        if (i === 0 || i === n - 1) continue;
+        var ux = X[i] - X[i - 1], uy = Y[i] - Y[i - 1], vx = X[i + 1] - X[i], vy = Y[i + 1] - Y[i];
+        var lu = Math.hypot(ux, uy), lv = Math.hypot(vx, vy);
+        if (lu < 4 * step / 2.5 || lv < 4 * step / 2.5) continue;
+        if ((ux * vx + uy * vy) / (lu * lv) < 0.17) c[i] = true;
+      }
+      return c;
+    }
+    // 手の細かいぶれをならす。となりの点が離れるほど弱く（急に切りかわって線がずれないように）。角はそのまま。2回かける
+    if (!shape) {
+      var C0 = corners();
+      for (var pass = 0; pass < 2; pass++) {
+        var X2 = X.slice(), Y2 = Y.slice();
+        for (i = 1; i < n - 1; i++) {
+          if (C0[i]) continue;
+          var dm = Math.max(Math.hypot(X[i] - X[i - 1], Y[i] - Y[i - 1]), Math.hypot(X[i] - X[i + 1], Y[i] - Y[i + 1]));
+          var w = Math.max(0, Math.min(1, 2 - 2 * dm / lim)); // lim の半分までは全部、lim で 0
+          if (!w) continue;
+          X2[i] = X[i] + w * ((X[i - 1] + 2 * X[i] + X[i + 1]) / 4 - X[i]);
+          Y2[i] = Y[i] + w * ((Y[i - 1] + 2 * Y[i] + Y[i + 1]) / 4 - Y[i]);
+        }
+        X = X2; Y = Y2;
+      }
+    }
+    var C = corners();
+    for (i = 0; i < n; i++) P.push([X[i], Y[i], Math.max(0.35, widthAt(s, W, pr[i]) / 2)]);
+    var Q = [P[0]];
+    for (i = 1; i < n; i++) {
+      var a = P[i - 1], b = P[i], d = Math.hypot(b[0] - a[0], b[1] - a[1]), k = Math.min(60, Math.floor(d / step));
+      if (k >= 1) {
+        // 線の端と角では、外へまっすぐ出るように仮の点を置く（その区間は角の所でまっすぐ向きを変える）
+        var a0 = (i >= 2 && !C[i - 1]) ? P[i - 2] : refl(a, b);
+        var b1 = (i <= n - 2 && !C[i]) ? P[i + 1] : refl(b, a);
+        for (var j = 1; j <= k; j++) Q.push(cr(a0, a, b, b1, j / (k + 1)));
+      }
+      Q.push(b);
+    }
+    return Q;
   }
   function band(ctx, a, b) { // 2つの丸の外側の接線でできる帯（丸と同じ向きに回る）
     var dx = b[0] - a[0], dy = b[1] - a[1], d = Math.hypot(dx, dy);
@@ -136,35 +218,7 @@
     ctx.moveTo(q[0][0], q[0][1]); ctx.lineTo(q[1][0], q[1][1]); ctx.lineTo(q[2][0], q[2][1]); ctx.lineTo(q[3][0], q[3][1]); ctx.closePath();
   }
   function segs(ctx, s, W, H) {
-    var p = s.points, n = p.length, i, P = [], Q, lim = W * 0.02;
-    // 筆圧は前から・後ろからの両方でならす（太さがゆっくりしか変わらないように）
-    var pr = [], f = p[0][2];
-    for (i = 0; i < n; i++) { f += (p[i][2] - f) * 0.18; pr.push(f); }
-    f = pr[n - 1];
-    for (i = n - 1; i >= 0; i--) { f += (pr[i] - f) * 0.18; pr[i] = f; }
-    // 手の細かいぶれをならす（となりの点が近いときだけ。図形の角はそのまま）。2回かける
-    var X = [], Y = [];
-    for (i = 0; i < n; i++) { X.push(p[i][0] * W); Y.push(p[i][1] * H); }
-    for (var pass = 0; pass < 2; pass++) {
-      var X2 = X.slice(), Y2 = Y.slice();
-      for (i = 1; i < n - 1; i++) {
-        if (Math.hypot(X[i] - X[i - 1], Y[i] - Y[i - 1]) < lim && Math.hypot(X[i] - X[i + 1], Y[i] - Y[i + 1]) < lim) {
-          X2[i] = (X[i - 1] + 2 * X[i] + X[i + 1]) / 4; Y2[i] = (Y[i - 1] + 2 * Y[i] + Y[i + 1]) / 4;
-        }
-      }
-      X = X2; Y = Y2;
-    }
-    for (i = 0; i < n; i++) P.push([X[i], Y[i], Math.max(0.35, widthAt(s, W, pr[i]) / 2)]);
-    Q = [P[0]];
-    for (i = 1; i < n; i++) {
-      var a = P[i - 1], b = P[i], d = Math.hypot(b[0] - a[0], b[1] - a[1]), k = Math.min(10, Math.floor(d / 2.5));
-      // 長い区間（図形に直した線の辺など）は、まっすぐのまま（角が丸まらないように）
-      if (k >= 1 && n > 2 && d < W * 0.02) {
-        var a0 = P[Math.max(0, i - 2)], b1 = P[Math.min(n - 1, i + 1)];
-        for (var j = 1; j <= k; j++) Q.push(cr(a0, a, b, b1, j / (k + 1)));
-      }
-      Q.push(b);
-    }
+    var Q = strokeOutline(s, W, H), i;
     ctx.fillStyle = s.color;
     ctx.beginPath();
     for (i = 0; i < Q.length; i++) {
@@ -357,7 +411,7 @@
     var s = S.live; if (!s || !x.snap || !st || st.n !== x.n || !st.ink || !crosses(x, s)) return;
     var c = st.ink.getContext('2d'), W = st.ink.width, H = st.ink.height;
     c.clearRect(0, 0, W, H); c.drawImage(x.snap, 0, 0);
-    drawItem(c, { tool: s.tool, color: s.color, width: s.width, points: crossPts(x, s.points) }, W, H);
+    drawItem(c, { tool: s.tool, color: s.color, width: s.width, points: crossPts(x, s.points), shape: s.shape }, W, H);
   }
   // 消した線と結ばれている、もう片方のページの写しも消す
   function dropLinked(gone) {
@@ -885,12 +939,14 @@
             pts.push([+q[0], +q[1], isFinite(q[2]) ? +q[2] : 0.5]);
         });
         if (!pts.length) return;
-        list.push({
+        var o = {
           tool: PENS[s.tool] ? s.tool : 'pen',
           color: /^#[0-9a-f]{3,8}$/i.test(s.color) ? s.color : '#1b2430',
           width: num(s.width, 0.5, 40, 4),
           points: pts
-        });
+        };
+        if (s.shape) o.shape = 1;
+        list.push(o);
       });
       if (list.length) res[k] = list;
     });
@@ -1841,6 +1897,13 @@
     }
     onInkDown(e);
   });
+  // 紙のまわりの余白（背景）: 指はふつうにスクロール・めくり・ピンチに使う（ペンは何もしない）
+  // （余白では何も反応しなかったので、紙が画面の外へずれると、指で戻せなくなった。2026-11-21）
+  stage.addEventListener('pointerdown', function (e) {
+    if (e.pointerType !== 'touch' || !S.hasFile) return;
+    if (e.target !== stage && e.target !== flow && e.target !== spine) return;
+    onInkDown(e);
+  });
   upEl.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   still.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   ink.addEventListener('pointermove', function (e) {
@@ -1884,7 +1947,7 @@
     var s = S.live, fixed = Shapes.recognize(s.points, S.cssW, S.cssH);
     if (!fixed) return;
     if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
-    s.points = fixed; d.shaped = true;
+    s.points = fixed; s.shape = 1; d.shaped = true;
     drawLive(0); drawnIdx = s.points.length;
     if (d.x) crossLive(d.x);
   }
@@ -1935,12 +1998,13 @@
         fixed = Shapes.recognize(s.points, S.cssW, S.cssH);
         if (fixed) s.points = fixed;
       }
+      if (fixed) s.shape = 1; // 図形に直した線（角を丸めずに描く）
       var xo = drawing.x && crosses(drawing.x, s) ? drawing.x : null;
       pushUndo(S.page, xo ? xo.n : 0);
       (S.strokes[S.page] = S.strokes[S.page] || []).push(s);
       if (xo) { // もう片方のページにも写しを入れる
         s.link = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-        (S.strokes[xo.n] = S.strokes[xo.n] || []).push({ tool: s.tool, color: s.color, width: s.width, points: crossPts(xo, s.points), link: s.link });
+        (S.strokes[xo.n] = S.strokes[xo.n] || []).push({ tool: s.tool, color: s.color, width: s.width, points: crossPts(xo, s.points), link: s.link, shape: s.shape });
         scheduleSave(xo.n); refreshStillInk();
       }
       S.live = null;
@@ -2020,7 +2084,7 @@
     openDoc: openDoc, setStatus: setStatus, dbg: dbg, hooks: hooks,
     drawInk: drawInk, drawList: drawList, renderPage: renderPage, renderThumb: renderThumb,
     goPage: goPage, updateUI: updateUI, pushUndo: pushUndo, commit: commit,
-    scheduleSave: scheduleSave, flushSave: flushSave, exportData: exportData,
+    scheduleSave: scheduleSave, flushSave: flushSave, exportData: exportData, strokeOutline: strokeOutline,
     setTool: setTool, insertPage: insertPage, deletePage: deletePage, movePage: movePage, rotatePage: rotatePage, addPageAt: addPageAt, duplicatePage: duplicatePage, clearPageAt: clearPageAt, addImage: addImage,
     setShift: setShift, setVert: setVert, setFling: setFling, flingLevel: function () { return flingLv; },
     setScrub: setScrub, scrubOn: function () { return scrubOn; },

@@ -144,6 +144,20 @@
           if (pts.length === 1) {
             ops.push(L.setLineWidth(wAt(pr(0))), L.moveTo(pts[0][0], pts[0][1]),
               L.lineTo(pts[0][0] + 0.01, pts[0][1]), L.stroke());
+          } else if (App.strokeOutline) {
+            // 画面と同じ形（曲線で補った点の並び）で描く。同じ太さが続く部分はまとめて1本で
+            var Q = App.strokeOutline(s, v.width, v.height, 1), qp = Q.map(function (q) { return v.convertToPdfPoint(q[0], q[1]); });
+            var lw = null;
+            for (var m = 1; m < qp.length; m++) {
+              var qw = Math.round((Q[m][2] + Q[m - 1][2]) * 20) / 20; // 半径の平均×2 = 太さ
+              if (qw !== lw) {
+                if (lw !== null) ops.push(L.stroke());
+                ops.push(L.setLineWidth(qw), L.moveTo(qp[m - 1][0], qp[m - 1][1]));
+                lw = qw;
+              }
+              ops.push(L.lineTo(qp[m][0], qp[m][1]));
+            }
+            ops.push(L.stroke());
           } else {
             // 筆圧で太さが変わる。同じ太さが続く部分はまとめて1本で描く
             var lastW = null;

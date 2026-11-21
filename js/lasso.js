@@ -35,10 +35,12 @@
     function X(x) { return r4(ox + (x - ox) * k + dx); }
     function Y(y) { return r4(oy + (y - oy) * k + dy); }
     if (s.tool === 'image') return { tool: 'image', id: s.id, x: X(s.x), y: Y(s.y), w: r4(s.w * k), h: r4(s.h * k) };
-    return {
+    var o = {
       tool: s.tool, color: s.color, width: Math.min(40, Math.max(0.5, Math.round(s.width * k * 100) / 100)),
       points: s.points.map(function (p) { return [X(p[0]), Y(p[1]), p[2]]; })
     };
+    if (s.shape) o.shape = 1;
+    return o;
   }
   function xform(s) {
     if (!sel || !sel.set.has(s) || (!sel.dx && !sel.dy && sel.s === 1)) return s;
