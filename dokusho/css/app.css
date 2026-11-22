@@ -879,8 +879,8 @@ header { position: relative; z-index: 10; background: var(--bg); }
   background: transparent; color: var(--text); font: inherit; cursor: pointer; touch-action: manipulation;
 }
 .h-spines {
-  --row: 172px; --board: 14px;
-  display: flex; flex-wrap: wrap; align-items: flex-end; column-gap: 2px; row-gap: var(--board);
+  --row: 300px; --board: 18px;
+  display: flex; flex-wrap: wrap; align-items: flex-end; align-content: flex-start; column-gap: 3px; row-gap: var(--board);
   padding: 0 12px var(--board); border-radius: 8px;
   background: repeating-linear-gradient(to bottom,
     var(--shelf-wall) 0, var(--shelf-wall) var(--row),
@@ -902,20 +902,38 @@ header { position: relative; z-index: 10; background: var(--bg); }
   box-shadow: inset 0 0 0 .5px rgba(0,0,0,.25), 1px 0 1px rgba(0,0,0,.18);
   transition: transform .15s;
 }
-.spine:active { transform: translateY(-8px); }
+.spine:active { transform: translateY(-12px); }
 .spine.on { transform: translateY(-5px); box-shadow: inset 0 0 0 .5px rgba(0,0,0,.25), 0 0 0 2px var(--accent); }
 .spine.cloud { opacity: .72; filter: saturate(.6); }
-.sp-band { flex: none; width: 100%; height: 6px; margin-top: 11px; background: var(--ac); }
-.sp-band.low { height: 4px; margin: 0 0 20px; }
+.sp-band { flex: none; width: 100%; height: 10px; margin-top: 20px; background: var(--ac); }
+.sp-band.low { height: 7px; margin: 0 0 34px; }
 .sp-title {
-  flex: 1; min-height: 0; margin: 8px 0; writing-mode: vertical-rl; text-orientation: mixed;
-  font-size: clamp(10px, calc(var(--w) * .42), 14px); font-weight: 600; letter-spacing: .08em; line-height: 1.1;
+  flex: 1; min-height: 0; margin: 14px 0; writing-mode: vertical-rl; text-orientation: mixed;
+  font-size: clamp(15px, calc(var(--w) * .4), 24px); font-weight: 600; letter-spacing: .08em; line-height: 1.1;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.sp-foot { position: absolute; left: 0; right: 0; bottom: 3px; display: flex; justify-content: center; }
+.sp-foot { position: absolute; left: 0; right: 0; bottom: 6px; display: flex; justify-content: center; }
 .sp-cloud { display: flex; }
-.sp-cloud svg { width: 14px; height: 14px; }
-.spine .t-dl { position: static; padding: 1px 3px; border-radius: 3px; font-size: 9.5px; background: rgba(0,0,0,.6); }
+.sp-cloud svg { width: 22px; height: 22px; }
+.spine .t-dl { position: static; padding: 2px 5px; border-radius: 4px; font-size: 12px; background: rgba(0,0,0,.6); }
+/* 本棚は、画面の下のほうまで棚が見えるように、少なくとも2段ぶんの高さにする（最後のフォルダだけ） */
+#shelf .h-spines:last-child { min-height: calc((var(--row) + var(--board)) * 2); }
+/* 本棚 ⇄ スクラップブック: 横に払って切りかえる */
+.h-tabs { display: flex; gap: 6px; min-width: 0; }
+.h-tab {
+  display: flex; align-items: center; gap: 8px; border: 0; background: transparent; color: var(--muted);
+  font: inherit; font-size: 18px; font-weight: 700; padding: 8px 10px; cursor: pointer; touch-action: manipulation; white-space: nowrap;
+  box-shadow: inset 0 -3px 0 transparent;
+}
+.h-tab.on { color: var(--text); box-shadow: inset 0 -3px 0 var(--accent); }
+.h-tab .h-ic { opacity: .75; } .h-tab.on .h-ic { opacity: 1; }
+.h-links[hidden] { display: none; }
+.h-pager {
+  display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+.h-pager::-webkit-scrollbar { display: none; }
+.h-page { flex: 0 0 100%; min-width: 0; box-sizing: border-box; scroll-snap-align: start; scroll-snap-stop: always; align-self: flex-start; }
 .h-card2 { background: var(--bar); border-radius: 14px; padding: 16px 18px; line-height: 1.8; font-size: 13.5px; box-shadow: 0 0 0 1px var(--line); margin: 4px 0 12px; }
 .h-card2 b { color: var(--text); }
 .h-usage { max-width: 1100px; margin: 0 auto 12px; color: var(--muted); font-size: 12px; }

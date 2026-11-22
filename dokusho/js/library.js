@@ -145,10 +145,10 @@
       im.src = url;
     });
   }
-  function spineSize(b, aspect) {
+  function spineSize(b, aspect) { // 大きめに表示する（読みやすいように、太さ・高さ・文字を約1.8倍に）
     var pages = +b.pages || (b.size ? Math.round(b.size / 350000) : 0);
-    var w = pages ? Math.max(22, Math.min(58, 16 + pages * 0.075)) : 30;
-    var h = aspect ? Math.max(128, Math.min(166, 128 + (aspect - 1.25) * 140)) : 144 + hashOf(b.id) % 5 * 5;
+    var w = pages ? Math.max(40, Math.min(104, 30 + pages * 0.135)) : 54;
+    var h = aspect ? Math.max(232, Math.min(292, 232 + (aspect - 1.25) * 250)) : 256 + hashOf(b.id) % 5 * 8;
     return { w: Math.round(w), h: Math.round(h) };
   }
   function spine(b) {
@@ -250,6 +250,7 @@
     App.flushSave(); savePos();
     document.body.classList.add('home-on');
     home.hidden = false;
+    goTab(tabIdx, false); // 非表示のあいだに横の位置が戻るので、開いていたほうへ戻す
     render().catch(function (e) { console.error(e); });
     if (window.GAuth && GAuth.hasToken() && Date.now() - lastRefresh > 10 * 60 * 1000) refresh(false);
   }
@@ -516,10 +517,31 @@
       case 'homeClose': hide(); break;
       case 'driveBtn': refresh(true); break;
       case 'addLocal': $('localFile').click(); break;
+      case 'tabShelf': goTab(0, true); break;
+      case 'tabScrap': goTab(1, true); break;
       case 'newScrap': Promise.resolve(Scrap.create()).then(render); break;
     }
   });
   $('openBtn').addEventListener('click', show);
+
+  /* ---------- 本棚 ⇄ スクラップブック（横に払って切りかえる） ---------- */
+  var pager = $('hPager'), tabIdx = 0, tabLock = 0;
+  function paintTab(i) {
+    tabIdx = i;
+    $('tabShelf').classList.toggle('on', i === 0); $('tabScrap').classList.toggle('on', i === 1);
+    $('tabShelf').setAttribute('aria-selected', String(i === 0)); $('tabScrap').setAttribute('aria-selected', String(i === 1));
+    $('linksShelf').hidden = i !== 0; $('linksScrap').hidden = i !== 1;
+  }
+  function goTab(i, smooth) {
+    paintTab(i);
+    tabLock = smooth ? Date.now() + 500 : 0;
+    pager.scrollTo({ left: i * pager.clientWidth, behavior: smooth ? 'smooth' : 'auto' });
+  }
+  pager.addEventListener('scroll', function () {
+    if (home.hidden || Date.now() < tabLock) return;
+    var i = Math.round(pager.scrollLeft / (pager.clientWidth || 1));
+    if (i !== tabIdx && (i === 0 || i === 1)) paintTab(i);
+  }, { passive: true });
 
   // 起動時: ログインから戻ってきたときは結果を伝える。新しい版に切りかえて読み直したときは、読んでいた本を開き直す
   (async function () {
