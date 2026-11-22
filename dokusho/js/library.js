@@ -91,8 +91,108 @@
   }
   function pct(dl) { return dl.total ? Math.min(99, Math.floor(dl.got / dl.total * 100)) + '%' : mb(dl.got); }
   function paintProgress(id) {
-    var el = home.querySelector('[data-book="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"] .t-dl b');
-    if (el && loading[id]) el.textContent = pct(loading[id]);
+    var els = home.querySelectorAll('[data-book="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"] .t-dl b');
+    for (var i = 0; i < els.length; i++) if (loading[id]) els[i].textContent = pct(loading[id]);
+  }
+
+  /* ---------- 本棚の背表紙 ----------
+     背表紙の絵はネットには出回っていない（本の情報のサイトにあるのは表紙だけ）ので、表紙の色から作る。
+     表紙でいちばん目立つ色を地の色に、次に目立つ色を上下の帯に。表紙がまだない本（一度も開いていない）は、名前から色を決める
+     太さはページ数（わからなければファイルの大きさ）、高さは表紙の縦横の比から */
+  function hashOf(t) { var h = 0; t = String(t); for (var i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0; return Math.abs(h); }
+  function hex(r, g, b) { return '#' + [r, g, b].map(function (v) { return ('0' + Math.round(v).toString(16)).slice(-2); }).join(''); }
+  function lum(r, g, b) { return (0.299 * r + 0.587 * g + 0.114 * b) / 255; }
+  function plainColors(name) { // 表紙がないとき: 名前から、落ち着いた色を
+    var h = hashOf(name) % 360;
+    return { bg: 'hsl(' + h + ',30%,36%)', ac: 'hsl(' + ((h + 28) % 360) + ',42%,72%)', fg: '#fbf8f1' };
+  }
+  var spineCache = {}; // id → { key: 表紙の印, c: 色, aspect }
+  function coverColors(url) {
+    return new Promise(function (res) {
+      var im = new Image();
+      im.onload = function () {
+        var W = 24, H = 34, c = document.createElement('canvas'); c.width = W; c.height = H;
+        var x = c.getContext('2d'); x.drawImage(im, 0, 0, W, H);
+        var d; try { d = x.getImageData(0, 0, W, H).data; } catch (e) { res(null); return; }
+        var bk = {}, white = 0, n = W * H;
+        for (var i = 0; i < d.length; i += 4) {
+          var r = d[i], g = d[i + 1], b = d[i + 2];
+          if (r > 232 && g > 232 && b > 232) { white++; continue; }
+          var k = (r >> 5) << 6 | (g >> 5) << 3 | (b >> 5), o = bk[k] || (bk[k] = { n: 0, r: 0, g: 0, b: 0 });
+          o.n++; o.r += r; o.g += g; o.b += b;
+        }
+        var list = Object.keys(bk).map(function (k) {
+          var o = bk[k], r = o.r / o.n, g = o.g / o.n, b = o.b / o.n, sat = (Math.max(r, g, b) - Math.min(r, g, b)) / 255;
+          return { r: r, g: g, b: b, n: o.n, s: o.n * (0.55 + sat) };
+        }).sort(function (a, b) { return b.s - a.s; });
+        var aspect = im.naturalHeight / (im.naturalWidth || 1);
+        c.width = c.height = 0;
+        if (!list.length || white > n * 0.5) { // 白い所が半分以上の表紙: 白い背表紙に、目立つ色の帯
+          var a0 = list[0] || { r: 120, g: 110, b: 100 };
+          res({ c: { bg: '#f3efe6', ac: hex(a0.r, a0.g, a0.b), fg: '#2a2620' }, aspect: aspect }); return;
+        }
+        var m = list[0], ac = null;
+        for (var j = 1; j < list.length && !ac; j++) {
+          var q = list[j];
+          if (Math.hypot(q.r - m.r, q.g - m.g, q.b - m.b) > 90 && q.n >= 3) ac = q;
+        }
+        if (!ac && white > n * 0.15) ac = { r: 246, g: 243, b: 236 };
+        if (!ac) { var k2 = lum(m.r, m.g, m.b) > 0.5 ? 0.55 : 1.6; ac = { r: Math.min(255, m.r * k2), g: Math.min(255, m.g * k2), b: Math.min(255, m.b * k2) }; }
+        var light = lum(m.r, m.g, m.b) > 0.58;
+        res({ c: { bg: hex(m.r, m.g, m.b), ac: hex(ac.r, ac.g, ac.b), fg: light ? '#1f1c17' : '#fbf8f1' }, aspect: aspect });
+      };
+      im.onerror = function () { res(null); };
+      im.src = url;
+    });
+  }
+  function spineSize(b, aspect) {
+    var pages = +b.pages || (b.size ? Math.round(b.size / 350000) : 0);
+    var w = pages ? Math.max(22, Math.min(58, 16 + pages * 0.075)) : 30;
+    var h = aspect ? Math.max(128, Math.min(166, 128 + (aspect - 1.25) * 140)) : 144 + hashOf(b.id) % 5 * 5;
+    return { w: Math.round(w), h: Math.round(h) };
+  }
+  function spine(b) {
+    var dl = loading[b.id], sc = spineCache[b.id], c = sc && sc.key === (b.thumb || '').length ? sc.c : plainColors(b.name);
+    var sz = spineSize(b, sc && sc.aspect), name = bare(b.name);
+    var foot = dl ? '<span class="t-dl"><b>' + pct(dl) + '</b></span>' : !b.has ? '<span class="sp-cloud">' + ICON.cloud + '</span>' : '';
+    return '<span class="sp-slot" data-book="' + esc(b.id) + '"><button class="spine' + (!b.has ? ' cloud' : '') + (b.id === cur ? ' on' : '') +
+      '" data-open="' + esc(b.id) + '" data-spine="' + esc(b.id) + '" aria-label="' + esc(name) + '" style="--w:' + sz.w + 'px;--h:' + sz.h +
+      'px;--bg:' + c.bg + ';--ac:' + c.ac + ';--fg:' + c.fg + '">' +
+      '<span class="sp-band"></span><span class="sp-title">' + esc(name) + '</span><span class="sp-band low"></span>' +
+      (foot ? '<span class="sp-foot">' + foot + '</span>' : '') + '</button></span>';
+  }
+  // 表紙から色を出し終わった本から、背表紙に色を付けていく
+  async function paintSpines(books, my) {
+    for (var i = 0; i < books.length; i++) {
+      var b = books[i];
+      if (!b.thumb) continue;
+      var sc = spineCache[b.id];
+      if (!sc || sc.key !== b.thumb.length) {
+        var r = await coverColors(b.thumb);
+        if (!r) continue;
+        sc = spineCache[b.id] = { key: b.thumb.length, c: r.c, aspect: r.aspect };
+      }
+      if (my !== seq) return;
+      var els = home.querySelectorAll('[data-spine="' + (window.CSS && CSS.escape ? CSS.escape(b.id) : b.id) + '"]');
+      var sz = spineSize(b, sc.aspect);
+      for (var j = 0; j < els.length; j++) {
+        var st = els[j].style;
+        st.setProperty('--bg', sc.c.bg); st.setProperty('--ac', sc.c.ac); st.setProperty('--fg', sc.c.fg);
+        st.setProperty('--w', sz.w + 'px'); st.setProperty('--h', sz.h + 'px');
+      }
+    }
+  }
+  // 最近読んでいる本（表紙を見せて棚の一番上に）
+  function faceTile(b) {
+    var prog = b.pages > 1 && b.last > 1 ? Math.round((b.last - 1) / (b.pages - 1) * 100) : 0;
+    var sub = b.pages ? (b.last && b.last > 1 ? b.last + ' / ' + b.pages + 'ページ' : b.pages + 'ページ') : '';
+    var cover = b.thumb ? '<img alt="" src="' + esc(b.thumb) + '">' : '<span class="t-ph">' + esc(bare(b.name).slice(0, 28)) + '</span>';
+    return '<div class="face' + (b.id === cur ? ' on' : '') + '" data-book="' + esc(b.id) + '">' +
+      '<div class="f-stand"><button class="f-cover" data-open="' + esc(b.id) + '" aria-label="' + esc(bare(b.name)) + '">' + cover +
+      (prog ? '<span class="t-prog"><i style="width:' + prog + '%"></i></span>' : '') + '</button>' +
+      '<button class="t-act f-act" data-more="' + esc(b.id) + '" aria-label="メニュー">' + ICON.more + '</button></div>' +
+      '<button class="f-label" data-open="' + esc(b.id) + '"><span class="t-name">' + esc(bare(b.name)) + '</span>' +
+      (sub ? '<span class="t-when">' + esc(sub) + '</span>' : '') + '</button></div>';
   }
 
   async function render() {
@@ -102,10 +202,10 @@
     var scraps = all.filter(function (b) { return b.kind === 'scrap'; })
       .sort(function (a, b) { return (b.lastAt || b.addedAt || 0) - (a.lastAt || a.addedAt || 0); });
     var books = all.filter(function (b) { return b.kind !== 'scrap'; });
-    // 続きを読む（最近開いた4つ）
-    var recent = all.filter(function (b) { return b.lastAt && (b.kind === 'scrap' ? b.pages > 0 : b.has); })
-      .sort(function (a, b) { return b.lastAt - a.lastAt; }).slice(0, 4);
-    $('recentGrid').innerHTML = recent.map(tile).join('');
+    // 最近読んでいる本（最近開いた5冊。表紙を見せて、棚の一番上に）
+    var recent = books.filter(function (b) { return b.lastAt && b.has; })
+      .sort(function (a, b) { return b.lastAt - a.lastAt; }).slice(0, 5);
+    $('recentGrid').innerHTML = recent.map(faceTile).join('');
     $('secRecent').hidden = !recent.length;
     // スクラップブック
     $('scrapGrid').innerHTML = scraps.map(tile).join('');
@@ -118,11 +218,13 @@
       groups[g].push(b);
     });
     order.sort(function (a, b) { return a.localeCompare(b, 'ja', { numeric: true }); });
+    // 2段目から下: 背表紙を見せて並べる（フォルダごとに1つの棚）
     $('shelf').innerHTML = order.map(function (g) {
       var name = g.replace(/^￿/, '');
       return (name ? '<h3 class="h-folder">' + esc(name) + '</h3>' : '') +
-        '<div class="h-grid">' + groups[g].sort(byName).map(tile).join('') + '</div>';
+        '<div class="h-spines">' + groups[g].sort(byName).map(spine).join('') + '</div>';
     }).join('');
+    paintSpines(books, my).catch(function (e) { console.error(e); });
     renderDrive(books);
     $('homeClose').hidden = !S.hasFile;
     // この端末に入っている量
@@ -384,8 +486,29 @@
     menuAt(anchor, items);
   }
 
+  // 背表紙は細くて「…」を置けないので、長押し（Macでは右クリック）でメニューを出す
+  var lp = null, lpFired = false;
+  home.addEventListener('pointerdown', function (e) {
+    lpFired = false; // 新しく触れたら、前の長押しの印は消す（長押しのあと click が来ないこともある）
+    var sp = e.target.closest('.spine'); if (!sp || e.button > 0) return;
+    clearTimeout(lp && lp.t);
+    lp = { x: e.clientX, y: e.clientY, t: setTimeout(function () { lpFired = true; lp = null; bookMenu(sp, sp.dataset.spine); }, 550) };
+  });
+  home.addEventListener('pointermove', function (e) {
+    if (lp && Math.hypot(e.clientX - lp.x, e.clientY - lp.y) > 10) { clearTimeout(lp.t); lp = null; }
+  });
+  ['pointerup', 'pointercancel'].forEach(function (t) { home.addEventListener(t, function () { if (lp) { clearTimeout(lp.t); lp = null; } }); });
+  home.addEventListener('scroll', function () { if (lp) { clearTimeout(lp.t); lp = null; } }, true);
+  home.addEventListener('contextmenu', function (e) {
+    var sp = e.target.closest('.spine'); if (!sp) return;
+    e.preventDefault();
+    if (lpFired) return;
+    bookMenu(sp, sp.dataset.spine);
+  });
+
   home.addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) return;
+    if (lpFired) { lpFired = false; if (b.classList.contains('spine')) return; }
     var d = b.dataset;
     if (d.open) { open(d.open); return; }
     if (d.more) { bookMenu(b, d.more); return; }

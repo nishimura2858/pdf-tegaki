@@ -34,6 +34,7 @@
   --sat: env(safe-area-inset-top, 0px); --sab: env(safe-area-inset-bottom, 0px);
   --sal: env(safe-area-inset-left, 0px); --sar: env(safe-area-inset-right, 0px);
   --pop-shadow: 0 14px 36px rgba(52,44,34,.20), 0 2px 6px rgba(52,44,34,.08);
+  --shelf-wall: #e4d8c3; --shelf-board: #b08155; --shelf-board-hi: #c99a6c; --shelf-board-lo: #8a6140; /* 本棚の板と奥の壁 */
   box-sizing: border-box;
 }
 @media (prefers-color-scheme: dark) {
@@ -44,6 +45,7 @@
     --chip: #f07a73; --chip-text: #ffffff; --sel: #4a2f2c;
     --pal: #3a372f; --pal-2: #302d27; --chip-glow: rgba(240,122,115,.3); --pal-text: #f4efe6; --pal-muted: #b5ad9f; --pal-chip: #f4efe6; --pal-chip-text: #34312c; --pal-line: rgba(255,255,255,.18); --pal-hi: rgba(255,255,255,.16); --pal-warn: #ffb0a8; --lav: #4a5578; --cream: #3a372f;
     --pop-shadow: 0 14px 36px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.3);
+    --shelf-wall: #24201a; --shelf-board: #5a4330; --shelf-board-hi: #6e5340; --shelf-board-lo: #3d2d20;
   }
 }
 :root[data-theme="dark"] {
@@ -53,6 +55,7 @@
   --chip: #f07a73; --chip-text: #ffffff; --sel: #4a2f2c;
   --pal: #3a372f; --pal-2: #302d27; --chip-glow: rgba(240,122,115,.3); --pal-text: #f4efe6; --pal-muted: #b5ad9f; --pal-chip: #f4efe6; --pal-chip-text: #34312c; --pal-line: rgba(255,255,255,.18); --pal-hi: rgba(255,255,255,.16); --pal-warn: #ffb0a8; --lav: #4a5578; --cream: #3a372f;
   --pop-shadow: 0 14px 36px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.3);
+  --shelf-wall: #24201a; --shelf-board: #5a4330; --shelf-board-hi: #6e5340; --shelf-board-lo: #3d2d20;
 }
 html, body { height: 100%; margin: 0; }
 /* ホーム画面のアプリでは、時計の欄の下まで使う設定にすると、100% が時計の欄の分だけ短くなり、下が空く（iPadの癖）。画面の高さそのものを使う */
@@ -843,6 +846,76 @@ header { position: relative; z-index: 10; background: var(--bg); }
 .h-ic.recent { color: #7d95d8; }
 .h-folder { font-size: 13.5px; font-weight: 700; color: var(--muted); margin: 18px 2px 8px; padding-bottom: 5px; border-bottom: 1px solid var(--line); }
 #shelf .h-grid + .h-folder { margin-top: 26px; }
+#shelf .h-spines + .h-folder { margin-top: 26px; }
+
+/* ---------- 本棚: 一番上は表紙を見せて（最近読んでいる本）、その下は背表紙を見せて並べる ---------- */
+.h-face {
+  --cov-h: 172px; --board: 14px;
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); column-gap: 10px; padding: 14px 14px 0; border-radius: 8px 8px 0 0;
+  background: linear-gradient(to bottom,
+    var(--shelf-wall) 0, var(--shelf-wall) calc(14px + var(--cov-h)),
+    var(--shelf-board-hi) calc(14px + var(--cov-h)), var(--shelf-board-hi) calc(17px + var(--cov-h)),
+    var(--shelf-board) calc(17px + var(--cov-h)), var(--shelf-board) calc(11px + var(--cov-h) + var(--board)),
+    var(--shelf-board-lo) calc(11px + var(--cov-h) + var(--board)), var(--shelf-board-lo) calc(14px + var(--cov-h) + var(--board)),
+    transparent calc(14px + var(--cov-h) + var(--board)));
+  box-shadow: inset 0 12px 20px -14px rgba(0,0,0,.3);
+}
+.h-face:empty { display: none; }
+@media (max-width: 600px) { .h-face { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.face { position: relative; min-width: 0; display: flex; flex-direction: column; align-items: center; }
+.f-stand { position: relative; width: 100%; height: var(--cov-h); margin-bottom: var(--board); display: flex; align-items: flex-end; justify-content: center; }
+.f-cover {
+  position: relative; width: min(120px, 94%); height: calc(var(--cov-h) - 8px); padding: 0; border: 0; overflow: hidden; cursor: pointer; touch-action: manipulation;
+  background: #fff; border-radius: 2px 4px 4px 2px;
+  box-shadow: inset 3px 0 4px -2px rgba(0,0,0,.25), 3px 2px 8px rgba(0,0,0,.28), 0 0 0 .5px rgba(0,0,0,.2);
+  transition: transform .15s;
+}
+.f-cover:active { transform: translateY(-4px) scale(.98); }
+.f-cover img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.face.on .f-cover { outline: 3px solid var(--accent); outline-offset: 2px; }
+.f-act { top: 2px; right: max(0px, calc(50% - 74px)); width: 30px; height: 30px; }
+.f-label {
+  width: 100%; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 2px 4px; border: 0;
+  background: transparent; color: var(--text); font: inherit; cursor: pointer; touch-action: manipulation;
+}
+.h-spines {
+  --row: 172px; --board: 14px;
+  display: flex; flex-wrap: wrap; align-items: flex-end; column-gap: 2px; row-gap: var(--board);
+  padding: 0 12px var(--board); border-radius: 8px;
+  background: repeating-linear-gradient(to bottom,
+    var(--shelf-wall) 0, var(--shelf-wall) var(--row),
+    var(--shelf-board-hi) var(--row), var(--shelf-board-hi) calc(var(--row) + 3px),
+    var(--shelf-board) calc(var(--row) + 3px), var(--shelf-board) calc(var(--row) + var(--board) - 3px),
+    var(--shelf-board-lo) calc(var(--row) + var(--board) - 3px), var(--shelf-board-lo) calc(var(--row) + var(--board)));
+  box-shadow: inset 0 12px 20px -14px rgba(0,0,0,.3);
+}
+.sp-slot { height: var(--row); display: flex; align-items: flex-end; }
+.spine {
+  position: relative; width: var(--w); height: var(--h); margin: 0; padding: 0; border: 0; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center;
+  color: var(--fg); font: inherit; cursor: pointer; touch-action: manipulation;
+  -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
+  background:
+    linear-gradient(90deg, rgba(0,0,0,.30) 0, rgba(0,0,0,.06) 12%, rgba(255,255,255,.16) 30%, rgba(255,255,255,0) 52%, rgba(0,0,0,.10) 82%, rgba(0,0,0,.32) 100%),
+    var(--bg);
+  border-radius: 2px 2px 1px 1px;
+  box-shadow: inset 0 0 0 .5px rgba(0,0,0,.25), 1px 0 1px rgba(0,0,0,.18);
+  transition: transform .15s;
+}
+.spine:active { transform: translateY(-8px); }
+.spine.on { transform: translateY(-5px); box-shadow: inset 0 0 0 .5px rgba(0,0,0,.25), 0 0 0 2px var(--accent); }
+.spine.cloud { opacity: .72; filter: saturate(.6); }
+.sp-band { flex: none; width: 100%; height: 6px; margin-top: 11px; background: var(--ac); }
+.sp-band.low { height: 4px; margin: 0 0 20px; }
+.sp-title {
+  flex: 1; min-height: 0; margin: 8px 0; writing-mode: vertical-rl; text-orientation: mixed;
+  font-size: clamp(10px, calc(var(--w) * .42), 14px); font-weight: 600; letter-spacing: .08em; line-height: 1.1;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sp-foot { position: absolute; left: 0; right: 0; bottom: 3px; display: flex; justify-content: center; }
+.sp-cloud { display: flex; }
+.sp-cloud svg { width: 14px; height: 14px; }
+.spine .t-dl { position: static; padding: 1px 3px; border-radius: 3px; font-size: 9.5px; background: rgba(0,0,0,.6); }
 .h-card2 { background: var(--bar); border-radius: 14px; padding: 16px 18px; line-height: 1.8; font-size: 13.5px; box-shadow: 0 0 0 1px var(--line); margin: 4px 0 12px; }
 .h-card2 b { color: var(--text); }
 .h-usage { max-width: 1100px; margin: 0 auto 12px; color: var(--muted); font-size: 12px; }

@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="css/app.css?v=13">
+<link rel="stylesheet" href="css/app.css?v=14">
 </head>
 <body class="home-on">
 <header>
@@ -112,13 +112,8 @@
     <button class="h-close" id="homeClose" hidden>読んでいた本に戻る</button>
   </div>
   <section class="h-sec" id="secRecent" hidden>
-    <div class="h-head"><h2><svg class="h-ic recent" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>続きを読む</h2></div>
-    <div class="h-grid" id="recentGrid"></div>
-  </section>
-  <section class="h-sec">
-    <div class="h-head"><h2><svg class="h-ic scrap" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6.5" cy="6.8" r="2.6"/><circle cx="6.5" cy="17.2" r="2.6"/><path d="M8.7 8.4L20.5 18M8.7 15.6L20.5 6"/></svg>スクラップブック</h2><button class="h-link" id="newScrap">＋ 新しく作る</button></div>
-    <div class="h-grid" id="scrapGrid"></div>
-    <p class="h-empty" id="scrapEmpty">いいなと思ったページを、本をまたいで集めたノートです。本を読んでいるときに、上のはさみのボタンで、そのページを入れられます（例:「音読指導」のスクラップブックに、いろいろな本の音読指導のページを集める）。</p>
+    <div class="h-head"><h2><svg class="h-ic recent" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>最近読んでいる本</h2></div>
+    <div class="h-face" id="recentGrid"></div>
   </section>
   <section class="h-sec">
     <div class="h-head"><h2><svg class="h-ic shelf" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 4v16M8.5 4v16M4.5 4h4M4.5 20h4M4.5 8h4"/><path d="M12.5 5.6l3.6-1 3.6 14-3.6 1z"/></svg>本棚</h2>
@@ -129,9 +124,15 @@
     <div id="shelf"></div>
     <input id="localFile" type="file" accept="application/pdf" hidden>
   </section>
+  <section class="h-sec">
+    <div class="h-head"><h2><svg class="h-ic scrap" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6.5" cy="6.8" r="2.6"/><circle cx="6.5" cy="17.2" r="2.6"/><path d="M8.7 8.4L20.5 18M8.7 15.6L20.5 6"/></svg>スクラップブック</h2><button class="h-link" id="newScrap">＋ 新しく作る</button></div>
+    <div class="h-grid" id="scrapGrid"></div>
+    <p class="h-empty" id="scrapEmpty">いいなと思ったページを、本をまたいで集めたノートです。本を読んでいるときに、上のはさみのボタンで、そのページを入れられます（例:「音読指導」のスクラップブックに、いろいろな本の音読指導のページを集める）。</p>
+  </section>
   <p class="h-usage" id="usage"></p>
   <details class="h-help"><summary>使い方</summary><p>
     <b>本を入れる</b>：Googleドライブの「読書ノート」フォルダに、自炊した本のPDFを入れます（MacのFinderから入れられます。フォルダで分けてもかまいません）。「Driveの本を更新」を押すと本棚に並びます。<br>
+    <b>本棚</b>：いちばん上の段には、最近読んだ5冊が表紙を見せて並びます。その下の段には、すべての本が背表紙を見せて並びます（背表紙の色は表紙の色から、太さはページ数から決まります。まだ一度も開いていない本は、名前から決めた色になります）。背表紙を長押しすると、本のメニューが出ます。<br>
     <b>読む</b>：本を押すと、最初の1回だけこのiPadにダウンロードしてから開きます。次からはすぐ開き、電波がなくても読めます。横向きにすると見開きになり、指で左右に払うとめくれます。2本指で拡大、2回たたくと拡大・元に戻す。<br>
     <b>書く</b>：マーカーとペンは、Apple Pencilで書きます（指はめくる・動かすのに使います）。<br>
     <b>付箋</b>：付箋のボタンを押してから、貼りたい場所を軽くたたきます（指でも貼れます）。付箋をたたくとメモを書け、引っぱると動かせます。左上のページ一覧の「付箋」に、貼った付箋が並びます。付箋を指2本でつまんでひねると、縦向き⇔横向きが変わります。付箋を引っぱってページの外側（小口）へはみ出させるか、付箋を開いて「小口に出す」を入れると、紙を1回たたいたときに画面の左右の端にインデックスとして出て、たたくとそのページへ飛べます（今より前のページは左、後ろのページは右に出ます。帯の幅は、付箋を開いた画面で「細い・ふつう・太い」から選べます）。<br>
@@ -260,20 +261,20 @@
 window.APP_CONFIG.REDIRECT_URI = new URL('../', location.href).href;
 window.APP_CONFIG.RETURN_TO = 'dokusho/';
 </script>
-<script src="js/store.js?v=13"></script>
-<script src="js/source.js?v=13"></script>
-<script src="js/app.js?v=13"></script>
-<script src="js/toolbar.js?v=13"></script>
-<script src="js/pages.js?v=13"></script>
+<script src="js/store.js?v=14"></script>
+<script src="js/source.js?v=14"></script>
+<script src="js/app.js?v=14"></script>
+<script src="js/toolbar.js?v=14"></script>
+<script src="js/pages.js?v=14"></script>
 <script src="../js/google-auth.js?v=100"></script>
-<script src="js/drive.js?v=13"></script>
-<script src="js/notes.js?v=13"></script>
-<script src="js/scrap.js?v=13"></script>
-<script src="js/sync.js?v=13"></script>
-<script src="js/library.js?v=13"></script>
-<script src="js/quick.js?v=13"></script>
-<script src="js/palette.js?v=13"></script>
-<script src="js/slide.js?v=13"></script>
+<script src="js/drive.js?v=14"></script>
+<script src="js/notes.js?v=14"></script>
+<script src="js/scrap.js?v=14"></script>
+<script src="js/sync.js?v=14"></script>
+<script src="js/library.js?v=14"></script>
+<script src="js/quick.js?v=14"></script>
+<script src="js/palette.js?v=14"></script>
+<script src="js/slide.js?v=14"></script>
 <script>
 // 電波がなくても開けるように、アプリの部品をこの端末に取っておく（sw.js）
 // 新しい版が届いたら: 本を開いていなければすぐ、開いていれば、ほかのアプリから戻ってきたときに読み直す
