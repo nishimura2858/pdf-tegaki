@@ -10,6 +10,9 @@ window.APP_CONFIG = {
   APP_ID: '519206114844',
   // Drive全体（元のPDFに書き込みを反映するため。Google Cloud の「データアクセス」にも同じものを登録）
   SCOPE: 'https://www.googleapis.com/auth/drive',
+  // 県のOneDriveと同期しているGoogleドライブのフォルダ「00 OneDriveと同期」（自宅Macのrcloneで5分ごとに同期）
+  // 書き込みを反映するPDFは、まずこの中（サブフォルダを含む）から探す。この中のPDFは、書き終えて約2分後に反映する
+  SYNC_FOLDER: '1pV-pa_6LIqakdUKnod6fqfdn8PPdi58B',
   // ログインを続けるためのサーバー（worker/ フォルダ。Cloudflare Workers）
   AUTH_SERVER: 'https://pdf-tegaki-auth.nishimura2858.workers.dev'
 };

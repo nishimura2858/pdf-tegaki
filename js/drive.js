@@ -1,6 +1,8 @@
 /* Google Drive API の呼び出し
    権限は「Drive全体」（元のPDFに書き込みを反映するため）。ただし実際に触るのは、
-   このアプリで開いたPDFと、このアプリが作ったファイル（PDF手書きデータ フォルダの中）だけ */
+   このアプリで開いたPDFと、このアプリが作ったファイル（PDF手書きデータ フォルダの中）だけ
+   - 「PDF手書きデータ」はマイドライブ直下に作る。OneDriveと同期しているフォルダ（00 OneDriveと同期）の外なので、
+     手書きデータ（.strokes.json）や書き込み前の控えが県のOneDriveへ同期されることはない */
 (function () {
   'use strict';
   var API = 'https://www.googleapis.com/drive/v3/files';
@@ -88,16 +90,39 @@
 
   /* ---------- 元のPDFへの書き込み反映で使うもの ---------- */
 
-  // 名前と中身（MD5）が一致するPDFを探す。md5s のどれかに一致したものを返す。なければ null
-  function findPdf(name, md5s, token) {
+  /* 同期フォルダ（APP_CONFIG.SYNC_FOLDER「00 OneDriveと同期」）の中（サブフォルダを含む）にあるか
+     親のフォルダを上へたどって調べる。調べたフォルダの結果は覚えておく（同じフォルダを何度も聞かない） */
+  var syncOf = {}; // フォルダID → true（同期フォルダの中）/ false（外）
+  async function inSyncFolder(file, token) {
+    var sync = window.APP_CONFIG && APP_CONFIG.SYNC_FOLDER;
+    if (!sync || !file) return false;
+    syncOf[sync] = true;
+    var id = file.parents && file.parents[0], path = [];
+    for (var depth = 0; id && depth < 30; depth++) {
+      if (id in syncOf) break;
+      path.push(id);
+      var f = await call(API + '/' + encodeURIComponent(id) + '?fields=id,parents&supportsAllDrives=true', token);
+      id = f.parents && f.parents[0];
+    }
+    var ans = !!(id && syncOf[id]);
+    path.forEach(function (p) { syncOf[p] = ans; });
+    return ans;
+  }
+
+  /* 名前と中身（MD5）が一致するPDFを探す。md5s のどれかに一致したものを返す。なければ null
+     同期フォルダの中にあるものを優先し（新しいものから）、なければほかの場所のもの。返すファイルに inSync を付ける */
+  async function findPdf(name, md5s, token) {
     var query = "name='" + q(name) + "' and mimeType='application/pdf' and trashed=false";
-    return list(query, 'id,name,md5Checksum,capabilities(canEdit)', token).then(function (files) {
-      for (var i = 0; i < files.length; i++) if (md5s.indexOf(files[i].md5Checksum) >= 0) return files[i];
-      return null;
-    });
+    var files = (await list(query, 'id,name,md5Checksum,parents,modifiedTime,capabilities(canEdit)', token))
+      .filter(function (f) { return md5s.indexOf(f.md5Checksum) >= 0; });
+    for (var i = 0; i < files.length; i++) {
+      if (await inSyncFolder(files[i], token)) { files[i].inSync = true; return files[i]; }
+    }
+    if (files[0]) files[0].inSync = false;
+    return files[0] || null;
   }
   function getMeta(id, token) {
-    return call(API + '/' + encodeURIComponent(id) + '?fields=id,name,md5Checksum,trashed,appProperties&supportsAllDrives=true', token);
+    return call(API + '/' + encodeURIComponent(id) + '?fields=id,name,md5Checksum,trashed,parents,appProperties,capabilities(canEdit)&supportsAllDrives=true', token);
   }
   // 書き込む前の元のPDFの控え（PDF手書きデータ フォルダ内）を探す
   function findOriginal(base, token) {
@@ -121,11 +146,66 @@
       body: JSON.stringify({ appProperties: props })
     });
   }
-  // PDFの中身を上書きする
+  /* PDFの中身を上書きする
+     - 5MBまでは1回で送る。5MBを超えるものは、小分けにして送る（再開可能アップロード）。
+       途中で通信が切れても、続きから送り直せる（教科書のような大きなPDF用）
+     - どちらの送り方でも、Driveの中身は最後まで届いた時点で一度に切り替わる。
+       書きかけのファイルが見えることはない（rcloneでOneDriveへ同期されても安全） */
+  var SIMPLE_MAX = 5 * 1024 * 1024;
+  var CHUNK = 8 * 1024 * 1024; // 256KBの倍数にすること（Driveの決まり）
   function uploadPdf(id, bytes, token) {
+    var size = bytes.byteLength != null ? bytes.byteLength : bytes.length;
+    if (size <= SIMPLE_MAX) return uploadSimple(id, bytes, token);
+    return uploadResumable(id, bytes, size, token).catch(function (e) {
+      // 小分けの送り方が使えなかった（送り先を受け取れないなど）→ 1回で送る
+      if (e && e.message === 'no_session') return uploadSimple(id, bytes, token);
+      throw e;
+    });
+  }
+  function uploadSimple(id, bytes, token) {
     return call(UPLOAD + '/' + encodeURIComponent(id) + '?uploadType=media&fields=id,md5Checksum&supportsAllDrives=true', token, {
       method: 'PATCH', headers: { 'Content-Type': 'application/pdf' }, body: new Blob([bytes], { type: 'application/pdf' })
     });
+  }
+  function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  // Driveが受け取った所までのバイト数（「Range: bytes=0-N」→ N+1）。わからなければ null
+  function received(r) {
+    var m = /bytes=0-(\d+)/.exec(r.headers.get('Range') || '');
+    return m ? +m[1] + 1 : null;
+  }
+  async function uploadResumable(id, bytes, size, token) {
+    // 1. 送り先（この上書き専用のURL）を用意してもらう
+    var r0 = await fetch(UPLOAD + '/' + encodeURIComponent(id) + '?uploadType=resumable&fields=id,md5Checksum&supportsAllDrives=true', {
+      method: 'PATCH',
+      headers: auth(token, { 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': 'application/pdf', 'X-Upload-Content-Length': String(size) }),
+      body: '{}'
+    });
+    if (!r0.ok) throw httpError(r0);
+    var url = r0.headers.get('Location');
+    if (!url) throw new Error('no_session');
+    var blob = new Blob([bytes], { type: 'application/pdf' });
+    // 2. 小分けにして送る。通信が切れたら、Driveが受け取った所を聞いて、続きから送る
+    var pos = 0, fails = 0;
+    while (true) {
+      var end = Math.min(pos + CHUNK, size), r;
+      try {
+        r = await fetch(url, { method: 'PUT', headers: { 'Content-Range': 'bytes ' + pos + '-' + (end - 1) + '/' + size }, body: blob.slice(pos, end) });
+      } catch (e) {
+        r = null; // 通信が切れた
+      }
+      if (r && (r.status === 200 || r.status === 201)) return r.json(); // 全部届いた（ここで中身が切り替わる）
+      if (r && r.status === 308) { var got = received(r); pos = got != null ? got : end; fails = 0; continue; }
+      if (r && r.status >= 400 && r.status < 500 && r.status !== 408 && r.status !== 429) throw httpError(r); // 送り先の期限切れなど
+      // 通信エラー・サーバーの一時的な不調 → 少し待って、受け取った所を聞いてから続きを送る
+      if (++fails > 4) throw r ? httpError(r) : new Error('upload_network');
+      await wait(1000 * Math.pow(2, fails));
+      try {
+        var s = await fetch(url, { method: 'PUT', headers: { 'Content-Range': 'bytes */' + size } });
+        if (s.status === 200 || s.status === 201) return s.json();
+        if (s.status === 308) { var g = received(s); if (g != null) pos = g; }
+        else if (s.status >= 400 && s.status < 500) throw httpError(s);
+      } catch (e) { if (e && e.status) throw e; }
+    }
   }
 
   /* 自分のドライブに since（ISO形式の時刻）より後に新しく置かれたPDF（新しいものから）
@@ -143,6 +223,6 @@
     downloadFile: downloadFile, ensureFolder: ensureFolder, findStrokes: findStrokes, findStrokesByName: findStrokesByName,
     getJson: getJson, createStrokes: createStrokes, updateStrokes: updateStrokes,
     findPdf: findPdf, getMeta: getMeta, findOriginal: findOriginal, createOriginal: createOriginal,
-    setAppProps: setAppProps, uploadPdf: uploadPdf
+    setAppProps: setAppProps, uploadPdf: uploadPdf, inSyncFolder: inSyncFolder
   };
 })();

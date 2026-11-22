@@ -1,6 +1,9 @@
 /* 書き込みを、Driveにある元のPDFそのものに反映する
    - Macのファインダーなど、ほかのアプリで開いても書き込みが見えるようにするため
    - 反映するのは、書いてから30分後・アプリを離れたとき・「Drive」ボタンを押したとき（通信量を抑えるため）
+   - ただし同期フォルダ「00 OneDriveと同期」（config.js の SYNC_FOLDER）の中のPDFは、書き終えて約2分後に反映する
+     （県のOneDriveへは、自宅Macのrcloneが5分ごとに同期する。書き続けていても、10分たてば一度反映する）
+   - 書き換えるPDFは、まず同期フォルダの中から探し、なければほかの場所から探す（名前と中身が同じもの）
    - 書き込み入りPDFには、元のPDFの識別子（TegakiBase）を入れておく。次に開いたときは
      「元のPDF＋手書きデータ」として開くので、前の書き込みも消しゴムで消せる
    - 元のPDFの控えは「PDF手書きデータ」フォルダに置く（ほかの端末でも続きを書けるように）
@@ -10,8 +13,10 @@
   'use strict';
   var App = window.App;
   var INTERVAL = 30 * 60 * 1000, RETRY = 5 * 60 * 1000;
+  var SHORT = 2 * 60 * 1000, MAXWAIT = 10 * 60 * 1000; // 同期フォルダの中のPDF: 書き終えて2分後。書き続けても10分で一度
+  function delayFor(c) { return c && c.inSync ? SHORT : INTERVAL; }
   var LIB = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js';
-  var cur = null, timer = null, busy = false, again = null, libP = null;
+  var cur = null, timer = null, due = 0, busy = false, again = null, libP = null;
 
   function readMeta(base) { try { return JSON.parse(localStorage.getItem('pdfw:' + base)) || {}; } catch (e) { return {}; } }
   function writeMeta(base, m) { try { localStorage.setItem('pdfw:' + base, JSON.stringify(m)); } catch (e) {} }
@@ -19,6 +24,7 @@
   function hhmm() { var d = new Date(); return d.getHours() + ':' + ('0' + d.getMinutes()).slice(-2); }
   function schedule(ms) {
     clearTimeout(timer);
+    due = Date.now() + ms;
     timer = setTimeout(function () { timer = null; flush(cur); }, ms);
   }
 
@@ -187,6 +193,40 @@
   }
   function jsonBase(name) { return String(name || 'PDF').replace(/\.pdf$/i, ''); }
 
+  /* 書き換えるPDFを探す。前に書き換えたファイル（m.fileId）が同期フォルダの外なら、
+     同期フォルダの中に同じもの（名前と中身が expect のどれか）がないかも探して、あればそちらにする。
+     返すファイルには inSync（同期フォルダの中か）が付く。見つからなければ null */
+  async function findTarget(c, m, expect, token) {
+    var target = null;
+    if (m.fileId) {
+      try { var fm = await Drive.getMeta(m.fileId, token); if (!fm.trashed) target = fm; }
+      catch (e) { if (e.status !== 404) throw e; }
+      if (target) target.inSync = await Drive.inSyncFolder(target, token);
+    }
+    if (!target || !target.inSync) {
+      var found = await Drive.findPdf(c.name, expect, token);
+      if (found && (!target || found.inSync)) target = found;
+    }
+    return target;
+  }
+
+  /* 開いたPDFが同期フォルダの中かを調べる（反映までの時間を決めるため）。書き換えはしない */
+  async function locate(c) {
+    if (!c || !window.GAuth || !GAuth.hasToken()) return;
+    var m = readMeta(c.base);
+    if (typeof m.inSync === 'boolean') c.inSync = m.inSync; // 前に調べた結果を、まず使う
+    try {
+      var token = await GAuth.ensure();
+      if (!token || c !== cur) return;
+      var t = await findTarget(c, m, [m.md5, c.fileMd5, c.origMd5].filter(function (x) { return !!x; }), token);
+      if (c !== cur || !t) return;
+      c.inSync = !!t.inSync;
+      var m2 = readMeta(c.base); m2.inSync = c.inSync; writeMeta(c.base, m2);
+      App.dbg('PDF反映: ' + (c.inSync ? '同期フォルダの中のPDF（書き終えて2分後に反映）' : '同期フォルダの外のPDF'));
+      if (c.inSync && m2.dirty && timer && !busy && due - Date.now() > SHORT) schedule(SHORT); // 調べている間に書いていたら、2分待ちに縮める
+    } catch (e) { console.error(e); if (e.status === 401) GAuth.invalidate(); }
+  }
+
   /* Driveの元のPDFに反映する。force: ボタンから（ほかで変更されていても、確認のうえ上書きできる） */
   async function flush(c, force) {
     if (!c) return;
@@ -208,12 +248,11 @@
       var orig = await Drive.findOriginal(c.base, token);
       var expect = [m.md5, orig && orig.appProperties && orig.appProperties.lastMd5, c.fileMd5, c.origMd5]
         .filter(function (x) { return !!x; });
-      var target = null;
-      if (m.fileId) {
-        try { var fm = await Drive.getMeta(m.fileId, token); if (!fm.trashed) target = fm; }
-        catch (e) { if (e.status !== 404) throw e; }
+      var target = await findTarget(c, m, expect, token);
+      if (target) {
+        c.inSync = !!target.inSync;
+        var mi = readMeta(c.base); mi.inSync = c.inSync; writeMeta(c.base, mi);
       }
-      if (!target) target = await Drive.findPdf(c.name, expect, token);
       if (!target) {
         m = readMeta(c.base); m.dirty = false; writeMeta(c.base, m);
         note('このPDFはDriveに見つからないため、PDFへの反映はしていません（手書きデータはDriveに保存されます）');
@@ -248,10 +287,11 @@
       var m2 = readMeta(c.base);
       m2.fileId = target.id; m2.md5 = res.md5Checksum; m2.at = Date.now(); m2.conflict = false;
       m2.dirty = m2.dirtyAt !== dirtyAt; // 送っている間にまた書いたら、まだ反映が必要
+      if (!m2.dirty) delete m2.since;
       writeMeta(c.base, m2);
       try { await Drive.setAppProps(orig.id, { lastMd5: res.md5Checksum }, token); } catch (e) { console.error(e); }
       note('PDFに書き込みを反映しました（' + hhmm() + '）');
-      if (m2.dirty && c === cur && !timer) schedule(INTERVAL);
+      if (m2.dirty && c === cur && !timer) schedule(delayFor(c));
     } catch (e) {
       console.error(e);
       if (e.status === 401) { GAuth.invalidate(); note('PDFへの反映は、Driveにログインし直してから行います'); }
@@ -269,15 +309,20 @@
     }
   }
 
-  // 手書きがこの端末に保存されたとき → 30分後に反映
+  // 手書きがこの端末に保存されたとき → 30分後に反映（同期フォルダの中のPDFは、書き終えて2分後）
   var prevSaved = App.hooks.saved;
   App.hooks.saved = function (key) {
     if (prevSaved) prevSaved(key);
     if (!cur || key !== 'strokes:pdf:' + cur.base) return;
-    var m = readMeta(cur.base);
-    m.dirty = true; m.dirtyAt = Date.now();
+    var m = readMeta(cur.base), now = Date.now();
+    if (!m.dirty || !m.since) m.since = now; // 反映していない書き込みが始まった時刻
+    m.dirty = true; m.dirtyAt = now;
     writeMeta(cur.base, m);
-    if (!timer && !busy) schedule(INTERVAL);
+    if (busy) return; // 送り終えたあとに、改めて待つ
+    if (cur.inSync) {
+      // 書くたびに2分待ち直す。ただし書き続けて10分たったら、待ち直さない（その2分後に反映）
+      if (!timer || now - m.since < MAXWAIT) schedule(SHORT);
+    } else if (!timer) schedule(INTERVAL);
   };
 
   // ファイルを開いたとき → 前のPDFに未反映の分があれば反映する
@@ -291,6 +336,7 @@
     if (prev && prev !== cur && readMeta(prev.base).dirty) flush(prev);
     // 前回反映できなかった分が残っていれば、少し待ってから反映
     if (cur && readMeta(cur.base).dirty) schedule(15000);
+    if (cur) locate(cur); // 同期フォルダの中のPDFか調べる
   };
 
   // アプリを離れるとき（ほかのアプリに切り替える・閉じる）は、待たずに反映
