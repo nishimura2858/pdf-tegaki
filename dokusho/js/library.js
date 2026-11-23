@@ -151,7 +151,27 @@
     var h = aspect ? Math.max(232, Math.min(292, 232 + (aspect - 1.25) * 250)) : 256 + hashOf(b.id) % 5 * 8;
     return { w: Math.round(w), h: Math.round(h) };
   }
+  /* 本物の背表紙の写真（裁断した本の背を撮って切り出したもの。spines/ に入れてある）
+     本の名前で合わせる。r は 背の太さ÷背の高さ（写真から測った値）。棚では、この比のまま細さを再現する */
+  var SPINE_PHOTOS = [
+    { re: /^英語教育[\s　]*2026[.．]0?8$/, src: 'spines/eigo-kyoiku-2026-08.jpg', r: 0.01824 },
+    { re: /^英語教育[\s　]*2026[.．]0?9$/, src: 'spines/eigo-kyoiku-2026-09.jpg', r: 0.01886 },
+    { re: /^英語教育[\s　]*2026[.．]10$/, src: 'spines/eigo-kyoiku-2026-10.jpg', r: 0.01974 },
+    { re: /^英語教育[\s　]*2026[.．]11$/, src: 'spines/eigo-kyoiku-2026-11.jpg', r: 0.02056 },
+    { re: /^英語教育[\s　]*2026[.．]12$/, src: 'spines/eigo-kyoiku-2026-12.jpg', r: 0.01894 }
+  ];
+  function spinePhoto(b) {
+    var n = bare(b.name).trim();
+    for (var i = 0; i < SPINE_PHOTOS.length; i++) if (SPINE_PHOTOS[i].re.test(n)) return SPINE_PHOTOS[i];
+    return null;
+  }
+  function photoSize(b, ph) { // 高さはほかの本と同じ決め方（この雑誌はB5判: 縦÷横 = 257÷182）。太さは写真の比のまま（本物と同じ細さ）
+    var h = spineSize(b, ph.aspect || 257 / 182).h;
+    return { w: Math.max(3, Math.round(h * ph.r * 10) / 10), h: h };
+  }
   function spine(b) {
+    var ph = spinePhoto(b);
+    if (ph) return photoSpine(b, ph);
     var dl = loading[b.id], sc = spineCache[b.id], c = sc && sc.key === (b.thumb || '').length ? sc.c : plainColors(b.name);
     var sz = spineSize(b, sc && sc.aspect), name = bare(b.name);
     var foot = dl ? '<span class="t-dl"><b>' + pct(dl) + '</b></span>' : !b.has ? '<span class="sp-cloud">' + ICON.cloud + '</span>' : '';
@@ -161,11 +181,18 @@
       '<span class="sp-band"></span><span class="sp-title">' + esc(name) + '</span><span class="sp-band low"></span>' +
       (foot ? '<span class="sp-foot">' + foot + '</span>' : '') + '</button></span>';
   }
+  function photoSpine(b, ph) {
+    var dl = loading[b.id], sz = photoSize(b, ph), name = bare(b.name);
+    return '<span class="sp-slot" data-book="' + esc(b.id) + '"><button class="spine photo' + (!b.has ? ' cloud' : '') + (b.id === cur ? ' on' : '') +
+      '" data-open="' + esc(b.id) + '" data-spine="' + esc(b.id) + '" aria-label="' + esc(name) + '" style="--w:' + sz.w + 'px;--h:' + sz.h +
+      'px;background-image:url(' + ph.src + ')">' +
+      (dl ? '<span class="sp-foot"><span class="t-dl"><b>' + pct(dl) + '</b></span></span>' : '') + '</button></span>';
+  }
   // 表紙から色を出し終わった本から、背表紙に色を付けていく
   async function paintSpines(books, my) {
     for (var i = 0; i < books.length; i++) {
       var b = books[i];
-      if (!b.thumb) continue;
+      if (!b.thumb || spinePhoto(b)) continue;
       var sc = spineCache[b.id];
       if (!sc || sc.key !== b.thumb.length) {
         var r = await coverColors(b.thumb);

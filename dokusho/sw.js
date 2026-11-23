@@ -6,7 +6,7 @@
    - 本のPDFそのものは、ここではなく IndexedDB に入れている（js/store.js）
    index.html の ?v= を上げたら、下の V も同じ番号にすること（古い控えを片づけるため）
    AUTH_V は、手書きノートと共通で使っている ../js/config.js・../js/google-auth.js の番号（index.html と合わせる） */
-var V = '15', AUTH_V = '80';
+var V = '16', AUTH_V = '100';
 var CACHE = 'dokusho-v' + V;
 var CORE = [
   './',
@@ -18,6 +18,8 @@ var CORE = [
   '../js/config.js?v=' + AUTH_V, '../js/google-auth.js?v=' + AUTH_V,
   'manifest.webmanifest', 'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png',
   'icons/favicon-32.png', 'icons/icon.svg',
+  'spines/eigo-kyoiku-2026-08.jpg', 'spines/eigo-kyoiku-2026-09.jpg', 'spines/eigo-kyoiku-2026-10.jpg',
+  'spines/eigo-kyoiku-2026-11.jpg', 'spines/eigo-kyoiku-2026-12.jpg',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js'
