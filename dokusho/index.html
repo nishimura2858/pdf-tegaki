@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="css/app.css?v=18">
+<link rel="stylesheet" href="css/app.css?v=19">
 </head>
 <body class="home-on">
 <header>
@@ -139,7 +139,7 @@
   <p class="h-usage" id="usage"></p>
   <details class="h-help"><summary>使い方</summary><p>
     <b>本を入れる</b>：Googleドライブの「読書ノート」フォルダに、自炊した本のPDFを入れます（MacのFinderから入れられます。フォルダで分けてもかまいません）。「Driveの本を更新」を押すと本棚に並びます。<br>
-    <b>本棚</b>：いちばん上の段には、最近読んだ5冊が表紙を見せて並びます。その下の段には、すべての本が背表紙を見せて並びます（背表紙の色は表紙の色から、太さはページ数から決まります。まだ一度も開いていない本は、名前から決めた色になります。本物の背表紙の写真を登録した本は、その写真が、本物と同じ細さで並びます）。背表紙に指を置いて横になぞると、本の表紙がパラパラとめくれて、指の位置の本の表紙が出ます。表紙が出ているときに指を上へはらうと、その本が開きます。背表紙を長押しすると、本のメニューが出ます。<br>
+    <b>本棚</b>：いちばん上の段には、最近読んだ5冊が表紙を見せて並びます。その下の段には、すべての本が背表紙を見せて並びます（背表紙の色は表紙の色から、太さはページ数から決まります。まだ一度も開いていない本は、名前から決めた色になります。本物の背表紙の写真を登録した本は、その写真が、本物と同じ細さで並びます）。背表紙に指を置いて横になぞると、指の上にその本の表紙が出て、次の背表紙へ指が移るたびに、その本の表紙に入れかわります。表紙が出ているときに指を上へはらうと、その本が開きます。背表紙を長押しすると、本のメニューが出ます。<br>
     <b>スクラップブック</b>：本棚を左へ払う（または上の「スクラップブック」を押す）と、スクラップブックが出ます。右へ払うと本棚に戻ります。<br>
     <b>読む</b>：本を押すと、最初の1回だけこのiPadにダウンロードしてから開きます。次からはすぐ開き、電波がなくても読めます。横向きにすると見開きになり、指で左右に払うとめくれます。2本指で拡大、2回たたくと拡大・元に戻す。<br>
     <b>書く</b>：マーカーとペンは、Apple Pencilで書きます（指はめくる・動かすのに使います）。<br>
@@ -269,20 +269,20 @@
 window.APP_CONFIG.REDIRECT_URI = new URL('../', location.href).href;
 window.APP_CONFIG.RETURN_TO = 'dokusho/';
 </script>
-<script src="js/store.js?v=18"></script>
-<script src="js/source.js?v=18"></script>
-<script src="js/app.js?v=18"></script>
-<script src="js/toolbar.js?v=18"></script>
-<script src="js/pages.js?v=18"></script>
+<script src="js/store.js?v=19"></script>
+<script src="js/source.js?v=19"></script>
+<script src="js/app.js?v=19"></script>
+<script src="js/toolbar.js?v=19"></script>
+<script src="js/pages.js?v=19"></script>
 <script src="../js/google-auth.js?v=100"></script>
-<script src="js/drive.js?v=18"></script>
-<script src="js/notes.js?v=18"></script>
-<script src="js/scrap.js?v=18"></script>
-<script src="js/sync.js?v=18"></script>
-<script src="js/library.js?v=18"></script>
-<script src="js/quick.js?v=18"></script>
-<script src="js/palette.js?v=18"></script>
-<script src="js/slide.js?v=18"></script>
+<script src="js/drive.js?v=19"></script>
+<script src="js/notes.js?v=19"></script>
+<script src="js/scrap.js?v=19"></script>
+<script src="js/sync.js?v=19"></script>
+<script src="js/library.js?v=19"></script>
+<script src="js/quick.js?v=19"></script>
+<script src="js/palette.js?v=19"></script>
+<script src="js/slide.js?v=19"></script>
 <script>
 // 電波がなくても開けるように、アプリの部品をこの端末に取っておく（sw.js）
 // 新しい版が届いたら: 本を開いていなければすぐ、開いていれば、ほかのアプリから戻ってきたときに読み直す
