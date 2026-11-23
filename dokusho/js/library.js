@@ -546,7 +546,11 @@
   pk.innerHTML = '<div class="pk-cover"></div><div class="pk-name"></div><div class="pk-hint">↑ 上へはらうと開く</div>';
   document.body.appendChild(pk);
   var pkCover = pk.children[0], pkName = pk.children[1];
-  var PK_W = 160, PK_H = 226, PK_BOX = PK_H + 54, pkHideT = 0;
+  var PK_W = 160, PK_H = 226, PK_BOX = PK_H + 60, pkHideT = 0;
+  function sizePeek() { // 表紙は大きめに（画面の幅の約3割。縦横はB5の比）
+    PK_W = Math.round(Math.max(200, Math.min(320, window.innerWidth * 0.3, (window.innerHeight * 0.62 - 60) * 182 / 257))); PK_H = Math.round(PK_W * 257 / 182); PK_BOX = PK_H + 60;
+    pk.style.width = PK_W + 'px'; pkCover.style.width = PK_W + 'px'; pkCover.style.height = PK_H + 'px';
+  }
   var br = null;          // なぞっている間の様子
   var brClickBlock = 0;   // なぞり終えた直後の click（マウス）は無視する
   function rowOf(sp) { // 同じ段に並ぶ背表紙（左から順に）
@@ -569,9 +573,14 @@
     return '<span class="pk-ph" style="background:' + (ph ? '#f3efe6' : c.bg) + ';color:' + (ph ? '#2a2620' : c.fg) + '">' + esc(bare(b.name)) + '</span>';
   }
   function placePeek(x, y) { // 指のすぐ上に（段の上に場所があれば、背表紙を隠さないよう段の上に）
-    var left = Math.max(8, Math.min(window.innerWidth - PK_W - 8, x - PK_W / 2));
-    var top = br.rowTop - 22 - PK_BOX >= 8 ? Math.min(br.rowTop - 22, y - 40) - PK_BOX : y - 40 - PK_BOX;
-    top = Math.max(8, top);
+    var vw = window.innerWidth, vh = window.innerHeight, left = x - PK_W / 2, top;
+    if (br.rowTop - 22 - PK_BOX >= 8) top = br.rowTop - 22 - PK_BOX;
+    else if (y - 40 - PK_BOX >= 8) top = y - 40 - PK_BOX;
+    else { // 指の上に入りきらないとき: 指のすぐ横に（右、だめなら左）。指を隠さないように
+      left = x + 44 + PK_W <= vw - 8 ? x + 44 : x - 44 - PK_W;
+      top = Math.min(vh - PK_BOX - 8, y - PK_H * 0.6);
+    }
+    left = Math.max(8, Math.min(vw - PK_W - 8, left)); top = Math.max(8, top);
     pk.style.transform = 'translate3d(' + Math.round(left) + 'px,' + Math.round(top) + 'px,0)';
   }
   function setBook(s) {
@@ -605,7 +614,7 @@
     var sp = e.target.closest('.spine');
     if (br) endBrowse(false);
     if (!sp || e.button > 0 || !e.isPrimary) return;
-    br = { id: e.pointerId, x0: e.clientX, y0: e.clientY, on: false, sp: sp, cur: null, low: e.clientY, row: null, rowTop: 0 };
+    br = { id: e.pointerId, x0: e.clientX, y0: e.clientY, on: false, sp: sp, cur: null, low: e.clientY, lowX: e.clientX, lowCur: null, row: null, rowTop: 0 };
   });
   home.addEventListener('pointermove', function (e) {
     if (!br || e.pointerId !== br.id) return;
@@ -617,13 +626,20 @@
       br.rowTop = Math.min.apply(null, br.row.map(function (s) { return s.top; })) - 14; // 引き出した本の分も
       if (lp) { clearTimeout(lp.t); lp = null; }
       clearTimeout(pkHideT); pk.classList.remove('go'); pkCover.textContent = '';
-      placePeek(e.clientX, e.clientY); pk.classList.add('on');
+      sizePeek(); placePeek(e.clientX, e.clientY); pk.classList.add('on');
     }
-    // 下へ動いた分は覚えておき、そこからどれだけ上へ戻したか（上へはらったか）を見る
-    if (e.clientY > br.low) br.low = e.clientY;
+    // 上へはらったかを見る。基準の点から、横に動いた分より多く上へ動いたときだけ「上へはらっている」とみなす
+    // （横になぞっている途中で指が少し上下に揺れても、本はちゃんと替わるように）
+    // 基準の点の本（lowCur）を覚えておき、上へはらったと決まったら、その本を出し直して開く
     var up = br.low - e.clientY;
-    if (br.cur && up > 70) { endBrowse(true); return; }
-    if (up < 18) { setBook(spineAt(e.clientX)); placePeek(e.clientX, e.clientY); } // 上へ動かし始めたら、本は替えず、表紙も動かさない
+    if (e.clientY > br.low || Math.abs(e.clientX - br.lowX) > up * 0.8) { br.low = e.clientY; br.lowX = e.clientX; up = 0; }
+    if (up < 28) {
+      setBook(spineAt(e.clientX)); placePeek(e.clientX, e.clientY);
+      if (!up) br.lowCur = br.cur;
+    } else { // 上へはらっている途中: 本は替えず、表紙も動かさない
+      if (br.lowCur && br.cur !== br.lowCur) setBook(br.lowCur);
+      if (br.cur && up > 60) { endBrowse(true); return; }
+    }
   });
   ['pointerup', 'pointercancel'].forEach(function (t) {
     home.addEventListener(t, function (e) { if (br && e.pointerId === br.id) endBrowse(false); });
