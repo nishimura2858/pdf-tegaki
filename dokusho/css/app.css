@@ -923,6 +923,26 @@ header { position: relative; z-index: 10; background: var(--bg); }
 .spine.photo.on { box-shadow: 0 0 0 2px var(--accent); }
 .spine.photo .sp-foot { left: 50%; right: auto; transform: translateX(-50%); z-index: 1; }
 .spine .t-dl { position: static; padding: 2px 5px; border-radius: 4px; font-size: 12px; background: rgba(0,0,0,.6); }
+/* 背表紙をなぞったとき: 指の下の本を少し引き出し、表紙を棚の手前に浮かべる */
+.spine { touch-action: pan-y; } /* 背表紙の上で横に動かしても、本棚⇄スクラップブックは切りかわらない（なぞる動きに使う） */
+.spine.pulled { transform: translateY(-14px); transition: transform .08s; }
+#spPeek { position: fixed; z-index: 60; width: 168px; pointer-events: none; }
+#spPeek .pk-card {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  opacity: 0; transform: translateY(16px) scale(.9); transition: opacity .14s, transform .14s;
+}
+#spPeek.show .pk-card { opacity: 1; transform: none; }
+#spPeek.flip .pk-cover { animation: pkFlip .16s ease-out; }
+@keyframes pkFlip { from { transform: perspective(500px) rotateY(-28deg) translateY(10px); opacity: .55; } to { transform: none; opacity: 1; } }
+#spPeek.go .pk-card { opacity: 0; transform: translateY(-60px) scale(1.08); transition: opacity .25s, transform .25s; }
+.pk-cover {
+  width: 168px; height: 238px; overflow: hidden; background: #fff; border-radius: 3px 5px 5px 3px;
+  box-shadow: inset 3px 0 4px -2px rgba(0,0,0,.25), 0 12px 28px rgba(0,0,0,.38), 0 0 0 .5px rgba(0,0,0,.2);
+}
+.pk-cover img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.pk-ph { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; padding: 14px; text-align: center; font-weight: 700; font-size: 17px; line-height: 1.35; }
+.pk-name, .pk-hint { max-width: 100%; padding: 2px 9px; border-radius: 10px; background: rgba(28,25,20,.78); color: #fff; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pk-hint { font-size: 11.5px; opacity: .9; }
 /* 本棚は、画面の下のほうまで棚が見えるように、少なくとも2段ぶんの高さにする（最後のフォルダだけ） */
 #shelf .h-spines:last-child { min-height: calc((var(--row) + var(--board)) * 2); }
 /* 本棚 ⇄ スクラップブック: 横に払って切りかえる */

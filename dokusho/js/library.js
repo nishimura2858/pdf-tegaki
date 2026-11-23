@@ -107,6 +107,7 @@
     return { bg: 'hsl(' + h + ',30%,36%)', ac: 'hsl(' + ((h + 28) % 360) + ',42%,72%)', fg: '#fbf8f1' };
   }
   var spineCache = {}; // id → { key: 表紙の印, c: 色, aspect }
+  var shelfBooks = {}; // id → 本の記録（いま本棚に並べているもの。背表紙をなぞったときに表紙を出すため）
   function coverColors(url) {
     return new Promise(function (res) {
       var im = new Image();
@@ -226,6 +227,7 @@
     var my = ++seq;
     var all = await Store.books();
     if (my !== seq) return; // あとから頼まれた描き直しがあれば、そちらに任せる
+    shelfBooks = {}; all.forEach(function (b) { shelfBooks[b.id] = b; });
     var scraps = all.filter(function (b) { return b.kind === 'scrap'; })
       .sort(function (a, b) { return (b.lastAt || b.addedAt || 0) - (a.lastAt || a.addedAt || 0); });
     var books = all.filter(function (b) { return b.kind !== 'scrap'; });
@@ -534,8 +536,105 @@
     bookMenu(sp, sp.dataset.spine);
   });
 
+  /* ---------- 背表紙を指でなぞると、表紙が次々に前へ出てくる ----------
+     背表紙に触れて横へなぞる: 指の下の本の表紙が、棚の手前に浮き出る（なぞるほどパラパラと替わる）
+     表紙が出ている間に、指を上へはらう: その本を開く。そのまま指を離す: 何もしない
+     縦に動かし始めたときは、ふだんどおり本棚がスクロールする */
+  var peek = document.createElement('div');
+  peek.id = 'spPeek'; peek.hidden = true; peek.setAttribute('aria-hidden', 'true');
+  peek.innerHTML = '<div class="pk-card"><div class="pk-cover"></div><div class="pk-name"></div><div class="pk-hint">↑ 上へはらうと開く</div></div>';
+  document.body.appendChild(peek);
+  var pkCard = peek.firstChild, pkCover = pkCard.children[0], pkName = pkCard.children[1];
+  var br = null;          // なぞっている間の様子
+  var brClickBlock = 0;   // なぞり終えた直後の click（マウス）は無視する
+  function slotsOfRow(sp) { // 同じ段に並ぶ背表紙（左から順に）
+    var row = sp.closest('.h-spines'), top = sp.getBoundingClientRect().bottom;
+    return Array.prototype.filter.call(row.querySelectorAll('.spine'), function (el) {
+      return Math.abs(el.getBoundingClientRect().bottom - top) < 4;
+    }).map(function (el) { var r = el.getBoundingClientRect(); return { el: el, l: r.left, r: r.right, top: r.top }; });
+  }
+  function spineAt(x) { // 指の横の位置にいちばん近い背表紙（すき間にいるときも、近いほうを選ぶ）
+    var best = null, bd = 1e9;
+    for (var i = 0; i < br.row.length; i++) {
+      var s = br.row[i], d = x < s.l ? s.l - x : x > s.r ? x - s.r : 0;
+      if (d < bd) { bd = d; best = s; }
+    }
+    return bd < 40 ? best : null;
+  }
+  function showPeek(s) {
+    if (br.cur === s) return;
+    if (br.cur) br.cur.el.classList.remove('pulled');
+    br.cur = s;
+    if (!s) { peek.classList.remove('show'); return; }
+    s.el.classList.add('pulled');
+    var b = shelfBooks[s.el.dataset.spine] || {}, ph = spinePhoto(b), name = bare(b.name);
+    if (b.thumb) pkCover.innerHTML = '<img alt="" src="' + esc(b.thumb) + '">';
+    else {
+      var c = (spineCache[b.id] && spineCache[b.id].c) || plainColors(b.name);
+      pkCover.innerHTML = '<span class="pk-ph" style="background:' + (ph ? '#f3efe6' : c.bg) + ';color:' + (ph ? '#2a2620' : c.fg) + '">' + esc(name) + '</span>';
+    }
+    pkName.textContent = name;
+    // 背表紙の真上に出す。上に場所がないときは、指の横（右、だめなら左）に出す（なぞっている背表紙を隠さないように）
+    var W = 168, H = 238 + 52, mid = (s.l + s.r) / 2, x = mid - W / 2, y = s.top - H - 6;
+    if (y < 8) {
+      y = Math.max(8, Math.min(window.innerHeight - H - 8, s.top - 10));
+      x = mid + 34 + W <= window.innerWidth - 8 ? mid + 34 : mid - 34 - W;
+    }
+    x = Math.max(8, Math.min(window.innerWidth - W - 8, x));
+    peek.style.left = x + 'px'; peek.style.top = y + 'px';
+    peek.hidden = false;
+    peek.classList.remove('show', 'flip'); void peek.offsetWidth; peek.classList.add('show', 'flip');
+  }
+  function endBrowse(openIt) {
+    if (!br) return;
+    var s = br.cur, id = s && s.el.dataset.spine;
+    if (s) s.el.classList.remove('pulled');
+    if (openIt && id) {
+      peek.classList.add('go');
+      setTimeout(function () { peek.hidden = true; peek.classList.remove('show', 'go', 'flip'); }, 260);
+      open(id);
+    } else {
+      peek.classList.remove('show', 'flip');
+      setTimeout(function () { if (!br) peek.hidden = true; }, 200);
+    }
+    if (br.on) brClickBlock = Date.now() + 400;
+    br = null;
+  }
+  home.addEventListener('pointerdown', function (e) {
+    var sp = e.target.closest('.spine');
+    if (br) endBrowse(false);
+    if (!sp || e.button > 0 || !e.isPrimary) return;
+    br = { id: e.pointerId, x0: e.clientX, y0: e.clientY, on: false, sp: sp, cur: null, low: e.clientY, row: null };
+  });
+  home.addEventListener('pointermove', function (e) {
+    if (!br || e.pointerId !== br.id) return;
+    var dx = e.clientX - br.x0, dy = e.clientY - br.y0;
+    if (!br.on) {
+      if (Math.hypot(dx, dy) < 8) return;
+      if (Math.abs(dx) < Math.abs(dy) * 1.1) { br = null; return; } // 縦に動かした: ふだんのスクロール
+      br.on = true; br.row = slotsOfRow(br.sp);
+      if (lp) { clearTimeout(lp.t); lp = null; }
+    }
+    // 下へ動いた分は覚えておき、そこからどれだけ上へ戻したか（上へはらったか）を見る
+    if (e.clientY > br.low) br.low = e.clientY;
+    var up = br.low - e.clientY;
+    if (br.cur && up > 70) { endBrowse(true); return; }
+    if (up < 18) showPeek(spineAt(e.clientX)); // 上へ動かし始めたら、本は替えない
+  });
+  ['pointerup', 'pointercancel'].forEach(function (t) {
+    home.addEventListener(t, function (e) { if (br && e.pointerId === br.id) endBrowse(false); });
+  });
+  // なぞっている間は、iPad が本棚をスクロールしたり、本棚⇄スクラップブックを切りかえたりしないように止める
+  // （まだ動き始めで、なぞるかスクロールか決まっていないときも、横向きの動きなら止めておく。iPad は最初の動きでスクロールするか決めるため）
+  home.addEventListener('touchmove', function (e) {
+    if (!br || !e.cancelable) return;
+    var t = e.touches[0]; if (!t) return;
+    if (br.on || Math.abs(t.clientX - br.x0) >= Math.abs(t.clientY - br.y0)) e.preventDefault();
+  }, { passive: false });
+
   home.addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) return;
+    if (Date.now() < brClickBlock && b.classList.contains('spine')) return;
     if (lpFired) { lpFired = false; if (b.classList.contains('spine')) return; }
     var d = b.dataset;
     if (d.open) { open(d.open); return; }
