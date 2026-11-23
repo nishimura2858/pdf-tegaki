@@ -536,75 +536,124 @@
     bookMenu(sp, sp.dataset.spine);
   });
 
-  /* ---------- 背表紙を指でなぞると、表紙が次々に前へ出てくる ----------
-     背表紙に触れて横へなぞる: 指の下の本の表紙が、棚の手前に浮き出る（なぞるほどパラパラと替わる）
+  /* ---------- 背表紙を指でなぞると、表紙がパラパラとめくれる ----------
+     読むときの「本の小口」（pages.js）と同じ見せ方: 表紙を1枚の紙のように、真ん中の背を軸に回してめくる。
+     いま選んでいる本の表紙が右に起き上がり、通り過ぎた本は左へ、これからの本は右の下に重なって、端だけが見える。
+     背表紙に触れて横へなぞる: 指の位置の本まで、表紙がパラパラめくれる（同じ段に並ぶ本の中で）
      表紙が出ている間に、指を上へはらう: その本を開く。そのまま指を離す: 何もしない
      縦に動かし始めたときは、ふだんどおり本棚がスクロールする */
-  var peek = document.createElement('div');
-  peek.id = 'spPeek'; peek.hidden = true; peek.setAttribute('aria-hidden', 'true');
-  peek.innerHTML = '<div class="pk-card"><div class="pk-cover"></div><div class="pk-name"></div><div class="pk-hint">↑ 上へはらうと開く</div></div>';
-  document.body.appendChild(peek);
-  var pkCard = peek.firstChild, pkCover = pkCard.children[0], pkName = pkCard.children[1];
+  var fl = document.createElement('div');
+  fl.id = 'spFlip'; fl.setAttribute('aria-hidden', 'true');
+  fl.innerHTML = '<div class="fl-stage"></div><div class="fl-name"></div><div class="fl-hint">↑ 上へはらうと開く</div>';
+  document.body.appendChild(fl);
+  var flStage = fl.children[0], flName = fl.children[1];
   var br = null;          // なぞっている間の様子
   var brClickBlock = 0;   // なぞり終えた直後の click（マウス）は無視する
-  function slotsOfRow(sp) { // 同じ段に並ぶ背表紙（左から順に）
-    var row = sp.closest('.h-spines'), top = sp.getBoundingClientRect().bottom;
+  var FL = { W: 190, H: 268, cx: 0, top: 0, f: 0, show: 0, intro: 1, introAt: 0, raf: 0, leaves: {}, books: [], hideT: 0 };
+  function rowOf(sp) { // 同じ段に並ぶ背表紙（左から順に）
+    var row = sp.closest('.h-spines'), bottom = sp.getBoundingClientRect().bottom;
     return Array.prototype.filter.call(row.querySelectorAll('.spine'), function (el) {
-      return Math.abs(el.getBoundingClientRect().bottom - top) < 4;
-    }).map(function (el) { var r = el.getBoundingClientRect(); return { el: el, l: r.left, r: r.right, top: r.top }; });
+      return Math.abs(el.getBoundingClientRect().bottom - bottom) < 4;
+    }).map(function (el) { var r = el.getBoundingClientRect(); return { el: el, c: (r.left + r.right) / 2, top: r.top, bottom: r.bottom }; });
   }
-  function spineAt(x) { // 指の横の位置にいちばん近い背表紙（すき間にいるときも、近いほうを選ぶ）
-    var best = null, bd = 1e9;
-    for (var i = 0; i < br.row.length; i++) {
-      var s = br.row[i], d = x < s.l ? s.l - x : x > s.r ? x - s.r : 0;
-      if (d < bd) { bd = d; best = s; }
-    }
-    return bd < 40 ? best : null;
+  function fAt(x) { // 指の横の位置 → 何冊目か（背表紙と背表紙の間では、小数でなめらかに）
+    var r = br.row, n = r.length;
+    if (x <= r[0].c) return 0;
+    if (x >= r[n - 1].c) return n - 1;
+    for (var i = 0; i < n - 1; i++) if (x < r[i + 1].c) return i + (x - r[i].c) / ((r[i + 1].c - r[i].c) || 1);
+    return n - 1;
   }
-  function showPeek(s) {
-    if (br.cur === s) return;
-    if (br.cur) br.cur.el.classList.remove('pulled');
-    br.cur = s;
-    if (!s) { peek.classList.remove('show'); return; }
-    s.el.classList.add('pulled');
-    var b = shelfBooks[s.el.dataset.spine] || {}, ph = spinePhoto(b), name = bare(b.name);
-    if (b.thumb) pkCover.innerHTML = '<img alt="" src="' + esc(b.thumb) + '">';
+  // 表紙の角度（本の小口と同じ考え方）。s = i - f + 0.5: 0.5 = いま選んでいる表紙（右に起き上がる）
+  function flAngle(s) {
+    var OPEN = 32, as = Math.abs(s);
+    if (as < 0.5) return 90 - (90 - OPEN) * 2 * s;   // めくっている途中（背を軸に回る）
+    var ef = 1 - (1 - Math.cos(OPEN * Math.PI / 180)) * Math.exp(-0.16 * (as - 0.5)); // 下の表紙ほど寝て、端がのぞく
+    var th = Math.acos(ef) * 180 / Math.PI;
+    return s > 0 ? th : 180 - th;
+  }
+  function flLeaf(i) {
+    var b = FL.books[i] || {}, el = document.createElement('div'), name = bare(b.name);
+    el.className = 'fl-leaf';
+    if (b.thumb) el.innerHTML = '<img alt="" src="' + esc(b.thumb) + '">';
     else {
-      var c = (spineCache[b.id] && spineCache[b.id].c) || plainColors(b.name);
-      pkCover.innerHTML = '<span class="pk-ph" style="background:' + (ph ? '#f3efe6' : c.bg) + ';color:' + (ph ? '#2a2620' : c.fg) + '">' + esc(name) + '</span>';
+      var ph = spinePhoto(b), c = (spineCache[b.id] && spineCache[b.id].c) || plainColors(b.name);
+      el.innerHTML = '<span class="fl-ph" style="background:' + (ph ? '#f3efe6' : c.bg) + ';color:' + (ph ? '#2a2620' : c.fg) + '">' + esc(name) + '</span>';
     }
-    pkName.textContent = name;
-    // 背表紙の真上に出す。上に場所がないときは、指の横（右、だめなら左）に出す（なぞっている背表紙を隠さないように）
-    var W = 168, H = 238 + 52, mid = (s.l + s.r) / 2, x = mid - W / 2, y = s.top - H - 6;
-    if (y < 8) {
-      y = Math.max(8, Math.min(window.innerHeight - H - 8, s.top - 10));
-      x = mid + 34 + W <= window.innerWidth - 8 ? mid + 34 : mid - 34 - W;
+    flStage.appendChild(el);
+    return el;
+  }
+  function flLayout() {
+    var f = FL.show, u = FL.intro, W = FL.W, H = FL.H, cx = FL.cx, n = FL.books.length, sel = Math.round(FL.f);
+    for (var i = 0; i < n; i++) {
+      var s = i - f + 0.5;
+      if (Math.abs(s) > 30) { if (FL.leaves[i]) { FL.leaves[i].remove(); delete FL.leaves[i]; } continue; }
+      var el = FL.leaves[i] || (FL.leaves[i] = flLeaf(i));
+      var th = 90 + (flAngle(s) - 90) * u, right = th <= 90, lift = right ? th : 180 - th;
+      el.style.width = W + 'px'; el.style.height = H + 'px';
+      el.style.transformOrigin = right ? '0 50%' : '100% 50%';
+      el.style.transform = 'translate3d(' + (right ? cx : cx - W) + 'px,' + FL.top + 'px,0) rotateY(' + (right ? -lift : lift) + 'deg)';
+      el.style.zIndex = String(2000 - Math.round(Math.abs(s) * 20));
+      el.style.setProperty('--dir', right ? '270deg' : '90deg');
+      var l = lift / 90; el.style.setProperty('--sh', (0.06 + 0.34 * l * l).toFixed(3));
+      el.classList.toggle('sel', i === sel && Math.abs(s - 0.5) < 0.5);
     }
-    x = Math.max(8, Math.min(window.innerWidth - W - 8, x));
-    peek.style.left = x + 'px'; peek.style.top = y + 'px';
-    peek.hidden = false;
-    peek.classList.remove('show', 'flip'); void peek.offsetWidth; peek.classList.add('show', 'flip');
+    var b = FL.books[sel];
+    flName.textContent = b ? bare(b.name) : '';
+  }
+  function flTick() {
+    FL.raf = 0;
+    if (!br || !br.on) return;
+    var now = performance.now();
+    if (FL.intro < 1) { var t = Math.min(1, (now - FL.introAt) / 240); FL.intro = 1 - Math.pow(1 - t, 3); }
+    var d = FL.f - FL.show;
+    FL.show += Math.abs(d) < 0.003 ? d : d * 0.38;
+    flLayout();
+    if (FL.intro < 1 || FL.show !== FL.f) FL.raf = requestAnimationFrame(flTick);
+  }
+  function flKick() { if (!FL.raf) FL.raf = requestAnimationFrame(flTick); }
+  function flOpen() {
+    clearTimeout(FL.hideT);
+    flStage.textContent = ''; FL.leaves = {};
+    FL.books = br.row.map(function (s) { return shelfBooks[s.el.dataset.spine] || {}; });
+    // 大きさと位置: なぞっている段の上に（場所がなければ下に）。背表紙を隠さないように
+    var vw = window.innerWidth, vh = window.innerHeight, bottom = br.row[0].bottom;
+    var top = Math.min.apply(null, br.row.map(function (s) { return s.top; })) - 16; // 引き出した本の分も
+    var H = Math.min(300, Math.max(180, Math.max(top, vh - bottom) - 100)), W = Math.round(H * 182 / 257);
+    var boxW = Math.min(vw - 16, W * 2 + 120), boxH = H + 76;
+    var y = top - boxH - 10 >= 8 ? top - boxH - 10 : bottom + 10 + boxH <= vh - 8 ? bottom + 10 : Math.max(8, top - boxH - 10);
+    FL.W = W; FL.H = H; FL.cx = boxW / 2; FL.top = 14;
+    fl.style.width = boxW + 'px'; fl.style.height = boxH + 'px';
+    fl.style.left = Math.round((vw - boxW) / 2) + 'px'; fl.style.top = Math.round(y) + 'px';
+    FL.intro = 0; FL.introAt = performance.now();
+    fl.classList.remove('go'); fl.classList.add('on'); void fl.offsetWidth; fl.classList.add('show');
+  }
+  function flClose(go) {
+    fl.classList.remove('show');
+    if (go) fl.classList.add('go');
+    clearTimeout(FL.hideT);
+    FL.hideT = setTimeout(function () { fl.classList.remove('on', 'go'); flStage.textContent = ''; FL.leaves = {}; }, 260);
+  }
+  function pullSel() {
+    var sel = Math.round(FL.f);
+    if (br.pulled === sel) return;
+    if (br.pulled != null && br.row[br.pulled]) br.row[br.pulled].el.classList.remove('pulled');
+    br.pulled = sel; if (br.row[sel]) br.row[sel].el.classList.add('pulled');
   }
   function endBrowse(openIt) {
     if (!br) return;
-    var s = br.cur, id = s && s.el.dataset.spine;
-    if (s) s.el.classList.remove('pulled');
-    if (openIt && id) {
-      peek.classList.add('go');
-      setTimeout(function () { peek.hidden = true; peek.classList.remove('show', 'go', 'flip'); }, 260);
-      open(id);
-    } else {
-      peek.classList.remove('show', 'flip');
-      setTimeout(function () { if (!br) peek.hidden = true; }, 200);
-    }
-    if (br.on) brClickBlock = Date.now() + 400;
+    var on = br.on, sel = Math.round(FL.f), s = on && br.row[sel], id = s && s.el.dataset.spine;
+    if (on && br.pulled != null && br.row[br.pulled]) br.row[br.pulled].el.classList.remove('pulled');
     br = null;
+    if (!on) return;
+    brClickBlock = Date.now() + 400;
+    flClose(openIt && id);
+    if (openIt && id) open(id);
   }
   home.addEventListener('pointerdown', function (e) {
     var sp = e.target.closest('.spine');
     if (br) endBrowse(false);
     if (!sp || e.button > 0 || !e.isPrimary) return;
-    br = { id: e.pointerId, x0: e.clientX, y0: e.clientY, on: false, sp: sp, cur: null, low: e.clientY, row: null };
+    br = { id: e.pointerId, x0: e.clientX, y0: e.clientY, on: false, sp: sp, low: e.clientY, row: null, pulled: null };
   });
   home.addEventListener('pointermove', function (e) {
     if (!br || e.pointerId !== br.id) return;
@@ -612,14 +661,17 @@
     if (!br.on) {
       if (Math.hypot(dx, dy) < 8) return;
       if (Math.abs(dx) < Math.abs(dy) * 1.1) { br = null; return; } // 縦に動かした: ふだんのスクロール
-      br.on = true; br.row = slotsOfRow(br.sp);
+      br.on = true; br.row = rowOf(br.sp);
       if (lp) { clearTimeout(lp.t); lp = null; }
+      FL.f = FL.show = fAt(br.x0);
+      flOpen();
     }
     // 下へ動いた分は覚えておき、そこからどれだけ上へ戻したか（上へはらったか）を見る
     if (e.clientY > br.low) br.low = e.clientY;
     var up = br.low - e.clientY;
-    if (br.cur && up > 70) { endBrowse(true); return; }
-    if (up < 18) showPeek(spineAt(e.clientX)); // 上へ動かし始めたら、本は替えない
+    if (up > 70) { FL.f = Math.round(FL.f); endBrowse(true); return; }
+    if (up < 18) { FL.f = fAt(e.clientX); pullSel(); } // 上へ動かし始めたら、本は替えない
+    flKick();
   });
   ['pointerup', 'pointercancel'].forEach(function (t) {
     home.addEventListener(t, function (e) { if (br && e.pointerId === br.id) endBrowse(false); });

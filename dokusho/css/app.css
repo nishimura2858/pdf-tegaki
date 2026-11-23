@@ -923,26 +923,32 @@ header { position: relative; z-index: 10; background: var(--bg); }
 .spine.photo.on { box-shadow: 0 0 0 2px var(--accent); }
 .spine.photo .sp-foot { left: 50%; right: auto; transform: translateX(-50%); z-index: 1; }
 .spine .t-dl { position: static; padding: 2px 5px; border-radius: 4px; font-size: 12px; background: rgba(0,0,0,.6); }
-/* 背表紙をなぞったとき: 指の下の本を少し引き出し、表紙を棚の手前に浮かべる */
+/* 背表紙をなぞったとき: 指の位置の本を少し引き出し、表紙を「本の小口」と同じようにパラパラめくって見せる */
 .spine { touch-action: pan-y; } /* 背表紙の上で横に動かしても、本棚⇄スクラップブックは切りかわらない（なぞる動きに使う） */
 .spine.pulled { transform: translateY(-14px); transition: transform .08s; }
-#spPeek { position: fixed; z-index: 60; width: 168px; pointer-events: none; }
-#spPeek .pk-card {
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  opacity: 0; transform: translateY(16px) scale(.9); transition: opacity .14s, transform .14s;
+#spFlip {
+  position: fixed; z-index: 60; display: none; flex-direction: column; align-items: center; pointer-events: none;
+  border-radius: 22px; background: var(--bar); box-shadow: 0 24px 60px rgba(52,44,34,.28), 0 4px 14px rgba(52,44,34,.12);
+  opacity: 0; transform: scale(.6) translateY(30px); transition: opacity .14s, transform .24s cubic-bezier(.2,1.25,.4,1);
 }
-#spPeek.show .pk-card { opacity: 1; transform: none; }
-#spPeek.flip .pk-cover { animation: pkFlip .16s ease-out; }
-@keyframes pkFlip { from { transform: perspective(500px) rotateY(-28deg) translateY(10px); opacity: .55; } to { transform: none; opacity: 1; } }
-#spPeek.go .pk-card { opacity: 0; transform: translateY(-60px) scale(1.08); transition: opacity .25s, transform .25s; }
-.pk-cover {
-  width: 168px; height: 238px; overflow: hidden; background: #fff; border-radius: 3px 5px 5px 3px;
-  box-shadow: inset 3px 0 4px -2px rgba(0,0,0,.25), 0 12px 28px rgba(0,0,0,.38), 0 0 0 .5px rgba(0,0,0,.2);
+#spFlip.on { display: flex; }
+#spFlip.show { opacity: 1; transform: none; }
+#spFlip.go { opacity: 0; transform: translateY(-50px) scale(1.06); transition: opacity .25s, transform .25s; }
+#spFlip .fl-stage { position: relative; width: 100%; flex: 1; min-height: 0; perspective: 1500px; perspective-origin: 50% 45%; }
+.fl-leaf {
+  position: absolute; left: 0; top: 0; background: #fff; overflow: hidden; will-change: transform;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
 }
-.pk-cover img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
-.pk-ph { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; padding: 14px; text-align: center; font-weight: 700; font-size: 17px; line-height: 1.35; }
-.pk-name, .pk-hint { max-width: 100%; padding: 2px 9px; border-radius: 10px; background: rgba(28,25,20,.78); color: #fff; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pk-hint { font-size: 11.5px; opacity: .9; }
+.fl-leaf img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.fl-leaf::after { /* 表紙の端の影（重なり） */
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(var(--dir, 90deg), rgba(60,50,38,0) 0%, rgba(60,50,38,var(--sh, 0)) 100%);
+  box-shadow: inset 0 0 0 .5px rgba(60,50,38,.3);
+}
+.fl-leaf.sel { box-shadow: 0 10px 30px rgba(52,44,34,.25); }
+.fl-ph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 14px; text-align: center; font-weight: 700; font-size: 17px; line-height: 1.35; }
+#spFlip .fl-name { max-width: 92%; margin-top: 4px; font-size: 15px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#spFlip .fl-hint { font-size: 12px; color: var(--muted); padding: 2px 0 10px; }
 /* 本棚は、画面の下のほうまで棚が見えるように、少なくとも2段ぶんの高さにする（最後のフォルダだけ） */
 #shelf .h-spines:last-child { min-height: calc((var(--row) + var(--board)) * 2); }
 /* 本棚 ⇄ スクラップブック: 横に払って切りかえる */
