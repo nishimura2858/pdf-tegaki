@@ -539,11 +539,11 @@
   /* ---------- 背表紙を指でなぞると、指の上に表紙が出る ----------
      背表紙に触れて横へなぞる: 指のすぐ上に表紙が出て、指といっしょに横へ動く。
      指の下の本が替わるたびに、表紙がスッと入れかわる（前の表紙は消えていく）
-     表紙が出ている間に、指を上へはらう: その本を開く。そのまま指を離す: 何もしない
+     指を離しても表紙は残る。その表紙を押す: その本を開く。ほかの所を押す（または本棚を動かす）: 表紙は消える
      縦に動かし始めたときは、ふだんどおり本棚がスクロールする */
   var pk = document.createElement('div');
   pk.id = 'spPeek'; pk.setAttribute('aria-hidden', 'true');
-  pk.innerHTML = '<div class="pk-cover"></div><div class="pk-name"></div><div class="pk-hint">↑ 上へはらうと開く</div>';
+  pk.innerHTML = '<div class="pk-cover"></div><div class="pk-name"></div><div class="pk-hint">表紙を押すと開きます</div>';
   document.body.appendChild(pk);
   var pkCover = pk.children[0], pkName = pk.children[1];
   var PK_W = 160, PK_H = 226, PK_BOX = PK_H + 60, pkHideT = 0;
@@ -598,23 +598,33 @@
     pkName.textContent = bare(b.name);
     pk.classList.add('show');
   }
-  function endBrowse(openIt) {
+  var pkStay = null; // 指を離したあとも出したままの表紙 { el: 背表紙, id }
+  function dismissPeek(openIt) {
+    var st = pkStay; pkStay = null;
+    if (st) st.el.classList.remove('pulled');
+    pk.classList.remove('show', 'stay');
+    if (openIt && st) { pk.classList.add('go'); open(st.id); }
+    clearTimeout(pkHideT);
+    pkHideT = setTimeout(function () { if (!br && !pkStay) { pk.classList.remove('on', 'go'); pkCover.textContent = ''; } }, 260);
+  }
+  function endBrowse() { // 指を離した: 表紙が出ていれば、そのまま残す（押すと開く）
     if (!br) return;
-    var on = br.on, s = br.cur, id = s && s.el.dataset.spine;
-    if (s) s.el.classList.remove('pulled');
+    var on = br.on, s = br.cur;
     br = null;
     if (!on) return;
     brClickBlock = Date.now() + 400;
-    pk.classList.remove('show');
-    if (openIt && id) { pk.classList.add('go'); open(id); }
-    clearTimeout(pkHideT);
-    pkHideT = setTimeout(function () { if (!br) { pk.classList.remove('on', 'go'); pkCover.textContent = ''; } }, 260);
+    if (s) { pkStay = { el: s.el, id: s.el.dataset.spine }; pk.classList.add('stay'); }
+    else dismissPeek(false);
   }
+  pk.addEventListener('click', function (e) { if (pkStay && e.target.closest('.pk-cover, .pk-name, .pk-hint')) dismissPeek(true); });
+  // 出したままの表紙は、ほかの所を押したら消す（背表紙を押したときは、そのまま新しくなぞり始められる）
+  document.addEventListener('pointerdown', function (e) { if (pkStay && !pk.contains(e.target)) dismissPeek(false); }, true);
+  home.addEventListener('scroll', function () { if (pkStay) dismissPeek(false); }, true);
   home.addEventListener('pointerdown', function (e) {
     var sp = e.target.closest('.spine');
-    if (br) endBrowse(false);
+    if (br) endBrowse();
     if (!sp || e.button > 0 || !e.isPrimary) return;
-    br = { id: e.pointerId, x0: e.clientX, y0: e.clientY, on: false, sp: sp, cur: null, low: e.clientY, lowX: e.clientX, lowCur: null, row: null, rowTop: 0 };
+    br = { id: e.pointerId, x0: e.clientX, y0: e.clientY, on: false, sp: sp, cur: null, row: null, rowTop: 0 };
   });
   home.addEventListener('pointermove', function (e) {
     if (!br || e.pointerId !== br.id) return;
@@ -628,21 +638,11 @@
       clearTimeout(pkHideT); pk.classList.remove('go'); pkCover.textContent = '';
       sizePeek(); placePeek(e.clientX, e.clientY); pk.classList.add('on');
     }
-    // 上へはらったかを見る。基準の点から、横に動いた分より多く上へ動いたときだけ「上へはらっている」とみなす
-    // （横になぞっている途中で指が少し上下に揺れても、本はちゃんと替わるように）
-    // 基準の点の本（lowCur）を覚えておき、上へはらったと決まったら、その本を出し直して開く
-    var up = br.low - e.clientY;
-    if (e.clientY > br.low || Math.abs(e.clientX - br.lowX) > up * 0.8) { br.low = e.clientY; br.lowX = e.clientX; up = 0; }
-    if (up < 28) {
-      setBook(spineAt(e.clientX)); placePeek(e.clientX, e.clientY);
-      if (!up) br.lowCur = br.cur;
-    } else { // 上へはらっている途中: 本は替えず、表紙も動かさない
-      if (br.lowCur && br.cur !== br.lowCur) setBook(br.lowCur);
-      if (br.cur && up > 60) { endBrowse(true); return; }
-    }
+    // 指の横の位置の本の表紙を出す（指が上下に動いても、横の位置だけで決める）
+    setBook(spineAt(e.clientX)); placePeek(e.clientX, e.clientY);
   });
   ['pointerup', 'pointercancel'].forEach(function (t) {
-    home.addEventListener(t, function (e) { if (br && e.pointerId === br.id) endBrowse(false); });
+    home.addEventListener(t, function (e) { if (br && e.pointerId === br.id) endBrowse(); });
   });
   // なぞっている間は、iPad が本棚をスクロールしたり、本棚⇄スクラップブックを切りかえたりしないように止める
   // （まだ動き始めで、なぞるかスクロールか決まっていないときも、横向きの動きなら止めておく。iPad は最初の動きでスクロールするか決めるため）
@@ -670,7 +670,7 @@
   });
   $('openBtn').addEventListener('click', show);
 
-  /* ---------- 本棚 ⇄ スクラップブック（横に払って切りかえる） ---------- */
+  /* ---------- 本棚 ⇄ スクラップブック（上の「本棚」「スクラップブック」を押して切りかえる。横に払っても切りかわらない） ---------- */
   var pager = $('hPager'), tabIdx = 0, tabLock = 0;
   function paintTab(i) {
     tabIdx = i;

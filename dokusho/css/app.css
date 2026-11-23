@@ -924,13 +924,15 @@ header { position: relative; z-index: 10; background: var(--bg); }
 .spine.photo .sp-foot { left: 50%; right: auto; transform: translateX(-50%); z-index: 1; }
 .spine .t-dl { position: static; padding: 2px 5px; border-radius: 4px; font-size: 12px; background: rgba(0,0,0,.6); }
 /* 背表紙をなぞったとき: 指の位置の本を少し引き出し、指の上に表紙を出す（本が替わるたびにスッと入れかわる） */
-.spine { touch-action: pan-y; } /* 背表紙の上で横に動かしても、本棚⇄スクラップブックは切りかわらない（なぞる動きに使う） */
+.spine { touch-action: pan-y; } /* 背表紙の上の横の動きは、なぞる動きに使う */
 .spine.pulled { transform: translateY(-14px); transition: transform .08s; }
 #spPeek {
   position: fixed; left: 0; top: 0; z-index: 60; width: 160px; display: none; flex-direction: column; align-items: center; gap: 6px;
   pointer-events: none; will-change: transform;
 }
 #spPeek.on { display: flex; }
+#spPeek.stay { pointer-events: auto; cursor: pointer; } /* 指を離したあと: 表紙を押すと開く */
+#spPeek.stay .pk-cover:active { transform: scale(.97); }
 #spPeek .pk-cover, #spPeek .pk-name, #spPeek .pk-hint { opacity: 0; transition: opacity .15s; }
 #spPeek.show .pk-cover, #spPeek.show .pk-name, #spPeek.show .pk-hint { opacity: 1; }
 #spPeek .pk-cover {
@@ -958,7 +960,7 @@ header { position: relative; z-index: 10; background: var(--bg); }
 .h-tab .h-ic { opacity: .75; } .h-tab.on .h-ic { opacity: 1; }
 .h-links[hidden] { display: none; }
 .h-pager {
-  display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; overscroll-behavior-x: contain;
+  display: flex; overflow-x: hidden; overflow-y: hidden; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; /* 横に払っても切りかわらない（タブを押して切りかえる） */
   -webkit-overflow-scrolling: touch; scrollbar-width: none;
 }
 .h-pager::-webkit-scrollbar { display: none; }
