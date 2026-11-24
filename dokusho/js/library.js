@@ -5,7 +5,7 @@
    - スクラップブックも、ここに並ぶ（中身は scrap.js）
    - 書き込み（ペン・マーカー・付箋）の、この端末への保存もここで受け持つ（Driveへの保存は sync.js）
    本の記録（Store の books）: { id, kind: 'drive'|'local'|'scrap', name, driveId, folder, size, md5,
-     has: この端末に入っているか, pages, last: 最後に読んでいたページ, lastAt, addedAt, thumb: 表紙の小さな絵 } */
+     has: この端末に入っているか, pages, last: 最後に読んでいたページ, lastAt, addedAt, thumb: 表紙の小さな絵, cover: 表紙の大きめの絵（背表紙をなぞったときに出す） } */
 (function () {
   'use strict';
   var App = window.App, S = App.S;
@@ -146,10 +146,10 @@
       im.src = url;
     });
   }
-  function spineSize(b, aspect) { // 大きめに表示する（読みやすいように、太さ・高さ・文字を約1.8倍に）
+  function spineSize(b, aspect) { // 大きめに表示する（読みやすいように、太さ・高さ・文字を約1.8倍に。高さはさらに約1.2倍）
     var pages = +b.pages || (b.size ? Math.round(b.size / 350000) : 0);
     var w = pages ? Math.max(40, Math.min(104, 30 + pages * 0.135)) : 54;
-    var h = aspect ? Math.max(232, Math.min(292, 232 + (aspect - 1.25) * 250)) : 256 + hashOf(b.id) % 5 * 8;
+    var h = aspect ? Math.max(278, Math.min(350, 278 + (aspect - 1.25) * 300)) : 307 + hashOf(b.id) % 5 * 10;
     return { w: Math.round(w), h: Math.round(h) };
   }
   /* 本物の背表紙の写真（裁断した本の背を撮って切り出したもの。spines/ に入れてある）
@@ -166,9 +166,12 @@
     for (var i = 0; i < SPINE_PHOTOS.length; i++) if (SPINE_PHOTOS[i].re.test(n)) return SPINE_PHOTOS[i];
     return null;
   }
-  function photoSize(b, ph) { // 高さはほかの本と同じ決め方（この雑誌はB5判: 縦÷横 = 257÷182）。太さは写真の比のまま（本物と同じ細さ）
+  // 高さはほかの本と同じ決め方（この雑誌はB5判: 縦÷横 = 257÷182）。
+  // 太さは写真の比（本物の細さ）だと細すぎて押しにくいので、その約2.2倍にする（写真は横に広げて貼る）
+  var PHOTO_THICK = 2.2;
+  function photoSize(b, ph) {
     var h = spineSize(b, ph.aspect || 257 / 182).h;
-    return { w: Math.max(3, Math.round(h * ph.r * 10) / 10), h: h };
+    return { w: Math.max(8, Math.round(h * ph.r * PHOTO_THICK * 10) / 10), h: h };
   }
   function spine(b) {
     var ph = spinePhoto(b);
@@ -214,7 +217,7 @@
   function faceTile(b) {
     var prog = b.pages > 1 && b.last > 1 ? Math.round((b.last - 1) / (b.pages - 1) * 100) : 0;
     var sub = b.pages ? (b.last && b.last > 1 ? b.last + ' / ' + b.pages + 'ページ' : b.pages + 'ページ') : '';
-    var cover = b.thumb ? '<img alt="" src="' + esc(b.thumb) + '">' : '<span class="t-ph">' + esc(bare(b.name).slice(0, 28)) + '</span>';
+    var src = coverSrc(b), cover = src ? '<img alt="" src="' + esc(src) + '">' : '<span class="t-ph">' + esc(bare(b.name).slice(0, 28)) + '</span>';
     return '<div class="face' + (b.id === cur ? ' on' : '') + '" data-book="' + esc(b.id) + '">' +
       '<div class="f-stand"><button class="f-cover" data-open="' + esc(b.id) + '" aria-label="' + esc(bare(b.name)) + '">' + cover +
       (prog ? '<span class="t-prog"><i style="width:' + prog + '%"></i></span>' : '') + '</button>' +
@@ -309,13 +312,13 @@
         seen[id] = true;
         if (byId[id]) {
           await Store.patchBook(id, function (rec) {
-            var p = { name: r.name, folder: r.folder, md5: r.md5, modified: r.modified, gone: undefined };
+            var p = { name: r.name, folder: r.folder, md5: r.md5, modified: r.modified, gone: undefined, thumbLink: r.thumbLink || undefined };
             if (!rec.has) p.size = r.size;
             return p;
           });
         } else {
           await Store.putBook({ id: id, kind: 'drive', driveId: r.driveId, name: r.name, folder: r.folder,
-            size: r.size, md5: r.md5, modified: r.modified, has: false, addedAt: Date.now() });
+            size: r.size, md5: r.md5, modified: r.modified, has: false, addedAt: Date.now(), thumbLink: r.thumbLink || undefined });
         }
       }
       // Driveからなくなった本: この端末に入っていれば残す（印だけ付ける）。入っていなければ本棚から外す（書き込みは残す）
@@ -326,6 +329,7 @@
         else await Store.removeBook(b.id, true);
       }
       lastRefresh = Date.now();
+      fetchCovers(token).catch(function (e) { console.error(e); }); // 表紙の絵がまだない本は、Driveの縮小画像から（裏で）
       if (window.Sync) await Sync.pullScraps(token).catch(function (e) { console.error(e); });
     } catch (e) {
       console.error(e);
@@ -390,23 +394,74 @@
   }
 
   /* ---------- 開く ---------- */
-  function thumbSoon(id) {
-    setTimeout(function () {
-      if (cur !== id || !S.hasFile || S.key !== id) return;
-      var c = document.createElement('canvas');
-      App.renderThumb(c, 1, 120).then(function () {
-        var url = c.toDataURL('image/jpeg', 0.75);
-        c.width = c.height = 0;
-        return Store.patchBook(id, { thumb: url });
-      }).catch(function (e) { console.error(e); });
+  function thumbSoon(id, needThumb, needCover) {
+    setTimeout(async function () {
+      try {
+        var p = {};
+        if (needThumb) { // 本棚の小さな表紙・背表紙の色に使う
+          if (cur !== id || !S.hasFile || S.key !== id) return;
+          var c = document.createElement('canvas');
+          await App.renderThumb(c, 1, 120);
+          p.thumb = c.toDataURL('image/jpeg', 0.75); c.width = c.height = 0;
+        }
+        if (needCover) { // 背表紙をなぞったときに出す、大きめの表紙（画面で見てもぼやけないように）
+          if (cur !== id || !S.hasFile || S.key !== id) return;
+          var c2 = document.createElement('canvas');
+          await App.renderThumb(c2, 1, 400);
+          p.cover = c2.toDataURL('image/jpeg', 0.82); c2.width = c2.height = 0;
+        }
+        if (p.thumb || p.cover) { await Store.patchBook(id, p); delete coverUrl[id]; }
+      } catch (e) { console.error(e); }
     }, 1500);
   }
-  // 本・スクラップブックを開いたあとの共通の後始末
-  function opened(id, pages, hadThumb) {
+  // 本・スクラップブックを開いたあとの共通の後始末（hadCover を渡さないもの（スクラップブック）は、大きめの表紙は作らない）
+  function opened(id, pages, hadThumb, hadCover) {
     cur = id; hide();
     Store.patchBook(id, { lastAt: Date.now(), pages: pages }).catch(function (e) { console.error(e); });
-    if (!hadThumb) thumbSoon(id);
+    if (!hadThumb || hadCover === false) thumbSoon(id, !hadThumb, hadCover === false);
   }
+
+  /* ---------- 表紙の絵を、Driveの縮小画像から作る ----------
+     まだ一度も開いていない本にも表紙を出すため。Driveが作っているPDFの縮小画像を大きめ（長い辺900）で取ってきて、
+     この端末に表紙（cover）として取っておく。小さな表紙（thumb）がない本は、そこからも作る（背表紙の色にも使う）
+     取ってきた絵を取っておけないとき（ブラウザが許さないとき）は、このアプリを開いている間だけ、その画像のアドレスを使う */
+  var coverUrl = {}, coverTried = {};
+  function bigThumbLink(u) { return /=s\d+(-[a-z0-9-]*)?$/i.test(u) ? u.replace(/=s\d+(-[a-z0-9-]*)?$/i, '=s900') : u + (u.indexOf('=') > 0 ? '' : '=s900'); }
+  function blobToJpeg(blob, w) {
+    return new Promise(function (res, rej) {
+      var u = URL.createObjectURL(blob), im = new Image();
+      im.onload = function () {
+        var k = Math.min(1, w / (im.naturalWidth || w)), c = document.createElement('canvas');
+        c.width = Math.round(im.naturalWidth * k); c.height = Math.round(im.naturalHeight * k);
+        c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(u);
+        try { var d = c.toDataURL('image/jpeg', 0.82); c.width = c.height = 0; res(d); } catch (e) { rej(e); }
+      };
+      im.onerror = function () { URL.revokeObjectURL(u); rej(new Error('img')); };
+      im.src = u;
+    });
+  }
+  async function fetchCovers(token) {
+    var all = await Store.books(), changed = false;
+    for (var i = 0; i < all.length; i++) {
+      var b = all[i];
+      if (b.kind !== 'drive' || b.cover || !b.thumbLink || coverTried[b.id]) continue;
+      coverTried[b.id] = true;
+      var url = bigThumbLink(b.thumbLink), blob = null;
+      try { var r = await fetch(url); if (r.ok) blob = await r.blob(); } catch (e) {}
+      if (!blob) { try { var r2 = await fetch(url, { headers: { Authorization: 'Bearer ' + token } }); if (r2.ok) blob = await r2.blob(); } catch (e) {} }
+      if (blob && /^image\//.test(blob.type)) {
+        try {
+          var p = { cover: await blobToJpeg(blob, 640) };
+          if (!b.thumb) p.thumb = await blobToJpeg(blob, 240);
+          await Store.patchBook(b.id, p); changed = true; continue;
+        } catch (e) { console.error(e); }
+      }
+      coverUrl[b.id] = url; changed = true; // 取っておけなかった: 画像のアドレスだけ使う
+    }
+    if (changed) render().catch(function () {});
+  }
+  function coverSrc(b) { return b.cover || coverUrl[b.id] || b.thumb || ''; }
   async function open(id, at) {
     if (opening) return false;
     var b = await Store.getBook(id);
@@ -430,7 +485,7 @@
       App.setStatus('開いています…');
       var doc = await Source.openPdf(b), ann = await Store.getAnn(id);
       App.openDoc(doc, b.name, id, ann, 'book', at || b.last || 1);
-      opened(id, doc.numPages, !!b.thumb);
+      opened(id, doc.numPages, !!b.thumb, !!b.cover);
       return true;
     } catch (e) {
       console.error(e);
@@ -568,7 +623,8 @@
     return bd < 40 ? best : null;
   }
   function coverHTML(b) {
-    if (b.thumb) return '<img alt="" src="' + esc(b.thumb) + '">';
+    var src = coverSrc(b);
+    if (src) return '<img alt="" src="' + esc(src) + '">';
     var ph = spinePhoto(b), c = (spineCache[b.id] && spineCache[b.id].c) || plainColors(b.name);
     return '<span class="pk-ph" style="background:' + (ph ? '#f3efe6' : c.bg) + ';color:' + (ph ? '#2a2620' : c.fg) + '">' + esc(bare(b.name)) + '</span>';
   }
@@ -669,6 +725,18 @@
     }
   });
   $('openBtn').addEventListener('click', show);
+
+  /* ---------- 「最近読んでいる本」の段: 文字を押すとたたむ・広げる（この端末で覚えておく） ---------- */
+  function paintFold(folded) {
+    $('secRecent').classList.toggle('folded', folded);
+    $('recentFold').setAttribute('aria-expanded', String(!folded));
+  }
+  (function () { var f = false; try { f = localStorage.getItem('dk:ui:recentFolded') === '1'; } catch (e) {} paintFold(f); })();
+  $('recentFold').addEventListener('click', function () {
+    var f = !$('secRecent').classList.contains('folded');
+    paintFold(f);
+    try { localStorage.setItem('dk:ui:recentFolded', f ? '1' : '0'); } catch (e) {}
+  });
 
   /* ---------- 本棚 ⇄ スクラップブック（上の「本棚」「スクラップブック」を押して切りかえる。横に払っても切りかわらない） ---------- */
   var pager = $('hPager'), tabIdx = 0, tabLock = 0;

@@ -879,7 +879,7 @@ header { position: relative; z-index: 10; background: var(--bg); }
   background: transparent; color: var(--text); font: inherit; cursor: pointer; touch-action: manipulation;
 }
 .h-spines {
-  --row: 300px; --board: 18px;
+  --row: 360px; --board: 18px;
   display: flex; flex-wrap: wrap; align-items: flex-end; align-content: flex-start; column-gap: 3px; row-gap: var(--board);
   padding: 0 12px var(--board); border-radius: 8px;
   background: repeating-linear-gradient(to bottom,
@@ -902,8 +902,7 @@ header { position: relative; z-index: 10; background: var(--bg); }
   box-shadow: inset 0 0 0 .5px rgba(0,0,0,.25), 1px 0 1px rgba(0,0,0,.18);
   transition: transform .15s;
 }
-.spine:active { transform: translateY(-12px); }
-.spine.on { transform: translateY(-5px); box-shadow: inset 0 0 0 .5px rgba(0,0,0,.25), 0 0 0 2px var(--accent); }
+.spine.on { box-shadow: inset 0 0 0 .5px rgba(0,0,0,.25), 0 0 0 2px var(--accent); }
 .spine.cloud { opacity: .72; filter: saturate(.6); }
 .sp-band { flex: none; width: 100%; height: 10px; margin-top: 20px; background: var(--ac); }
 .sp-band.low { height: 7px; margin: 0 0 34px; }
@@ -925,7 +924,7 @@ header { position: relative; z-index: 10; background: var(--bg); }
 .spine .t-dl { position: static; padding: 2px 5px; border-radius: 4px; font-size: 12px; background: rgba(0,0,0,.6); }
 /* 背表紙をなぞったとき: 指の位置の本を少し引き出し、指の上に表紙を出す（本が替わるたびにスッと入れかわる） */
 .spine { touch-action: pan-y; } /* 背表紙の上の横の動きは、なぞる動きに使う */
-.spine.pulled { transform: translateY(-14px); transition: transform .08s; }
+.spine.pulled { box-shadow: 0 0 0 2px var(--accent), 0 0 10px rgba(0,0,0,.25); z-index: 1; } /* なぞっている本: 浮かせず、枠で示す（浮かせると、指の下から逃げてなぞりにくい） */
 #spPeek {
   position: fixed; left: 0; top: 0; z-index: 60; width: 160px; display: none; flex-direction: column; align-items: center; gap: 6px;
   pointer-events: none; will-change: transform;
@@ -947,6 +946,13 @@ header { position: relative; z-index: 10; background: var(--bg); }
 .pk-ph { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; padding: 14px; text-align: center; font-weight: 700; font-size: 17px; line-height: 1.35; }
 #spPeek .pk-name, #spPeek .pk-hint { max-width: 100%; padding: 3px 11px; border-radius: 12px; background: rgba(28,25,20,.78); color: #fff; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #spPeek .pk-hint { font-size: 13px; }
+/* 「最近読んでいる本」の文字を押すと、段をたたむ・広げる */
+.h-fold { display: flex; align-items: center; gap: 8px; padding: 4px 2px; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; touch-action: manipulation; }
+.h-chev { width: 18px; height: 18px; fill: none; stroke: var(--muted); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; transition: transform .2s; }
+#secRecent.folded .h-chev { transform: rotate(-90deg); }
+#secRecent .h-face { transition: opacity .2s; }
+#secRecent.folded .h-face { display: none; }
+#secRecent.folded { margin-bottom: 6px; }
 /* 本棚は、画面の下のほうまで棚が見えるように、少なくとも2段ぶんの高さにする（最後のフォルダだけ） */
 #shelf .h-spines:last-child { min-height: calc((var(--row) + var(--board)) * 2); }
 /* 本棚 ⇄ スクラップブック: 横に払って切りかえる */

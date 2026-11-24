@@ -76,7 +76,7 @@
     var f = await folders(token);
     var out = [], seen = {}, todo = [{ id: f.root, path: '' }], visited = {};
     visited[f.data] = true;
-    var fields = 'id,name,mimeType,size,md5Checksum,modifiedTime,shortcutDetails(targetId,targetMimeType)';
+    var fields = 'id,name,mimeType,size,md5Checksum,modifiedTime,thumbnailLink,shortcutDetails(targetId,targetMimeType)';
     for (var n = 0; todo.length && n < 300; n++) {
       var cur = todo.shift();
       if (visited[cur.id]) continue;
@@ -89,9 +89,9 @@
         if (type !== PDF && !/\.pdf$/i.test(it.name || '')) continue;
         if (seen[id]) continue;
         seen[id] = true;
-        var b = { driveId: id, name: it.name, size: +it.size || 0, md5: it.md5Checksum || '', modified: it.modifiedTime || '', folder: cur.path };
+        var b = { driveId: id, name: it.name, size: +it.size || 0, md5: it.md5Checksum || '', modified: it.modifiedTime || '', folder: cur.path, thumbLink: it.thumbnailLink || '' };
         if (late) { // ショートカットの先の大きさなどは、あらためて聞く
-          try { var m = await meta(id, token); if (m.trashed) continue; b.size = +m.size || 0; b.md5 = m.md5Checksum || ''; b.modified = m.modifiedTime || ''; }
+          try { var m = await meta(id, token, 'id,size,md5Checksum,modifiedTime,trashed,thumbnailLink'); if (m.trashed) continue; b.size = +m.size || 0; b.md5 = m.md5Checksum || ''; b.modified = m.modifiedTime || ''; b.thumbLink = m.thumbnailLink || ''; }
           catch (e) { if (e.status === 404 || e.status === 403) continue; throw e; }
         }
         out.push(b);
