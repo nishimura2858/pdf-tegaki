@@ -168,9 +168,9 @@
   }
   // 高さはほかの本と同じ決め方（この雑誌はB5判: 縦÷横 = 257÷182）。
   // 太さは写真の比（本物の細さ）だと細すぎて押しにくいので、その約2.2倍にする（写真は横に広げて貼る）
-  var PHOTO_THICK = 2.2;
+  var PHOTO_THICK = 2.2, PHOTO_H = 450;
   function photoSize(b, ph) {
-    var h = spineSize(b, ph.aspect || 257 / 182).h;
+    var h = PHOTO_H; // 雑誌の背表紙は、棚の高さいっぱい近くまで高くする
     return { w: Math.max(8, Math.round(h * ph.r * PHOTO_THICK * 10) / 10), h: h };
   }
   function spine(b) {

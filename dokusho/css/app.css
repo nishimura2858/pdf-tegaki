@@ -879,7 +879,7 @@ header { position: relative; z-index: 10; background: var(--bg); }
   background: transparent; color: var(--text); font: inherit; cursor: pointer; touch-action: manipulation;
 }
 .h-spines {
-  --row: 360px; --board: 18px;
+  --row: 480px; --board: 18px;
   display: flex; flex-wrap: wrap; align-items: flex-end; align-content: flex-start; column-gap: 3px; row-gap: var(--board);
   padding: 0 12px var(--board); border-radius: 8px;
   background: repeating-linear-gradient(to bottom,
