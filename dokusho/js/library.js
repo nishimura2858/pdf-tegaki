@@ -269,7 +269,7 @@
       return '<section class="h-row' + (folded ? ' folded' : '') + '">' +
         (r.name ? '<h3 class="h-folder"><button class="h-fold" data-fold="' + esc(r.key) + '" aria-expanded="' + !folded + '">' + esc(r.name) +
           '<span class="h-cnt">' + r.books.length + '冊</span>' + CHEV + '</button></h3>' : '') +
-        '<div class="h-spines">' + (C.bookends ? '<span class="sp-end l" aria-hidden="true"></span>' : '') +
+        '<div class="h-spines" style="--row:' + rowHeight(r.books, C) + 'px">' + (C.bookends ? '<span class="sp-end l" aria-hidden="true"></span>' : '') +
         r.books.sort(sorter).map(function (b) { return spine(b, r.key); }).join('') +
         (C.bookends ? '<span class="sp-end" aria-hidden="true"></span>' : '') + (i === 0 && C.plant ? PLANT : '') +
         (!r.books.length ? '<span class="h-rowempty">本を長押しして「段を移す」を選ぶと、この段に入れられます</span>' : '') + '</div></section>';
@@ -294,6 +294,13 @@
     added: function (a, b) { return (b.addedAt || 0) - (a.addedAt || 0) || byName(a, b); },
     pages: function (a, b) { return (+b.pages || (b.size || 0) / 350000) - (+a.pages || (a.size || 0) / 350000) || byName(a, b); }
   };
+  // 段の高さ（設定）。低めは、その段でいちばん背の高い本に合わせてつめる（本がはみ出さないよう、いつもそれ以上にする）
+  var ROW_H = { normal: 480, high: 580, xhigh: 700 };
+  function rowHeight(books, C) {
+    var tall = books.some(function (b) { return spinePhoto(b); }) ? PHOTO_H : 350;
+    if (C.bookends || C.plant) tall = Math.max(tall, 200);
+    return Math.max(tall + 16, C.rowH === 'low' ? 0 : ROW_H[C.rowH] || ROW_H.normal);
+  }
   function shelfRows(books, C) {
     if (C.group === 'none') return [{ key: 'n:all', name: '', books: books.slice() }];
     if (C.group === 'custom') {

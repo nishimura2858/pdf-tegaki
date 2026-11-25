@@ -9,6 +9,7 @@
   var DEF = {
     group: 'folder',     // 段の分け方: folder（Driveのフォルダごと）| custom（自分で作った段）| none（分けない）
     sort: 'name',        // 段の中の並び順: name | recent | added | pages
+    rowH: 'normal',      // 段の高さ: low（本に合わせてぴったり）| normal | high | xhigh
     shelves: [],         // 自分で作った段 [{ id, name }]（上から順に）
     order: [],           // Driveのフォルダの段の順番（フォルダ名）
     folded: {},          // たたんでいる段
@@ -169,6 +170,7 @@
         nav('段の分け方', GROUP_LABEL[cfg.group], 'group', null, ic('rows', '#7d95d8')),
         nav(cfg.group === 'custom' ? '段を作る・名前・順番' : '段の順番', rowsVal, 'rows', null, ic('order', '#2e9e55')),
         nav('段の中の並び順', SORT_LABEL[cfg.sort], 'sort', null, ic('sort', '#d9822b')),
+        seg('段の高さ', 'rowH', [['low', '低め'], ['normal', 'ふつう'], ['high', '高め'], ['xhigh', 'とても高い']], '低めにすると、本の背の高さに合わせて段をつめるので、1画面に多くの段が見えます'),
         nav('しまった本', stash + '冊', 'stash', null, ic('box', '#8d6e63'))
       ], '段の名前を押すと、その段をたためます。本を長押しすると「段を移す」「ピン留め」「本棚からしまう」が出ます。') +
       sec('最近読んでいる本') + group([
