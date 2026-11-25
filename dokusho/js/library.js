@@ -148,7 +148,7 @@
   }
   function spineSize(b, aspect) { // 大きめに表示する（読みやすいように、太さ・高さ・文字を約1.8倍に。高さはさらに約1.2倍）
     var pages = +b.pages || (b.size ? Math.round(b.size / 350000) : 0);
-    var w = pages ? Math.max(40, Math.min(104, 30 + pages * 0.135)) : 54;
+    var w = HomeSet.cfg.spWidth === 'even' ? 56 : pages ? Math.max(40, Math.min(104, 30 + pages * 0.135)) : 54; // 設定で「太さをそろえる」のときは同じ太さ
     var h = aspect ? Math.max(278, Math.min(350, 278 + (aspect - 1.25) * 300)) : 307 + hashOf(b.id) % 5 * 10;
     return { w: Math.round(w), h: Math.round(h) };
   }
@@ -173,13 +173,29 @@
     var h = PHOTO_H; // 雑誌の背表紙は、棚の高さいっぱい近くまで高くする
     return { w: Math.max(8, Math.round(h * ph.r * PHOTO_THICK * 10) / 10), h: h };
   }
-  function spine(b) {
+  // 背表紙の色（設定: 表紙から・名前から・段ごとにそろえる）
+  function shelfColors(gkey, id) {
+    var h = hashOf(gkey) % 360, l = 26 + hashOf(id) % 5 * 4;
+    return { bg: 'hsl(' + h + ',34%,' + l + '%)', ac: 'hsl(' + ((h + 24) % 360) + ',46%,74%)', fg: '#fbf8f1' };
+  }
+  function spineColors(b, gkey) {
+    var m = HomeSet.cfg.spColor, sc = spineCache[b.id];
+    if (m === 'shelf') return shelfColors(gkey || '', b.id);
+    if (m === 'cover' && sc && sc.key === (b.thumb || '').length) return sc.c;
+    return plainColors(b.name);
+  }
+  // しおりのひも: 読みかけの本だけ、背表紙の下から垂らす
+  function ribbon(b) {
+    if (!HomeSet.cfg.ribbon || !b.has || !(b.pages > 1) || !(b.last > 1) || b.last >= b.pages) return '';
+    return '<span class="sp-ribbon" style="--rc:' + ['#c0392b', '#2e6bc0', '#2e8b57', '#b8860b'][hashOf(b.id) % 4] + '"></span>';
+  }
+  function spine(b, gkey) {
     var ph = spinePhoto(b);
     if (ph) return photoSpine(b, ph);
-    var dl = loading[b.id], sc = spineCache[b.id], c = sc && sc.key === (b.thumb || '').length ? sc.c : plainColors(b.name);
+    var dl = loading[b.id], sc = spineCache[b.id], c = spineColors(b, gkey);
     var sz = spineSize(b, sc && sc.aspect), name = bare(b.name);
     var foot = dl ? '<span class="t-dl"><b>' + pct(dl) + '</b></span>' : !b.has ? '<span class="sp-cloud">' + ICON.cloud + '</span>' : '';
-    return '<span class="sp-slot" data-book="' + esc(b.id) + '"><button class="spine' + (!b.has ? ' cloud' : '') + (b.id === cur ? ' on' : '') +
+    return '<span class="sp-slot" data-book="' + esc(b.id) + '" data-g="' + esc(gkey || '') + '">' + ribbon(b) + '<button class="spine' + (!b.has ? ' cloud' : '') + (b.id === cur ? ' on' : '') +
       '" data-open="' + esc(b.id) + '" data-spine="' + esc(b.id) + '" aria-label="' + esc(name) + '" style="--w:' + sz.w + 'px;--h:' + sz.h +
       'px;--bg:' + c.bg + ';--ac:' + c.ac + ';--fg:' + c.fg + '">' +
       '<span class="sp-band"></span><span class="sp-title">' + esc(name) + '</span><span class="sp-band low"></span>' +
@@ -187,7 +203,7 @@
   }
   function photoSpine(b, ph) {
     var dl = loading[b.id], sz = photoSize(b, ph), name = bare(b.name);
-    return '<span class="sp-slot" data-book="' + esc(b.id) + '"><button class="spine photo' + (!b.has ? ' cloud' : '') + (b.id === cur ? ' on' : '') +
+    return '<span class="sp-slot" data-book="' + esc(b.id) + '">' + ribbon(b) + '<button class="spine photo' + (!b.has ? ' cloud' : '') + (b.id === cur ? ' on' : '') +
       '" data-open="' + esc(b.id) + '" data-spine="' + esc(b.id) + '" aria-label="' + esc(name) + '" style="--w:' + sz.w + 'px;--h:' + sz.h +
       'px;background-image:url(' + ph.src + ')">' +
       (dl ? '<span class="sp-foot"><span class="t-dl"><b>' + pct(dl) + '</b></span></span>' : '') + '</button></span>';
@@ -205,22 +221,24 @@
       }
       if (my !== seq) return;
       var els = home.querySelectorAll('[data-spine="' + (window.CSS && CSS.escape ? CSS.escape(b.id) : b.id) + '"]');
-      var sz = spineSize(b, sc.aspect);
+      var sz = spineSize(b, sc.aspect), byCover = HomeSet.cfg.spColor === 'cover';
       for (var j = 0; j < els.length; j++) {
         var st = els[j].style;
-        st.setProperty('--bg', sc.c.bg); st.setProperty('--ac', sc.c.ac); st.setProperty('--fg', sc.c.fg);
+        if (byCover) { st.setProperty('--bg', sc.c.bg); st.setProperty('--ac', sc.c.ac); st.setProperty('--fg', sc.c.fg); }
         st.setProperty('--w', sz.w + 'px'); st.setProperty('--h', sz.h + 'px');
       }
     }
   }
   // 最近読んでいる本（表紙を見せて棚の一番上に）
+  var PIN = '<svg viewBox="0 0 24 24"><path d="M9 3h6l-1 6 3.5 3.5v1.5h-11v-1.5L10 9z" class="fill"/><path d="M12 14v7"/></svg>';
   function faceTile(b) {
-    var prog = b.pages > 1 && b.last > 1 ? Math.round((b.last - 1) / (b.pages - 1) * 100) : 0;
+    var prog = HomeSet.cfg.recentProg && b.pages > 1 && b.last > 1 ? Math.round((b.last - 1) / (b.pages - 1) * 100) : 0;
     var sub = b.pages ? (b.last && b.last > 1 ? b.last + ' / ' + b.pages + 'ページ' : b.pages + 'ページ') : '';
     var src = coverSrc(b), cover = src ? '<img alt="" src="' + esc(src) + '">' : '<span class="t-ph">' + esc(bare(b.name).slice(0, 28)) + '</span>';
     return '<div class="face' + (b.id === cur ? ' on' : '') + '" data-book="' + esc(b.id) + '">' +
       '<div class="f-stand"><button class="f-cover" data-open="' + esc(b.id) + '" aria-label="' + esc(bare(b.name)) + '">' + cover +
-      (prog ? '<span class="t-prog"><i style="width:' + prog + '%"></i></span>' : '') + '</button>' +
+      (prog ? '<span class="t-prog"><i style="width:' + prog + '%"></i></span>' : '') +
+      (b.pin ? '<span class="f-pin" title="ピン留め">' + PIN + '</span>' : '') + '</button>' +
       '<button class="t-act f-act" data-more="' + esc(b.id) + '" aria-label="メニュー">' + ICON.more + '</button></div>' +
       '<button class="f-label" data-open="' + esc(b.id) + '"><span class="t-name">' + esc(bare(b.name)) + '</span>' +
       (sub ? '<span class="t-when">' + esc(sub) + '</span>' : '') + '</button></div>';
@@ -234,34 +252,65 @@
     var scraps = all.filter(function (b) { return b.kind === 'scrap'; })
       .sort(function (a, b) { return (b.lastAt || b.addedAt || 0) - (a.lastAt || a.addedAt || 0); });
     var books = all.filter(function (b) { return b.kind !== 'scrap'; });
-    // 最近読んでいる本（最近開いた5冊。表紙を見せて、棚の一番上に）
-    var recent = books.filter(function (b) { return b.lastAt && b.has; })
-      .sort(function (a, b) { return b.lastAt - a.lastAt; }).slice(0, 5);
+    var C = HomeSet.cfg, shown = books.filter(function (b) { return !b.stash; }); // しまった本は並べない
+    // 最近読んでいる本（ピン留めした本を先頭に、あとは最近開いた順。冊数は設定から。表紙を見せて、棚の一番上に）
+    var pinned = shown.filter(function (b) { return b.pin; }).sort(function (a, b) { return a.pin - b.pin; });
+    var recent = !C.recentShow ? [] : pinned.concat(shown.filter(function (b) { return !b.pin && b.lastAt && b.has; })
+      .sort(function (a, b) { return b.lastAt - a.lastAt; })).slice(0, Math.max(C.recentCount, pinned.length));
     $('recentGrid').innerHTML = recent.map(faceTile).join('');
     $('secRecent').hidden = !recent.length;
     // スクラップブック
     $('scrapGrid').innerHTML = scraps.map(tile).join('');
     $('scrapEmpty').hidden = !!scraps.length;
-    // 本棚（Driveのフォルダごと。このiPadから入れた本は最後に）
-    var groups = {}, order = [];
-    books.forEach(function (b) {
-      var g = b.kind === 'local' ? '￿このiPadから入れた本' : (b.folder || '');
-      if (!groups[g]) { groups[g] = []; order.push(g); }
-      groups[g].push(b);
-    });
-    order.sort(function (a, b) { return a.localeCompare(b, 'ja', { numeric: true }); });
-    // 2段目から下: 背表紙を見せて並べる（フォルダごとに1つの棚）
-    $('shelf').innerHTML = order.map(function (g) {
-      var name = g.replace(/^￿/, '');
-      return (name ? '<h3 class="h-folder">' + esc(name) + '</h3>' : '') +
-        '<div class="h-spines">' + groups[g].sort(byName).map(spine).join('') + '</div>';
+    // 2段目から下: 背表紙を見せて並べる（段の分け方・並び順・飾りは設定から）
+    var rows = shelfRows(shown, C), sorter = SORTS[C.sort] || byName;
+    $('shelf').innerHTML = rows.map(function (r, i) {
+      var folded = !!(r.name && C.folded[r.key]);
+      return '<section class="h-row' + (folded ? ' folded' : '') + '">' +
+        (r.name ? '<h3 class="h-folder"><button class="h-fold" data-fold="' + esc(r.key) + '" aria-expanded="' + !folded + '">' + esc(r.name) +
+          '<span class="h-cnt">' + r.books.length + '冊</span>' + CHEV + '</button></h3>' : '') +
+        '<div class="h-spines">' + (C.bookends ? '<span class="sp-end l" aria-hidden="true"></span>' : '') +
+        r.books.sort(sorter).map(function (b) { return spine(b, r.key); }).join('') +
+        (C.bookends ? '<span class="sp-end" aria-hidden="true"></span>' : '') + (i === 0 && C.plant ? PLANT : '') +
+        (!r.books.length ? '<span class="h-rowempty">本を長押しして「段を移す」を選ぶと、この段に入れられます</span>' : '') + '</div></section>';
     }).join('');
-    paintSpines(books, my).catch(function (e) { console.error(e); });
+    paintSpines(shown, my).catch(function (e) { console.error(e); });
     renderDrive(books);
     $('homeClose').hidden = !S.hasFile;
     // この端末に入っている量
     var have = books.filter(function (b) { return b.has; }), sum = have.reduce(function (s, b) { return s + (+b.size || 0); }, 0);
     $('usage').textContent = have.length ? 'この端末に入っている本: ' + have.length + '冊・' + mb(sum) + '（本の「…」から、端末から消して空きを増やせます。Driveには残ります）' : '';
+  }
+  /* 段の分け方（設定）: Driveのフォルダごと / 自分で作った段 / 分けない */
+  var CHEV = '<svg class="h-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+  var PLANT = '<span class="sp-plant" aria-hidden="true"><svg viewBox="0 0 120 200"><g fill="none" stroke-linecap="round">' +
+    '<path d="M60 128C58 96 50 70 30 46" stroke="#3f7d4e" stroke-width="3"/><path d="M60 128C62 92 72 62 96 38" stroke="#3f7d4e" stroke-width="3"/><path d="M60 128V60" stroke="#3f7d4e" stroke-width="3"/></g>' +
+    '<g fill="#4f9a5f"><path d="M30 46c-16-2-24 8-22 20 12 0 22-6 22-20z"/><path d="M96 38c14-6 24 2 22 14-12 2-22-2-22-14z"/><path d="M60 60c-8-12-4-26 6-32 6 12 4 24-6 32z"/>' +
+    '<path d="M44 88c-16 0-24 10-20 22 12-2 20-10 20-22z" fill="#5fae6c"/><path d="M76 82c14-4 24 4 22 16-12 2-22-4-22-16z" fill="#5fae6c"/><path d="M60 100c-10-6-12-18-6-26 8 6 10 18 6 26z" fill="#6cbf78"/></g>' +
+    '<path d="M30 128h60l-7 62a6 6 0 0 1-6 5H43a6 6 0 0 1-6-5z" fill="#c8754d"/><path d="M26 122h68v12H26z" fill="#d98a60"/><path d="M40 140h40" stroke="rgba(0,0,0,.12)" stroke-width="3"/></svg></span>';
+  var SORTS = {
+    name: byName,
+    recent: function (a, b) { return (b.lastAt || 0) - (a.lastAt || 0) || byName(a, b); },
+    added: function (a, b) { return (b.addedAt || 0) - (a.addedAt || 0) || byName(a, b); },
+    pages: function (a, b) { return (+b.pages || (b.size || 0) / 350000) - (+a.pages || (a.size || 0) / 350000) || byName(a, b); }
+  };
+  function shelfRows(books, C) {
+    if (C.group === 'none') return [{ key: 'n:all', name: '', books: books.slice() }];
+    if (C.group === 'custom') {
+      var ids = {};
+      var rows = C.shelves.map(function (s) { ids[s.id] = true; return { key: 'c:' + s.id, name: s.name, books: books.filter(function (b) { return b.shelf === s.id; }) }; });
+      var rest = books.filter(function (b) { return !ids[b.shelf]; });
+      if (rest.length || !rows.length) rows.push({ key: 'c:_rest', name: rows.length ? 'そのほかの本' : '', books: rest });
+      return rows;
+    }
+    // Driveのフォルダごと（このiPadから入れた本は最後に。順番は設定で変えられる）
+    var groups = {}, order = [];
+    books.forEach(function (b) {
+      var g = HomeSet.folderKey(b);
+      if (!groups[g]) { groups[g] = []; order.push(g); }
+      groups[g].push(b);
+    });
+    return HomeSet.sortFolders(order).map(function (g) { return { key: 'f:' + g, name: g.replace(/^\uffff/, ''), books: groups[g] }; });
   }
   function renderDrive(books) {
     var btn = $('driveBtn'), info = $('driveInfo'), empty = $('shelfEmpty');
@@ -543,7 +592,10 @@
       items.push({ label: '名前を変える', run: function () { return Scrap.rename(id); } });
       items.push({ label: 'PDFにして共有', run: function () { return Scrap.share(id); } });
       items.push({ label: 'スクラップブックを削除', danger: true, run: function () { return Scrap.remove(id); } });
-    } else if (b.kind === 'drive') {
+    } else {
+      shelfItems(b, items, anchor);
+    }
+    if (b.kind === 'drive') {
       if (loading[id]) items.push({ label: 'ダウンロードを中止', run: function () { loading[id] && loading[id].ctrl.abort(); } });
       else if (!b.has) {
         if (!b.gone) items.push({ label: 'この端末にダウンロード（' + mb(b.size) + '）', run: function () { download(id); } });
@@ -561,13 +613,42 @@
           return evict(b);
         } });
       }
-    } else {
+    } else if (b.kind === 'local') {
       items.push({ label: '本棚から外す', danger: true, run: function () {
         if (!window.confirm('「' + bare(b.name) + '」を本棚から外しますか？\nこの端末に入れたPDFを消します（元のファイルは消えません）。書き込みは残るので、同じPDFを入れ直すと戻ります。')) return;
         if (b.id === cur) { App.closeDoc(); cur = null; }
         return Store.removeBook(id, true);
       } });
     }
+    menuAt(anchor, items);
+  }
+
+  // 本のメニューの、本棚の並べ方に関わるもの（ピン留め・段を移す・しまう）
+  function shelfItems(b, items, anchor) {
+    var C = HomeSet.cfg, id = b.id;
+    items.push({ label: b.pin ? 'ピン留めを外す' : '「最近読んでいる本」にピン留め', run: function () {
+      if (!b.pin && !C.recentShow) HomeSet.set('recentShow', true);
+      return Store.patchBook(id, { pin: b.pin ? undefined : Date.now() });
+    } });
+    items.push({ label: '段を移す…', run: function () { shelfMenu(anchor, b); } });
+    items.push({ label: '本棚からしまう', run: function () {
+      return Store.patchBook(id, { stash: true, pin: undefined }).then(function () {
+        App.setStatus('「' + bare(b.name) + '」をしまいました（右上の歯車の「しまった本」から戻せます）');
+      });
+    } });
+  }
+  function shelfMenu(anchor, b) {
+    var C = HomeSet.cfg;
+    function moveTo(sid) {
+      return Store.patchBook(b.id, { shelf: sid }).then(function () {
+        if (C.group !== 'custom') { HomeSet.set('group', 'custom'); App.setStatus('段の分け方を「自分で作った段」にしました（右上の歯車から変えられます）'); }
+      });
+    }
+    var items = [{ head: '「' + bare(b.name) + '」を入れる段' }];
+    C.shelves.forEach(function (s) { items.push({ label: (b.shelf === s.id ? '✓ ' : '　') + s.name, run: function () { return moveTo(s.id); } }); });
+    if (C.shelves.length) items.push({ label: (!b.shelf ? '✓ ' : '　') + 'どの段にも入れない', run: function () { return moveTo(undefined); } });
+    items.push({ label: '＋ 新しい段を作って入れる', run: function () { var s = HomeSet.askNewShelf(); return s && moveTo(s.id); } });
+    if (!anchor.isConnected) anchor = home.querySelector('[data-book="' + (window.CSS && CSS.escape ? CSS.escape(b.id) : b.id) + '"]') || $('homeSet');
     menuAt(anchor, items);
   }
 
@@ -715,8 +796,10 @@
     var d = b.dataset;
     if (d.open) { open(d.open); return; }
     if (d.more) { bookMenu(b, d.more); return; }
+    if (d.fold) { var row = b.closest('.h-row'); if (row) { row.classList.toggle('folded'); b.setAttribute('aria-expanded', String(!row.classList.contains('folded'))); } HomeSet.toggleFold(d.fold); return; }
     switch (b.id) {
       case 'homeClose': hide(); break;
+      case 'homeSet': HomeSet.open(); break;
       case 'driveBtn': refresh(true); break;
       case 'addLocal': $('localFile').click(); break;
       case 'tabShelf': goTab(0, true); break;
@@ -740,7 +823,13 @@
 
   /* ---------- 本棚 ⇄ スクラップブック（上の「本棚」「スクラップブック」を押して切りかえる。横に払っても切りかわらない） ---------- */
   var pager = $('hPager'), tabIdx = 0, tabLock = 0;
+  (function () { // アプリを開いたときに出すほう（設定: 本棚・スクラップブック・前回のまま）
+    var st = HomeSet.cfg.start, last = 0;
+    try { last = localStorage.getItem('dk:ui:lastTab') === '1' ? 1 : 0; } catch (e) {}
+    tabIdx = st === 'scrap' ? 1 : st === 'shelf' ? 0 : last;
+  })();
   function paintTab(i) {
+    if (tabIdx !== i) { try { localStorage.setItem('dk:ui:lastTab', String(i)); } catch (e) {} }
     tabIdx = i;
     $('tabShelf').classList.toggle('on', i === 0); $('tabScrap').classList.toggle('on', i === 1);
     $('tabShelf').setAttribute('aria-selected', String(i === 0)); $('tabScrap').setAttribute('aria-selected', String(i === 1));
@@ -763,6 +852,7 @@
     var r = window.GAuth ? await GAuth.consumeRedirect() : null;
     if (r) GAuth.takeAfter();
     await render().catch(function (e) { console.error(e); });
+    goTab(tabIdx, false);
     if (r && r.error) App.setStatus(message(r.error));
     else if (r) App.setStatus('Googleドライブにログインしました');
     var again = null;
