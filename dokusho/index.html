@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="css/app.css?v=25">
+<link rel="stylesheet" href="css/app.css?v=26">
 </head>
 <body class="home-on">
 <header>
@@ -143,7 +143,7 @@
   <details class="h-help"><summary>使い方</summary><p>
     <b>本を入れる</b>：Googleドライブの「読書ノート」フォルダに、自炊した本のPDFを入れます（MacのFinderから入れられます。フォルダで分けてもかまいません）。「Driveの本を更新」を押すと本棚に並びます。<br>
     <b>本棚</b>：いちばん上の段には、最近読んだ5冊が表紙を見せて並びます（「最近読んでいる本」の文字を押すと、たたむ・広げるができます）。その下の段には、すべての本が背表紙を見せて並びます（背表紙の色は表紙の色から、太さはページ数から決まります。まだ一度も開いていない本は、名前から決めた色になります。本物の背表紙の写真を登録した本は、その写真が、本物と同じ細さで並びます）。背表紙に指を置いて横になぞると、指の上にその本の表紙が出て、次の背表紙へ指が移るたびに、その本の表紙に入れかわります。指を離しても表紙は残るので、その表紙を押すと本が開きます（ほかの所を押すと消えます）。背表紙を長押しすると、本のメニューが出ます（ピン留め・段を移す・本棚からしまう など）。<br>
-    <b>本棚の設定</b>：右上の歯車のボタンで、段の分け方（Driveのフォルダごと・自分で作った段・分けない）、段の順番、並び順、「最近読んでいる本」の冊数、背表紙の色や太さ、棚の色、壁（しっくい・レンガ・好きな写真）、本立てや観葉植物、明るい・暗い外観などを変えられます。段の名前を押すと、その段をたためます。<br>
+    <b>本棚の設定</b>：右上の歯車のボタンで、段の分け方（Driveのフォルダごと・自分で作った段・分けない）、段の順番、並び順、「最近読んでいる本」の冊数、背表紙の色や太さ、棚の色、壁（しっくい・レンガ・好きな写真）、本立てや観葉植物、明るい・暗い外観などを変えられます。「段の高さ」の「指で調整する」を押すと、棚板のつまみを指で上下に動かして段の高さを決められます（背表紙の写真も、それに合わせて縦にのびます）。段の名前を押すと、その段をたためます。<br>
     <b>スクラップブック</b>：上の「スクラップブック」を押すと、スクラップブックが出ます。「本棚」を押すと本棚に戻ります。<br>
     <b>読む</b>：本を押すと、最初の1回だけこのiPadにダウンロードしてから開きます。次からはすぐ開き、電波がなくても読めます。横向きにすると見開きになり、指で左右に払うとめくれます。2本指で拡大、2回たたくと拡大・元に戻す。<br>
     <b>書く</b>：マーカーとペンは、Apple Pencilで書きます（指はめくる・動かすのに使います）。<br>
@@ -273,21 +273,21 @@
 window.APP_CONFIG.REDIRECT_URI = new URL('../', location.href).href;
 window.APP_CONFIG.RETURN_TO = 'dokusho/';
 </script>
-<script src="js/store.js?v=25"></script>
-<script src="js/source.js?v=25"></script>
-<script src="js/app.js?v=25"></script>
-<script src="js/toolbar.js?v=25"></script>
-<script src="js/pages.js?v=25"></script>
+<script src="js/store.js?v=26"></script>
+<script src="js/source.js?v=26"></script>
+<script src="js/app.js?v=26"></script>
+<script src="js/toolbar.js?v=26"></script>
+<script src="js/pages.js?v=26"></script>
 <script src="../js/google-auth.js?v=100"></script>
-<script src="js/drive.js?v=25"></script>
-<script src="js/notes.js?v=25"></script>
-<script src="js/scrap.js?v=25"></script>
-<script src="js/sync.js?v=25"></script>
-<script src="js/homeset.js?v=25"></script>
-<script src="js/library.js?v=25"></script>
-<script src="js/quick.js?v=25"></script>
-<script src="js/palette.js?v=25"></script>
-<script src="js/slide.js?v=25"></script>
+<script src="js/drive.js?v=26"></script>
+<script src="js/notes.js?v=26"></script>
+<script src="js/scrap.js?v=26"></script>
+<script src="js/sync.js?v=26"></script>
+<script src="js/homeset.js?v=26"></script>
+<script src="js/library.js?v=26"></script>
+<script src="js/quick.js?v=26"></script>
+<script src="js/palette.js?v=26"></script>
+<script src="js/slide.js?v=26"></script>
 <script>
 // 電波がなくても開けるように、アプリの部品をこの端末に取っておく（sw.js）
 // 新しい版が届いたら: 本を開いていなければすぐ、開いていれば、ほかのアプリから戻ってきたときに読み直す

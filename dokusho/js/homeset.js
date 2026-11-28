@@ -9,7 +9,7 @@
   var DEF = {
     group: 'folder',     // 段の分け方: folder（Driveのフォルダごと）| custom（自分で作った段）| none（分けない）
     sort: 'name',        // 段の中の並び順: name | recent | added | pages
-    rowH: 'normal',      // 段の高さ: low（本に合わせてぴったり）| normal | high | xhigh
+    rowPx: 480,          // 段の高さ（px）。設定の「指で調整する」で、棚板をつかんで変える。背表紙の写真もこれに合わせて縦にのびる
     shelves: [],         // 自分で作った段 [{ id, name }]（上から順に）
     order: [],           // Driveのフォルダの段の順番（フォルダ名）
     folded: {},          // たたんでいる段
@@ -30,6 +30,7 @@
     var c = {};
     try { c = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) {}
     Object.keys(DEF).forEach(function (k) { cfg[k] = k in c ? c[k] : clone(DEF[k]); });
+    if (!('rowPx' in c) && c.rowH) cfg.rowPx = { low: 380, normal: 480, high: 580, xhigh: 700 }[c.rowH] || 480; // v25の「低め・ふつう…」から
   })();
   function save() { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (e) {} }
   var rT = 0;
@@ -170,7 +171,8 @@
         nav('段の分け方', GROUP_LABEL[cfg.group], 'group', null, ic('rows', '#7d95d8')),
         nav(cfg.group === 'custom' ? '段を作る・名前・順番' : '段の順番', rowsVal, 'rows', null, ic('order', '#2e9e55')),
         nav('段の中の並び順', SORT_LABEL[cfg.sort], 'sort', null, ic('sort', '#d9822b')),
-        seg('段の高さ', 'rowH', [['low', '低め'], ['normal', 'ふつう'], ['high', '高め'], ['xhigh', 'とても高い']], '低めにすると、本の背の高さに合わせて段をつめるので、1画面に多くの段が見えます'),
+        '<div class="hs-row"><span class="hs-lbl">段の高さ<small>棚板を指でつかんで、上下に動かして決めます。背表紙の写真も、それに合わせて縦にのびます</small></span>' +
+          '<span class="hs-val">' + cfg.rowPx + '</span><button class="hs-pill" data-act="rowEdit">指で調整する</button></div>',
         nav('しまった本', stash + '冊', 'stash', null, ic('box', '#8d6e63'))
       ], '段の名前を押すと、その段をたためます。本を長押しすると「段を移す」「ピン留め」「本棚からしまう」が出ます。') +
       sec('最近読んでいる本') + group([
@@ -372,6 +374,7 @@
           if (cfg.wall === 'photo') cfg.wall = 'plain';
           changed();
           break;
+        case 'rowEdit': closeSheet(); setTimeout(startRowEdit, 250); break;
         case 'reset':
           if (!window.confirm('本棚の設定を、すべて最初の状態に戻しますか？\n自分で作った段・ピン留め・しまった本の印も外れます（本と書き込みはそのままです）。')) break;
           Object.keys(DEF).forEach(function (k) { cfg[k] = clone(DEF[k]); });
@@ -402,7 +405,62 @@
   });
 
   applyLook();
+  /* ---------- 段の高さを指で決める（編集の画面） ----------
+     棚板をつかんで上下に動かすと、すべての段の高さがその場で変わる（背表紙の写真も縦にのびる）。指を離すと覚える */
+  var ROW_MIN = 370, ROW_MAX = 820, editing = false;
+  var bar = document.createElement('div');
+  bar.id = 'rowEditBar'; bar.hidden = true;
+  bar.innerHTML = '<div class="re-txt"><b>段の高さ <span class="re-val"></span></b><small>棚板（つまみ）を指でつかんで、上下に動かしてください</small></div>' +
+    '<button class="re-reset">元の高さ</button><button class="re-done">完了</button>';
+  document.body.appendChild(bar);
+  var reVal = bar.querySelector('.re-val');
+  function paintRowPx(px) { // 描き直さずに、その場で高さを変える（指についてくるように）
+    reVal.textContent = px;
+    var home = document.getElementById('home');
+    home.querySelectorAll('.h-spines').forEach(function (el) { el.style.setProperty('--row', px + 'px'); });
+    home.querySelectorAll('.spine.photo').forEach(function (el) { el.style.setProperty('--h', (px - 30) + 'px'); });
+  }
+  function startRowEdit() {
+    var home = document.getElementById('home');
+    if (window.Library) Library.goShelf && Library.goShelf();
+    editing = true; bar.hidden = false; reVal.textContent = cfg.rowPx;
+    document.body.classList.add('row-edit');
+    Library.render().then(function () {
+      var row = home.querySelector('.h-row:not(.folded) .h-spines');
+      if (row) home.scrollTo({ top: Math.max(0, row.getBoundingClientRect().top - home.getBoundingClientRect().top + home.scrollTop - 110), behavior: 'smooth' });
+    });
+  }
+  function endRowEdit() {
+    editing = false; bar.hidden = true;
+    document.body.classList.remove('row-edit');
+    rerender();
+  }
+  bar.querySelector('.re-done').addEventListener('click', endRowEdit);
+  bar.querySelector('.re-reset').addEventListener('click', function () { cfg.rowPx = DEF.rowPx; save(); paintRowPx(cfg.rowPx); rerender(); });
+  var drag = null;
+  document.addEventListener('pointerdown', function (e) {
+    var g = editing && e.target.closest('.sp-grip'); if (!g) return;
+    e.preventDefault();
+    drag = { id: e.pointerId, y: e.clientY, px: cfg.rowPx, el: g };
+    g.classList.add('on');
+    try { g.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  document.addEventListener('pointermove', function (e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    var px = Math.round(Math.max(ROW_MIN, Math.min(ROW_MAX, drag.px + e.clientY - drag.y)));
+    if (px !== cfg.rowPx) { cfg.rowPx = px; paintRowPx(px); }
+  });
+  function endDrag(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    drag.el.classList.remove('on'); drag = null;
+    save(); rerender();
+  }
+  document.addEventListener('pointerup', endDrag);
+  document.addEventListener('pointercancel', endDrag);
+  document.addEventListener('touchmove', function (e) { if (drag && e.cancelable) e.preventDefault(); }, { passive: false });
+
   window.HomeSet = {
+    isEditing: function () { return editing; }, ROW_MIN: ROW_MIN,
     cfg: cfg, open: openSheet, close: closeSheet, set: set, changed: changed, applyLook: applyLook,
     newShelf: newShelf, askNewShelf: askNewShelf, toggleFold: toggleFold,
     folderKey: folderKey, sortFolders: sortFolders

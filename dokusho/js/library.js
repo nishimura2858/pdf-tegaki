@@ -168,10 +168,11 @@
   }
   // 高さはほかの本と同じ決め方（この雑誌はB5判: 縦÷横 = 257÷182）。
   // 太さは写真の比（本物の細さ）だと細すぎて押しにくいので、その約2.2倍にする（写真は横に広げて貼る）
+  // 写真の高さは、段の高さ（設定。指で変えられる）より30px低く。太さは変えないので、段を高くすると写真が縦にのびる
   var PHOTO_THICK = 2.2, PHOTO_H = 450;
   function photoSize(b, ph) {
-    var h = PHOTO_H; // 雑誌の背表紙は、棚の高さいっぱい近くまで高くする
-    return { w: Math.max(8, Math.round(h * ph.r * PHOTO_THICK * 10) / 10), h: h };
+    var h = Math.max(300, (HomeSet.cfg.rowPx || 480) - 30);
+    return { w: Math.max(8, Math.round(PHOTO_H * ph.r * PHOTO_THICK * 10) / 10), h: h };
   }
   // 背表紙の色（設定: 表紙から・名前から・段ごとにそろえる）
   function shelfColors(gkey, id) {
@@ -271,6 +272,7 @@
           '<span class="h-cnt">' + r.books.length + '冊</span>' + CHEV + '</button></h3>' : '') +
         '<div class="h-spines" style="--row:' + rowHeight(r.books, C) + 'px">' + (C.bookends ? '<span class="sp-end l" aria-hidden="true"></span>' : '') +
         r.books.sort(sorter).map(function (b) { return spine(b, r.key); }).join('') +
+        (HomeSet.isEditing() ? '<span class="sp-grip" aria-label="棚板をつかんで高さを変える"><i></i></span>' : '') +
         (C.bookends ? '<span class="sp-end" aria-hidden="true"></span>' : '') + (i === 0 && C.plant ? PLANT : '') +
         (!r.books.length ? '<span class="h-rowempty">本を長押しして「段を移す」を選ぶと、この段に入れられます</span>' : '') + '</div></section>';
     }).join('');
@@ -295,12 +297,7 @@
     pages: function (a, b) { return (+b.pages || (b.size || 0) / 350000) - (+a.pages || (a.size || 0) / 350000) || byName(a, b); }
   };
   // 段の高さ（設定）。低めは、その段でいちばん背の高い本に合わせてつめる（本がはみ出さないよう、いつもそれ以上にする）
-  var ROW_H = { normal: 480, high: 580, xhigh: 700 };
-  function rowHeight(books, C) {
-    var tall = books.some(function (b) { return spinePhoto(b); }) ? PHOTO_H : 350;
-    if (C.bookends || C.plant) tall = Math.max(tall, 200);
-    return Math.max(tall + 16, C.rowH === 'low' ? 0 : ROW_H[C.rowH] || ROW_H.normal);
-  }
+  function rowHeight(books, C) { return Math.max(HomeSet.ROW_MIN, C.rowPx || 480); }
   function shelfRows(books, C) {
     if (C.group === 'none') return [{ key: 'n:all', name: '', books: books.slice() }];
     if (C.group === 'custom') {
@@ -869,6 +866,7 @@
   })();
 
   window.Library = {
+    goShelf: function () { goTab(0, false); },
     show: show, hide: hide, render: render, open: open, opened: opened, refresh: refresh,
     current: function () { return cur; }, bare: bare, message: message,
     forget: function (id) { if (cur === id) cur = null; }

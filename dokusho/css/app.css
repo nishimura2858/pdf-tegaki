@@ -1298,3 +1298,27 @@ button.hs-mvlbl { cursor: pointer; border-radius: 0; }
 .hs-nav .hs-backbtn[hidden] { display: flex !important; visibility: hidden; } /* 戻るがないときも、題名をまん中に保つ */
 #home.walled .f-label { margin-top: 6px; padding: 5px 6px; border-radius: 10px; background: color-mix(in srgb, var(--bg) 84%, transparent); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
 #home.walled .h-face { border-radius: 8px; }
+/* ---------- 段の高さを指で決める（編集の画面） ---------- */
+#rowEditBar {
+  position: fixed; z-index: 45; top: calc(12px + var(--sat)); left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 18px; border-radius: 18px;
+  background: color-mix(in srgb, var(--bar) 92%, transparent); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+  box-shadow: 0 10px 30px rgba(0,0,0,.22), 0 0 0 .5px rgba(0,0,0,.1); max-width: calc(100vw - 24px);
+}
+.re-txt { display: flex; flex-direction: column; min-width: 0; margin-right: 6px; }
+.re-txt b { font-size: 15.5px; } .re-val { font-variant-numeric: tabular-nums; color: var(--accent); }
+.re-txt small { font-size: 12px; color: var(--muted); }
+#rowEditBar button { flex: none; height: 38px; padding: 0 16px; border: 0; border-radius: 19px; font: inherit; font-weight: 600; cursor: pointer; touch-action: manipulation; }
+.re-reset { background: var(--hs-seg); color: var(--text); }
+.re-done { background: var(--accent); color: #fff; }
+.row-edit .h-spines { position: relative; outline: 2px dashed color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 3px; }
+.row-edit .h-top .h-gear, .row-edit .h-help { opacity: .4; pointer-events: none; }
+.sp-grip { /* 一段目の棚板の上に重ねる、つまみ（上下に動かす） */
+  position: absolute; left: 0; right: 0; top: calc(var(--row) - 10px); height: calc(var(--board) + 20px); z-index: 3;
+  display: flex; align-items: center; justify-content: center; cursor: ns-resize; touch-action: none;
+}
+.sp-grip::before { content: ""; position: absolute; left: 0; right: 0; top: 10px; height: var(--board); box-shadow: 0 0 0 2px var(--accent); border-radius: 2px; }
+.sp-grip i { position: relative; width: 74px; height: 30px; border-radius: 15px; background: var(--accent); box-shadow: 0 3px 10px rgba(0,0,0,.3); transition: transform .15s; }
+.sp-grip i::before, .sp-grip i::after { content: ""; position: absolute; left: 22px; right: 22px; height: 2.5px; border-radius: 2px; background: #fff; }
+.sp-grip i::before { top: 10px; } .sp-grip i::after { bottom: 10px; }
+.sp-grip.on i { transform: scale(1.15); }
